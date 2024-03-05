@@ -1,0 +1,3 @@
+[submodule "hyq-description"]
+	path = urdf_files/HyQ/hyq-description
+	url = DanielChaseButterfield:iit-DLSLab/hyq-description.git
