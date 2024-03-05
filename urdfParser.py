@@ -1,7 +1,6 @@
 from urchin import URDF
 import os
 import numpy as np
-import networkx
 
 class RobotURDF():
     def __init__(self, urdf_path):
@@ -28,12 +27,15 @@ class RobotURDF():
         with open(self.new_urdf_path, 'w') as f:
             f.writelines(file_data)
 
-    def get_edge_index(self):
-        # Create a link dictionary to map link names to numbers
+    # Create a link dictionary to map link names to numbers
+    def get_link_name_to_num_dict(self):
         link_names = []
         for link in self.robot_urdf.links:
             link_names.append(link.name)
-        link_dict = dict(zip(link_names, range(len(self.robot_urdf.links))))
+        return dict(zip(link_names, range(len(self.robot_urdf.links))))
+
+    def get_edge_index(self):
+        link_dict = self.get_link_name_to_num_dict()
 
         # Iterate through joints, and add to the edge matrix
         edge_matrix = None
@@ -48,6 +50,25 @@ class RobotURDF():
                 edge_matrix = np.concatenate((edge_matrix, edge_vector), axis=1)
         
         return edge_matrix
+    
+    def get_num_nodes(self):
+        return len(self.robot_urdf.links)
+    
+    def get_node_name_dict(self):
+        node_names = []
+        for link in self.robot_urdf.links:
+            node_names.append(link.name)
+        node_dict = dict(zip(range(len(self.robot_urdf.links)), node_names))
+        return node_dict
+    
+    def get_edge_name_dict(self):
+        link_dict = self.get_link_name_to_num_dict()
+
+        # Create a dictionary to map edge pair to a joint name
+        joint_dict = {}
+        for joint in self.robot_urdf.joints:
+            joint_dict[(link_dict[joint.parent], link_dict[joint.child])] = joint.name
+        return joint_dict
     
     def display_URDF_info(self):
         print("============ Displaying Robot Links: ============")
