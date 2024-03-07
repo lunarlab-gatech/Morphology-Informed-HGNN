@@ -72,8 +72,17 @@ class RobotURDF():
     
     def display_URDF_info(self):
         print("============ Displaying Robot Links: ============")
+        print("Link name: Mass - Inertia")
         for link in self.robot_urdf.links:
-            print(link.name)
+            print(f"{link.name}")
+        print("")
+
+        print("============ Displaying Example Link: ============")
+        ex_link = self.robot_urdf.links[7]
+        print("Name: ", ex_link.name)
+        print("Mass: ", ex_link.inertial.mass)
+        print("Inertia: \n", ex_link.inertial.inertia)
+        print("Origin of Inertials: \n", ex_link.inertial.origin)
         print("")
 
         print("============ Displaying Robot Joints: ============")

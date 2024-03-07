@@ -1,0 +1,6 @@
+numpy
+matplotlib
+networkx
+urchin
+torch
+torch_geometric
