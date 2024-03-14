@@ -9,6 +9,8 @@ def main():
     # Load the HyQ URDF file
     HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf') 
 
+    # Put Joint information into Nodes #TODO
+
     # Extract the edge matrix and convert to tensor
     edge_matrix = torch.tensor(HyQ_URDF.get_edge_index(), dtype=torch.long)
 

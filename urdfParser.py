@@ -83,11 +83,20 @@ class RobotURDF():
         print("Mass: ", ex_link.inertial.mass)
         print("Inertia: \n", ex_link.inertial.inertia)
         print("Origin of Inertials: \n", ex_link.inertial.origin)
-        print("")
+        print("") 
 
         print("============ Displaying Robot Joints: ============")
         for joint in self.robot_urdf.joints:
             print('{} -> {} <- {}'.format(joint.parent, joint.name, joint.child))
+        print("")
+
+        print("============ Displaying Example Joints: ============")
+        ex_joint = self.robot_urdf.joints[8]
+        print("Name: ", ex_joint.name)
+        print("Parent: ", ex_joint.parent)
+        print("Child: ", ex_joint.child)
+        print("Joint Type: ", ex_joint.joint_type)
+        print("Pose of Child with respect to Parent: \n", ex_joint.origin)
         print("")
             
 
