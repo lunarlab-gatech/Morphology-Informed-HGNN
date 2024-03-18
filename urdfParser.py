@@ -33,8 +33,17 @@ class RobotURDF():
         for link in self.robot_urdf.links:
             link_names.append(link.name)
         return dict(zip(link_names, range(len(self.robot_urdf.links))))
+    
+    # Return a dictionary to map link numbers to names
+    def get_link_num_to_name_dict(self):
+        link_names = []
+        for link in self.robot_urdf.links:
+            link_names.append(link.name)
+        link_dict = dict(zip(range(len(self.robot_urdf.links)), link_names))
+        return link_dict
 
-    def get_edge_index(self):
+    # Return the edge connectivity matrix
+    def get_edge_matrix(self):
         link_dict = self.get_link_name_to_num_dict()
 
         # Iterate through joints, and add to the edge matrix
@@ -51,17 +60,12 @@ class RobotURDF():
         
         return edge_matrix
     
-    def get_num_nodes(self):
+    # Return the number of links in the URDF file
+    def get_num_links(self):
         return len(self.robot_urdf.links)
     
-    def get_node_name_dict(self):
-        node_names = []
-        for link in self.robot_urdf.links:
-            node_names.append(link.name)
-        node_dict = dict(zip(range(len(self.robot_urdf.links)), node_names))
-        return node_dict
-    
-    def get_edge_name_dict(self):
+    # Return a dictionary that maps the edge connections to names
+    def get_edge_connection_to_name_dict(self):
         link_dict = self.get_link_name_to_num_dict()
 
         # Create a dictionary to map edge pair to a joint name
@@ -69,6 +73,17 @@ class RobotURDF():
         for joint in self.robot_urdf.joints:
             joint_dict[(link_dict[joint.parent], link_dict[joint.child])] = joint.name
         return joint_dict
+    
+    # Return a dictionary that maps the edge name to connections
+    def get_edge_name_to_connection_dict(self):
+        link_dict = self.get_link_name_to_num_dict()
+
+        # Create a dictionary to map edge pair to a joint name
+        joint_dict = {}
+        for joint in self.robot_urdf.joints:
+            joint_dict[joint.name] = np.array([link_dict[joint.parent], link_dict[joint.child]])
+        return joint_dict
+
     
     def display_URDF_info(self):
         print("============ Displaying Robot Links: ============")

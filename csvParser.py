@@ -1,9 +1,7 @@
-import numpy as np
 import pandas as pd
-import csv
 import os
-
-class RobotDataset:
+    
+class RobotCSV:
     def __init__(self, dataset_name):
         # Create the system path to the data
         data_path = os.path.join(os.getcwd(), "datasets", dataset_name, dataset_name, "data", "sensors.csv")
@@ -38,10 +36,15 @@ class RobotDataset:
 
     def pull_values(self, variable_name):
         return self.data_dict[variable_name]
+    
+    # Return the number of enteries in the dataset
+    def num_dataset_entries(self):
+        return len(self.data_dict['time'])
+
 
 def main():
     dataset_name = "trot_in_lab_1"
-    data = RobotDataset(dataset_name)
+    data = RobotCSV(dataset_name)
     print("Time: ", data.pull_values('time'))
     print("Left front hip a/a joint position: ", data.pull_values('LF_HAA_q'))
 
