@@ -3,4 +3,5 @@ matplotlib
 networkx
 urchin
 torch
+pandas
 torch_geometric

@@ -1,22 +1,19 @@
 import numpy as np
 import pandas as pd
 import csv
+import os
 
+class RobotDataset:
+    def __init__(self, dataset_name):
+        # Create the system path to the data
+        data_path = os.path.join(os.getcwd(), "datasets", dataset_name, dataset_name, "data", "sensors.csv")
 
-class Robot_dataset:
-
-    def __init__(self, data_path):
-        
-        self.data = []
+        # Read in the data
         self.data = pd.read_csv(data_path, header=None)
         self.data = self.data.to_numpy()
 
-        # print(self.data.head())
-        # print(self.data)
-
         # catagorize dataset
-        columns = [
-                   'time' ,'real_time','TIME_MOTOR_r',
+        columns = ['time' ,'real_time','TIME_MOTOR_r',
                    'LF_HAA_q', 'LF_HFE_q','LF_KFE_q','RF_HAA_q', 'RF_HFE_q','RF_KFE_q',
                    'LH_HAA_q', 'LH_HFE_q','LH_KFE_q','RH_HAA_q', 'RH_HFE_q','RH_KFE_q',
                    'LF_HAA_qd_f', 'LF_HFE_qd_f','LF_KFE_qd_f','RF_HAA_qd_f', 'RF_HFE_qd_f','RF_KFE_qd_f',
@@ -32,16 +29,24 @@ class Robot_dataset:
                    'LH_HAA_rel_enc', 'LH_HFE_rel_enc','LH_KFE_rel_enc','RH_HAA_rel_enc', 'RH_HFE_rel_enc','RH_KFE_rel_enc',
                    'LF_HAA_abs_enc', 'LF_HFE_abs_enc','LF_KFE_abs_enc','RF_HAA_abs_enc', 'RF_HFE_abs_enc','RF_KFE_abs_enc',
                    'LH_HAA_abs_enc', 'LH_HFE_abs_enc','LH_KFE_abs_enc','RH_HAA_abs_enc', 'RH_HFE_abs_enc','RH_KFE_abs_enc',
-                   'imu_time_stamp1','imu_time_stamp2'
-                   ]
-       
-        for i in range (0, len(columns)):
-            columns[i] = self.data[:,i]
+                   'imu_time_stamp1','imu_time_stamp2']
         
-        print(columns)
+        # Create a dictionary to store the results
+        self.data_dict = {}
+        for i in range (0, len(columns)):
+            self.data_dict[columns[i]] = self.data[:,i]
 
-path = "D:\State estimation\dataset code\sensors.csv"
-data = Robot_dataset(path)
+    def pull_values(self, variable_name):
+        return self.data_dict[variable_name]
+
+def main():
+    dataset_name = "trot_in_lab_1"
+    data = RobotDataset(dataset_name)
+    print("Time: ", data.pull_values('time'))
+    print("Left front hip a/a joint position: ", data.pull_values('LF_HAA_q'))
+
+if __name__ == "__main__":
+    main()
 
 
     

@@ -10,7 +10,7 @@ class RobotURDF():
 
     def update_paths_in_urdf(self):
         ros_url = 'package://hyq_description/'
-        actual_url = os.path.join(os.getcwd(), os.path.dirname(self.urdf_path)) + '/hyq-description/'
+        actual_url = os.path.join(os.getcwd(), os.path.dirname(self.urdf_path), "hyq-description", "temp")[:-4]
         self.new_urdf_path = self.urdf_path[:-5] + '_updated.urdf'
 
         # Load urdf file
