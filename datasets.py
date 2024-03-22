@@ -11,10 +11,12 @@ from torch_geometric.data import Dataset
 from pathlib import Path
 from itertools import islice
 
+
 class CerberusStreetDataset(Dataset):
 
     def __init__(self,
                  root=None,
+                 entries_to_use=None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -24,8 +26,7 @@ class CerberusStreetDataset(Dataset):
         self.reader = AnyReader([Path(root)])
         self.reader.open()
         self.imu_gen = self.reader.messages(connections=[
-            x for x in self.reader.connections 
-            if x.topic == '/hardware_a1/imu'
+            x for x in self.reader.connections if x.topic == '/hardware_a1/imu'
         ])
         self.joint_gen = self.reader.messages(connections=[
             x for x in self.reader.connections
@@ -40,7 +41,58 @@ class CerberusStreetDataset(Dataset):
 
         # Calculate the length of the dataset
         self.length = sum(1 for _ in self.imu_gen)
-        
+        if entries_to_use is not None and entries_to_use <= self.length:
+            self.length = entries_to_use
+
+        # Open up the A1 urdf file and get the edge matrix
+        self.A1_URDF = RobotURDF('urdf_files/A1/a1.urdf',
+                                 'package://a1_description/',
+                                 'unitree_ros/robots/a1_description')
+        self.edge_matrix = self.A1_URDF.get_edge_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+
+        # Map ROS names to array positions
+        self.ros_name_in_index = [
+            'FL0', 'FL1', 'FL2', 'FR0', 'FR1', 'FR2', 'RL0', 'RL1', 'RL2',
+            'RR0', 'RR1', 'RR2', 'FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'
+        ]
+
+        # Map urdf names to ROS names
+        # How do I know this is the correct mapping?
+        # Line 347 of https://github.com/ShuoYangRobotics/Cerberus/blob/main/src/main.cpp
+        self.urdf_to_ros_map = {
+            'FL_hip_joint': 'FL0',
+            'FL_thigh_joint': 'FL1',
+            'FL_calf_joint': 'FL2',
+            'FR_hip_joint': 'FR0',
+            'FR_thigh_joint': 'FR1',
+            'FR_calf_joint': 'FR2',
+            'RL_hip_joint': 'RL0',
+            'RL_thigh_joint': 'RL1',
+            'RL_calf_joint': 'RL2',
+            'RR_hip_joint': 'RR0',
+            'RR_thigh_joint': 'RR1',
+            'RR_calf_joint': 'RR2',
+            'FL_foot_fixed': 'FL_foot',
+            'FR_foot_fixed': 'FR_foot',
+            'RL_foot_fixed': 'RL_foot',
+            'RR_foot_fixed': 'RR_foot'
+        }
+
+        # Define the ros names that contain our ground truth labels
+        self.ground_truth_ros_names = [
+            'FL_foot', 'FR_foot', 'RL_foot', 'RR_foot'
+        ]
+
+        # Define the joints that should recieve edge attributes
+        self.joints_for_attributes = [
+            'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint', 'FR_hip_joint',
+            'FR_thigh_joint', 'FR_calf_joint', 'RL_hip_joint',
+            'RL_thigh_joint', 'RL_calf_joint', 'RR_hip_joint',
+            'RR_thigh_joint', 'RR_calf_joint'
+        ]
+
         # Close the reader
         self.reader.close()
 
@@ -52,23 +104,75 @@ class CerberusStreetDataset(Dataset):
         # value at the idx position
         return next(islice(gen, idx, None), default)
 
+    def get_position_of_ros_name(self, name):
+        for i in range(0, len(self.ros_name_in_index)):
+            if name == self.ros_name_in_index[i]:
+                return i
+
+    def find_matrix_indexes_from_connections(self, edge_connections):
+        edge_index = list()
+        for i in range(0, len(self.edge_matrix[0])):
+            vector = self.edge_matrix[:, i]
+            if (np.array_equal(vector, edge_connections)
+                    or np.array_equal(vector, np.flip(edge_connections))):
+                edge_index.append(i)
+        return edge_index
+
+    def create_edge_attr_matrix(self, msg):
+        # Load the edge matrix
+        edge_matrix = self.A1_URDF.get_edge_matrix()
+        edge_name_to_connection_dict = self.A1_URDF.get_edge_name_to_connection_dict(
+        )
+
+        # Create the edge_attribute matrix
+        edge_attrs = np.zeros((len(edge_matrix[0]), 2))
+
+        # For each joint specified
+        for urdf_joint_name in self.joints_for_attributes:
+
+            # Find the edge_attrs indexes of the particular joint
+            joint_con = edge_name_to_connection_dict[urdf_joint_name]
+            matrix_indexes = self.find_matrix_indexes_from_connections(
+                joint_con)
+
+            # Get the msg array index
+            msg_ind = self.get_position_of_ros_name(
+                self.urdf_to_ros_map[urdf_joint_name])
+
+            # Add the features to the edge_attrs matrix
+            for edge_index in matrix_indexes:
+                edge_attrs[edge_index, 0] = msg.position[msg_ind]
+                edge_attrs[edge_index, 1] = msg.velocity[msg_ind]
+
+        return edge_attrs
+
     def get(self, idx):
         # Find the joint_foot message with the right index
         self.reader.open()
-        connection, timestamp, rawdata = self.get_val_from_generator(self.joint_gen, idx)
+        connection, timestamp, rawdata = self.get_val_from_generator(
+            self.joint_gen, idx)
         msg = self.reader.deserialize(rawdata, connection.msgtype)
-        print(msg)
+
+        # Get the ground truth force labels
+        ground_truth_labels = []
+        for name in self.ground_truth_ros_names:
+            ground_truth_labels.append(
+                msg.effort[self.get_position_of_ros_name(name)])
+
+        # Get the edge attributes
+        edge_attrs_matrix = self.create_edge_attr_matrix(msg)
 
         # Create the graph
-        # Data(edge_index=edge_matrix_tensor,
-        #              edge_attr=torch.tensor(edge_attrs_matrices[i],
-        #                                     dtype=torch.float),
-        #              y=torch.tensor(y_all_graphs[i], dtype=torch.float),
-        #              num_nodes=HyQ_URDF.get_num_links()))
-        
+        graph = Data(edge_index=self.edge_matrix_tensor,
+                     edge_attr=torch.tensor(edge_attrs_matrix,
+                                            dtype=torch.float),
+                     y=torch.tensor(ground_truth_labels, dtype=torch.float),
+                     num_nodes=self.A1_URDF.get_num_links())
+
         # Close the reader
         self.reader.close()
-        pass
+
+        return graph
 
 
 class HyQDataset(Dataset):
@@ -83,7 +187,7 @@ class HyQDataset(Dataset):
 
         # Load the HyQ URDF file & dataset
         HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf',
-                         'package://hyq_description/', 'hyq-description')
+                             'package://hyq_description/', 'hyq-description')
         HyQ_CSV = RobotCSV("trot_in_lab_1")
 
         # Extract the edge matrix and convert to tensor
