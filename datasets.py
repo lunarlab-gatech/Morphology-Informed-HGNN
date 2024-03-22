@@ -159,11 +159,16 @@ class CerberusStreetDataset(Dataset):
             ground_truth_labels.append(
                 msg.effort[self.get_position_of_ros_name(name)])
 
+        # Create a note feature matrix (filled with ones)
+        node_features = torch.ones((self.A1_URDF.get_num_links(), 2),
+                                   dtype=torch.float)
+
         # Get the edge attributes
         edge_attrs_matrix = self.create_edge_attr_matrix(msg)
 
         # Create the graph
-        graph = Data(edge_index=self.edge_matrix_tensor,
+        graph = Data(x=node_features,
+                     edge_index=self.edge_matrix_tensor,
                      edge_attr=torch.tensor(edge_attrs_matrix,
                                             dtype=torch.float),
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
