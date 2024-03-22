@@ -1,1 +1,7 @@
 
+[submodule "urdf_files/A1/unitree_ros"]
+	path = urdf_files/A1/unitree_ros
+	url = https://github.com/unitreerobotics/unitree_ros.git
+[submodule "urdf_files/HyQ/hyq-description"]
+	path = urdf_files/HyQ/hyq-description
+	url = https://github.com/iit-DLSLab/hyq-description.git
