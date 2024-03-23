@@ -99,7 +99,7 @@ class RobotURDF():
                     # Setup an edge for each pair of connections
                     count = 0
                     for i in range(0, len(connections)):
-                        for j in range(i+1, len(connections)):
+                        for j in range(i + 1, len(connections)):
                             self.edges.append(
                                 self.Edge(name=link.name + str(count),
                                           parent=connections[i],
