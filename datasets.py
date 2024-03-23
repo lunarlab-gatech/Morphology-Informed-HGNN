@@ -48,7 +48,7 @@ class CerberusStreetDataset(Dataset):
         self.A1_URDF = RobotURDF('urdf_files/A1/a1.urdf',
                                  'package://a1_description/',
                                  'unitree_ros/robots/a1_description')
-        self.edge_matrix = self.A1_URDF.get_edge_matrix()
+        self.edge_matrix = self.A1_URDF.get_edge_index_matrix()
         self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
                                                dtype=torch.long)
 
@@ -120,8 +120,8 @@ class CerberusStreetDataset(Dataset):
 
     def create_edge_attr_matrix(self, msg):
         # Load the edge matrix
-        edge_matrix = self.A1_URDF.get_edge_matrix()
-        edge_name_to_connection_dict = self.A1_URDF.get_edge_name_to_connection_dict(
+        edge_matrix = self.A1_URDF.get_edge_index_matrix()
+        edge_name_to_connection_dict = self.A1_URDF.get_edge_name_to_connections_dict(
         )
 
         # Create the edge_attribute matrix
@@ -196,7 +196,7 @@ class HyQDataset(Dataset):
         HyQ_CSV = RobotCSV("trot_in_lab_1")
 
         # Extract the edge matrix and convert to tensor
-        edge_matrix = HyQ_URDF.get_edge_matrix()
+        edge_matrix = HyQ_URDF.get_edge_index_matrix()
         edge_matrix_tensor = torch.tensor(edge_matrix, dtype=torch.long)
 
         # Create edge attribute matrices
@@ -258,7 +258,7 @@ class HyQDataset(Dataset):
                                                                 list[str]],
                                    features_per_joint):
         # Load the edge matrix
-        edge_matrix = HyQ_URDF.get_edge_matrix()
+        edge_matrix = HyQ_URDF.get_edge_index_matrix()
 
         # Create the edge_attribute matrix
         edge_attrs = np.zeros((HyQ_CSV.num_dataset_entries(),
@@ -276,7 +276,7 @@ class HyQDataset(Dataset):
                 feature_vectors[:, i] = HyQ_CSV.pull_values(feature_names[i])
 
             # Find the indexes of the particular joint
-            edge_name_to_connection_dict = HyQ_URDF.get_edge_name_to_connection_dict(
+            edge_name_to_connection_dict = HyQ_URDF.get_edge_name_to_connections_dict(
             )
             joint_edges_dict = edge_name_to_connection_dict[joint]
             joint_edge_indexes = self._find_edge_indexes_from_connections(
@@ -317,7 +317,7 @@ def hyq_test():
     HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf')
 
     # Extract the edge matrix and convert to tensor
-    edge_matrix = HyQ_URDF.get_edge_matrix()
+    edge_matrix = HyQ_URDF.get_edge_index_matrix()
 
     # Create the dataset
     dataset = HyQDataset()
