@@ -136,7 +136,8 @@ class RobotURDF():
     def get_node_name_to_index_dict(self):
         """
         Return a dictionary that maps the node name to its
-        corresponding index.
+        corresponding index. Each node should have a unique
+        index.
 
         Returns:
             (dict[str, int]): A dictinoary that maps node name
