@@ -279,12 +279,12 @@ def main():
     Simple code that demonstrates basic functionality of the RobotURDF class.
     """
 
-    HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf',
+    HyQ_URDF = RobotURDF('urdf_files\HyQ\hyq.urdf',
                          'package://hyq_description/', 'hyq-description')
     HyQ_URDF.display_URDF_info()
-    print("Edge Matrix (HyQ): ", HyQ_URDF.get_edge_index_matrix())
+    print("Edge Matrix (HyQ): ", HyQ_URDF.get_node_name_to_index_dict())
 
-    A1_URDF = RobotURDF('urdf_files/A1/a1.urdf', 'package://a1_description/',
+    A1_URDF = RobotURDF('urdf_files\A1\a1.urdf', 'package://a1_description/',
                         'unitree_ros/robots/a1_description', True)
     A1_URDF.display_URDF_info()
     print("Edge Matrix (A1): ", A1_URDF.get_edge_index_matrix())
