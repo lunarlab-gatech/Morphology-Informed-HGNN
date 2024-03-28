@@ -1,7 +1,7 @@
 from urchin import URDF
-import urchin
 import os
 import numpy as np
+from pathlib import Path
 
 
 class RobotURDF():
@@ -26,15 +26,15 @@ class RobotURDF():
             self.child = child
 
     def __init__(self,
-                 urdf_path,
-                 ros_builtin_path,
-                 urdf_to_desc_path,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
                  swap_nodes_and_edges=False):
         """
         Constructor for RobotURDF class.
 
         Args:
-            urdf_path (str): The relative path from this file (urdfParser.py)
+            urdf_path (Path): The absolute path from this file (urdfParser.py)
                 to the desired urdf file to load.
             ros_builtin_path (str): The path ROS uses in the urdf file to navigate
                 to the urdf description directory. An example looks like this:
@@ -50,7 +50,7 @@ class RobotURDF():
         """
 
         # Define paths
-        self.urdf_path = urdf_path
+        self.urdf_path = str(urdf_path)
         self.new_urdf_path = self.urdf_path[:-5] + '_updated.urdf'
         self.ros_builtin_path = ros_builtin_path
         self.urdf_to_desc_path = urdf_to_desc_path
@@ -244,11 +244,10 @@ class RobotURDF():
         # Create a dictionary to map edge name pair to its node connections
         edge_dict = {}
         for edge in self.edges:
-            edge_dict[edge.name] = np.array([
-                [node_dict[edge.parent], node_dict[edge.child]],
-                [node_dict[edge.child], node_dict[edge.parent]]
-                ])
-            
+            edge_dict[edge.name] = np.array(
+                [[node_dict[edge.parent], node_dict[edge.child]],
+                 [node_dict[edge.child], node_dict[edge.parent]]])
+
         # print(edge_dict)
         return edge_dict
 

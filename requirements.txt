@@ -6,3 +6,4 @@ torch
 pandas
 torch_geometric
 rosbags
+pathlib

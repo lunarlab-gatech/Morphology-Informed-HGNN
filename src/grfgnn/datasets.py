@@ -1,8 +1,7 @@
 import torch
 import torch_geometric
 from torch_geometric.data import Data, Dataset
-from urdfParser import RobotURDF
-from csvParser import RobotCSV
+from .urdfParser import RobotURDF
 import networkx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -203,6 +202,11 @@ class CerberusStreetDataset(Dataset):
 
 
 class HyQDataset(Dataset):
+    """
+    NOTE: DO NOT USE
+    THIS CLASS IS CURRENTLY DEFUNCT.
+    """
+
 
     def __init__(self,
                  root=None,
@@ -274,7 +278,7 @@ class HyQDataset(Dataset):
                 edge_index.append(i)
         return edge_index
 
-    def _create_edge_attr_matrices(self, HyQ_CSV: RobotCSV,
+    def _create_edge_attr_matrices(self, HyQ_CSV,
                                    HyQ_URDF: RobotURDF,
                                    joint_to_features_dict: dict[str,
                                                                 list[str]],
@@ -312,7 +316,7 @@ class HyQDataset(Dataset):
 
         return edge_attrs
 
-    def _create_target_matrix(self, HyQ_CSV: RobotCSV, HyQ_URDF: RobotURDF,
+    def _create_target_matrix(self, HyQ_CSV, HyQ_URDF: RobotURDF,
                               target_matrix_names: list[str]):
         # Create the target matrix
         y = np.zeros((HyQ_CSV.num_dataset_entries(), len(target_matrix_names)))
@@ -422,7 +426,7 @@ def a1_test():
     #     edge_labels=A1_URDF.get_edge_connections_to_name_dict(),
     #     rotate=False,
     #     font_size=7)
-    plt.show()
+    plt.savefig("drawnGraph.png")
 
 
 def main():
