@@ -2,6 +2,7 @@ import unittest
 import os
 import urdfParser
 import pandas as pd
+import numpy as np
 
 class TestStringMethods(unittest.TestCase):
 
@@ -155,20 +156,23 @@ class TestStringMethods(unittest.TestCase):
         HyQ_URDF = urdfParser.RobotURDF('urdf_files\HyQ\hyq.urdf',
                                         'package://hyq_description/', 'hyq-description',False)
         
-        key_index = list(HyQ_URDF.get_edge_connections_to_name_dict())
-        print(key_index)
+        expected_index = list(HyQ_URDF.get_edge_connections_to_name_dict())
+        print(expected_index)
 
         key = list(HyQ_URDF.get_edge_name_to_connections_dict())
+        
         connections_dict = []
 
         for key in key:
             index = HyQ_URDF.get_edge_name_to_connections_dict()[key]
-            connections_dict.append(index)
-        
+            for i in range (index.shape[1]):
+                real_index = np.squeeze(index[:,i].reshape(1,-1))
+                connections_dict.append(real_index)
+
         connections_dict = [tuple(arr) for arr in connections_dict]
         print(connections_dict)
 
-        self.assertEqual(key_index, connections_dict)
+        self.assertEqual(expected_index, connections_dict)
 
         # raise NotImplemented
 
