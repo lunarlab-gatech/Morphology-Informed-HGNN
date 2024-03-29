@@ -95,7 +95,7 @@ class RobotURDF():
                                          parent=connections[0],
                                          child=connections[1])
                     self.edges.append(new_edge)
-                if len(connections) > 2:
+                if len(connections) > 2: # TODO: Don't connect children to other children
                     # Setup an edge for each pair of connections
                     count = 0
                     for i in range(0, len(connections)):
@@ -248,7 +248,6 @@ class RobotURDF():
                 [[node_dict[edge.parent], node_dict[edge.child]],
                  [node_dict[edge.child], node_dict[edge.parent]]])
 
-        # print(edge_dict)
         return edge_dict
 
     def display_URDF_info(self):
@@ -276,25 +275,3 @@ class RobotURDF():
             print('{} -> {} <- {}'.format(joint.parent, joint.name,
                                           joint.child))
         print("")
-
-
-def main():
-    """
-    Simple code that demonstrates basic functionality of the RobotURDF class.
-    """
-
-    HyQ_URDF = RobotURDF('urdf_files\HyQ\hyq.urdf',
-                         'package://hyq_description/', 'hyq-description')
-    # HyQ_URDF.display_URDF_info()
-    # print("Edge Matrix (HyQ): ", HyQ_URDF.get_node_name_to_index_dict())
-
-    # A1_URDF = RobotURDF('urdf_files\A1\a1.urdf', 'package://a1_description/',
-    #                     'unitree_ros/robots/a1_description', True)
-    # A1_URDF.display_URDF_info()
-    # print("Edge Matrix (A1): ", A1_URDF.get_edge_index_matrix())
-
-    HyQ_URDF.get_edge_name_to_connections_dict()
-
-
-if __name__ == "__main__":
-    main()
