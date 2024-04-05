@@ -95,7 +95,8 @@ class RobotURDF():
                                          parent=connections[0],
                                          child=connections[1])
                     self.edges.append(new_edge)
-                if len(connections) > 2: # TODO: Don't connect children to other children
+                if len(connections
+                       ) > 2:  # TODO: Don't connect children to other children
                     # Setup an edge for each pair of connections
                     count = 0
                     for i in range(0, len(connections)):
@@ -233,10 +234,10 @@ class RobotURDF():
         it's connected to.
 
         Returns:
-            edge_dict (dict[str, np.array([int, int])]): This dictionary
-                takes the name of an edge in the URDF as input. It 
-                returns an np.array that contains the indices of the 
-                two nodes that this edge is connected to.
+            edge_dict (dict[str, np.array([[int, int],[int, int]])]): 
+                This dictionary takes the name of an edge in the URDF
+                as input. It returns an np.array that contains the 
+                indices of the two nodes that this edge is connected to.
         """
 
         node_dict = self.get_node_name_to_index_dict()

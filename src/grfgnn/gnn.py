@@ -221,10 +221,10 @@ def display_viewable_graph():
     print(ground_truth_indices)
 
     # Create a validation dataloader
-    valLoader: DataLoader = DataLoader(val_set, batch_size=500, shuffle=False)
+    valLoader: DataLoader = DataLoader(val_set, batch_size=100, shuffle=False)
 
     # Setup four graphs
-    fig, axes = plt.subplots(4, figsize=[50, 10])
+    fig, axes = plt.subplots(4, figsize=[20, 10])
     fig.suptitle('Foot Estimated Forces vs. Ground Truth')
 
     # Validate on entire eval_dataset
