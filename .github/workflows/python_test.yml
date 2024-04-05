@@ -27,6 +27,8 @@ jobs:
     - name: Install the package
       run: |
         python -m pip install .
+    - name: Import URDF files
+      uses: snickerbockers/submodules-init@v4
     - name: Test with unittest
       run: |
         python -m unittest discover tests/
