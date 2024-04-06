@@ -4,6 +4,10 @@ import numpy as np
 from pathlib import Path
 
 
+class InvalidURDFException(Exception):
+    pass
+
+
 class RobotURDF():
 
     class Node():
@@ -11,16 +15,16 @@ class RobotURDF():
         Simple class that holds a node's name.
         """
 
-        def __init__(self, name):
+        def __init__(self, name: str):
             self.name = name
 
     class Edge():
         """
         Simple class that holds an edge's name, and
-        both connections.
+        the names of both connections.
         """
 
-        def __init__(self, name, parent, child):
+        def __init__(self, name: str, parent: str, child: str):
             self.name = name
             self.parent = parent
             self.child = child
@@ -83,28 +87,46 @@ class RobotURDF():
             # Create joints from the links, to set as the edges
             self.edges = []
             for link in self.robot_urdf.links:
-                # Check that two joints connect to this link
+                # Get all the connections to this link
                 connections = []
                 for joint in self.robot_urdf.joints:
-                    if (joint.parent == link.name or joint.child == link.name):
-                        connections.append(joint.name)
+                    # The joint's parent is the link's child, and visa versa
+                    if (joint.parent == link.name):
+                        connections.append((joint.name, 'child'))
+                    elif (joint.child == link.name):
+                        connections.append((joint.name, 'parent'))
 
-                # If two joints do connect, add it as an edge
-                if len(connections) == 2:
-                    new_edge = self.Edge(name=link.name,
-                                         parent=connections[0],
-                                         child=connections[1])
-                    self.edges.append(new_edge)
-                if len(connections
-                       ) > 2:  # TODO: Don't connect children to other children
-                    # Setup an edge for each pair of connections
-                    count = 0
-                    for i in range(0, len(connections)):
-                        for j in range(i + 1, len(connections)):
-                            self.edges.append(
-                                self.Edge(name=link.name + str(count),
-                                          parent=connections[i],
-                                          child=connections[j]))
+                # If there is 1 connection, drop this link
+                if (len(connections) == 1):
+                    continue
+                if (len(connections) < 1):
+                    raise InvalidURDFException("Link connected to no joints.")
+
+                # Find the singular link parent
+                parent_connection = None
+                for conn in connections:
+                    if conn[1] == 'parent':
+                        if parent_connection is not None:
+                            raise InvalidURDFException(
+                                "Link has more than two parent joints.")
+                        else:
+                            parent_connection = conn
+                            connections.remove(conn)
+
+                # Create an edge from each link parent to each link child
+                new_edge = None
+                if (len(connections) == 1):
+                    self.edges.append(
+                        self.Edge(name=link.name,
+                                  parent=parent_connection[0],
+                                  child=connections[0][0]))
+                else:  # If there are multiple edges for this one link
+                       # give them each a unique name.
+                    for child_conn in connections:
+                        self.edges.append(
+                            self.Edge(name=link.name + "_to_" + child_conn[0],
+                                      parent=parent_connection[0],
+                                      child=child_conn[0]))
 
     def create_updated_urdf_file(self):
         """
@@ -234,10 +256,10 @@ class RobotURDF():
         it's connected to.
 
         Returns:
-            edge_dict (dict[str, np.array([[int, int],[int, int]])]): 
+            edge_dict (dict[str, np.array)]): 
                 This dictionary takes the name of an edge in the URDF
-                as input. It returns an np.array that contains the 
-                indices of the two nodes that this edge is connected to.
+                as input. It returns an np.array (N, 2), where N is the
+                number of connections this name supports.
         """
 
         node_dict = self.get_node_name_to_index_dict()

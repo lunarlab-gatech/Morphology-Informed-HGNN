@@ -1,10 +1,11 @@
 from pathlib import Path
 import unittest
-import os
 from grfgnn import RobotURDF
+from pathlib import Path
+import copy
 import pandas as pd
 import numpy as np
-from pathlib import Path
+import os
 
 
 class TestRobotURDF(unittest.TestCase):
@@ -21,31 +22,86 @@ class TestRobotURDF(unittest.TestCase):
 
     def test_constructor(self):
         """
-        Check if self.nodes has all the name in the URDF file, and
-        check if self.edges has all the name in the URDF file.
+        Check that the constructor properly assigns all of the links and joints
+        to a node/edge.
         """
 
-        nodes_name = {
-            'world', 'base_link', 'trunk', 'lf_hipassembly', 'lh_hipassembly',
-            'rf_hipassembly', 'rh_hipassembly', 'lf_upperleg', 'lh_upperleg',
-            'rf_upperleg', 'rh_upperleg', 'lf_lowerleg', 'lh_lowerleg',
-            'rf_lowerleg', 'rh_lowerleg', 'lf_foot', 'lh_foot', 'rf_foot',
-            'rh_foot'
-        }
-
-        edges_name = {
+        node_names = [
+            'world', 'base_link', 'trunk', 'lf_hipassembly', 'lf_upperleg',
+            'lf_lowerleg', 'lf_foot', 'rf_hipassembly', 'rf_upperleg',
+            'rf_lowerleg', 'rf_foot', 'lh_hipassembly', 'lh_upperleg',
+            'lh_lowerleg', 'lh_foot', 'rh_hipassembly', 'rh_upperleg',
+            'rh_lowerleg', 'rh_foot'
+        ]
+        edge_names = [
             'floating_base_joint', 'floating_base', 'lf_haa_joint',
-            'lh_haa_joint', 'rf_haa_joint', 'rh_haa_joint', 'lf_hfe_joint',
-            'lh_hfe_joint', 'rf_hfe_joint', 'rh_hfe_joint', 'lf_kfe_joint',
-            'lh_kfe_joint', 'rf_kfe_joint', 'rh_kfe_joint', 'lf_foot_joint',
-            'lh_foot_joint', 'rf_foot_joint', 'rh_foot_joint'
-        }
+            'lf_hfe_joint', 'lf_kfe_joint', 'lf_foot_joint', 'rf_haa_joint',
+            'rf_hfe_joint', 'rf_kfe_joint', 'rf_foot_joint', 'lh_haa_joint',
+            'lh_hfe_joint', 'lh_kfe_joint', 'lh_foot_joint', 'rh_haa_joint',
+            'rh_hfe_joint', 'rh_kfe_joint', 'rh_foot_joint'
+        ]
 
-        for node in self.HyQ_URDF.nodes:
-            self.assertTrue(node.name in nodes_name)
+        # Check for the normal case: where links become nodes and
+        # joints become edges.
+        node_names_copy = copy.deepcopy(node_names)
+        for i, node in enumerate(self.HyQ_URDF.nodes):
+            self.assertTrue(node.name in node_names_copy)
+            node_names_copy.remove(node.name)
+        self.assertEqual(0, len(node_names_copy))
 
-        for edge in self.HyQ_URDF.edges:
-            self.assertTrue(edge.name in edges_name)
+        edge_names_copy = copy.deepcopy(edge_names)
+        for i, edge in enumerate(self.HyQ_URDF.edges):
+            self.assertTrue(edge.name in edge_names_copy)
+            edge_names_copy.remove(edge.name)
+        self.assertEqual(0, len(edge_names_copy))
+
+        # Check for the swapped case: where links become edges and
+        # joints become nodes.
+        edge_names_copy = copy.deepcopy(edge_names)
+        for i, node in enumerate(self.HyQ_URDF_swapped.nodes):
+            self.assertTrue(node.name in edge_names_copy)
+            edge_names_copy.remove(node.name)
+        self.assertEqual(0, len(edge_names_copy))
+
+        # Remember that links that don't connect to two or more
+        # joints get dropped, as they can't be represented as an edge.
+        # Additionally, links with multiple children joints get one
+        # edge for each child.
+        desired_edges = [
+            RobotURDF.Edge('base_link', "floating_base_joint",
+                           "floating_base"),
+            RobotURDF.Edge('trunk_to_lf_haa_joint', "floating_base",
+                           "lf_haa_joint"),
+            RobotURDF.Edge('trunk_to_lh_haa_joint', "floating_base",
+                           "lh_haa_joint"),
+            RobotURDF.Edge('trunk_to_rf_haa_joint', "floating_base",
+                           "rf_haa_joint"),
+            RobotURDF.Edge('trunk_to_rh_haa_joint', "floating_base",
+                           "rh_haa_joint"),
+            RobotURDF.Edge('lf_hipassembly', "lf_haa_joint", "lf_hfe_joint"),
+            RobotURDF.Edge('lf_upperleg', "lf_hfe_joint", "lf_kfe_joint"),
+            RobotURDF.Edge('lf_lowerleg', "lf_kfe_joint", "lf_foot_joint"),
+            RobotURDF.Edge('rf_hipassembly', "rf_haa_joint", "rf_hfe_joint"),
+            RobotURDF.Edge('rf_upperleg', "rf_hfe_joint", "rf_kfe_joint"),
+            RobotURDF.Edge('rf_lowerleg', "rf_kfe_joint", "rf_foot_joint"),
+            RobotURDF.Edge('lh_hipassembly', "lh_haa_joint", "lh_hfe_joint"),
+            RobotURDF.Edge('lh_upperleg', "lh_hfe_joint", "lh_kfe_joint"),
+            RobotURDF.Edge('lh_lowerleg', "lh_kfe_joint", "lh_foot_joint"),
+            RobotURDF.Edge('rh_hipassembly', "rh_haa_joint", "rh_hfe_joint"),
+            RobotURDF.Edge('rh_upperleg', "rh_hfe_joint", "rh_kfe_joint"),
+            RobotURDF.Edge('rh_lowerleg', "rh_kfe_joint", "rh_foot_joint")
+        ]
+        for i, edge in enumerate(self.HyQ_URDF_swapped.edges):
+            match_found = False
+            for j, desired_edge in enumerate(desired_edges):
+                if edge.name == desired_edge.name:
+                    self.assertEqual(edge.child, desired_edge.child)
+                    self.assertEqual(edge.parent, desired_edge.parent)
+                    desired_edges.remove(desired_edge)
+                    match_found = True
+                    break
+            self.assertTrue(match_found)
+        self.assertEqual(0, len(desired_edges))
 
     def test_create_updated_urdf_file(self):
         """

@@ -7,3 +7,4 @@ pandas
 torch_geometric
 rosbags
 pathlib
+gdown

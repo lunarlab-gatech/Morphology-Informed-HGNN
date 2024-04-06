@@ -9,6 +9,7 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 from itertools import islice
 import os
+from torchvision.datasets.utils import download_file_from_google_drive
 from rosbags.rosbag2 import Writer
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from rosbags.interfaces import ConnectionExtRosbag2
@@ -106,9 +107,9 @@ class CerberusStreetDataset(Dataset):
         return ['street.bag']
 
     def download(self):
-        raise Exception(
-            "Please download the bag file from https://drive.google.com/drive/folders/1PdCLMVRqS97Tc9VbJY12EUl9UHpVoO_X and put it in <dataset_dir>/raw/"
-        )
+        download_file_from_google_drive("1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu",
+                                        Path(self.root, 'raw'),
+                                        "street.bag")
 
     @property
     def processed_file_names(self):
@@ -207,7 +208,6 @@ class HyQDataset(Dataset):
     THIS CLASS IS CURRENTLY DEFUNCT.
     """
 
-
     def __init__(self,
                  root=None,
                  transform=None,
@@ -278,8 +278,7 @@ class HyQDataset(Dataset):
                 edge_index.append(i)
         return edge_index
 
-    def _create_edge_attr_matrices(self, HyQ_CSV,
-                                   HyQ_URDF: RobotURDF,
+    def _create_edge_attr_matrices(self, HyQ_CSV, HyQ_URDF: RobotURDF,
                                    joint_to_features_dict: dict[str,
                                                                 list[str]],
                                    features_per_joint):
