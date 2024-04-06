@@ -161,3 +161,6 @@ cython_debug/
 
 # Ignore urdf files that are expanded with new paths, as the contents will vary between computers and file system locations
 *_updated.urdf
+
+# Ignore models we learn
+models/

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "grfgnn"
+version = "0.0.1"
+authors = [
+  { name="Daniel Butterfield", email="dbutterfield3@gatech.edu" },
+  { name="Jackson Cheng", email="ncheng49@gatech.edu" },
+]
+description = "A graph neural network implementation that learns to estimate GRF on a robotic quadruped, using joint position and velocities."
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/lunarlab-gatech/state-estimation-gnn"
+Issues = "https://github.com/lunarlab-gatech/state-estimation-gnn/issues"
