@@ -19,9 +19,9 @@ from typing import cast
 class CerberusStreetDataset(Dataset):
 
     def __init__(self,
-                 root,
+                 root: str,
                  robotURDF: RobotURDF,
-                 entries_to_use=None,
+                 entries_to_use: int = None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -30,25 +30,16 @@ class CerberusStreetDataset(Dataset):
         self.root = root
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        # Setup the reader for reading rosbags
-        path_to_bag = os.path.join(root, 'raw', 'street.bag')
-        reader = AnyReader([Path(path_to_bag)])
-        reader.open()
-        imu_gen = reader.messages(connections=[
-            x for x in reader.connections if x.topic == '/hardware_a1/imu'
-        ])
+        # Get the first index and length of dataset
+        info_path = Path(root, 'processed', 'info.txt')
+        with open(info_path, 'r') as f:
+            data = f.readline().split(" ")
+            self.length = int(data[0])
+            self.first_index = int(data[1])
 
-        # Get the first index of the dataset.
-        for connection, timestamp, rawdata in imu_gen:
-            msg = reader.deserialize(rawdata, connection.msgtype)
-            self.first_index = msg.header.seq
-            break
-
-        # Calculate the length of the dataset
-        self.length = sum(1 for _ in imu_gen)
+        # Use less entries if we want to
         if entries_to_use is not None and entries_to_use <= self.length:
             self.length = entries_to_use
-        reader.close()
 
         # Open up the A1 urdf file and get the edge matrix
         self.A1_URDF = robotURDF
@@ -108,12 +99,20 @@ class CerberusStreetDataset(Dataset):
 
     def download(self):
         download_file_from_google_drive("1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu",
-                                        Path(self.root, 'raw'),
-                                        "street.bag")
+                                        Path(self.root, 'raw'), "street.bag")
 
     @property
     def processed_file_names(self):
-        return ['processed.txt']
+        """
+        Make the list of all the processed 
+        files we are expecting.
+        """
+
+        processed_file_names = []
+        for i in range(1597, 264904 + 1):
+            processed_file_names.append(str(i) + ".txt")
+        processed_file_names.append("info.txt")
+        return processed_file_names
 
     def process(self):
         topic = '/hardware_a1/joint_foot'
@@ -127,9 +126,12 @@ class CerberusStreetDataset(Dataset):
         ])
 
         # Iterate through every joint message and save important data in txt file
+        length = 0
+        first_seq = None
         for connection, _timestamp, rawdata in self.joint_gen:
             msg = self.reader.deserialize(rawdata, connection.msgtype)
-
+            if first_seq is None:
+                first_seq = msg.header.seq
             with open(
                     os.path.join(self.processed_dir,
                                  str(msg.header.seq) + ".txt"), "w") as f:
@@ -138,28 +140,36 @@ class CerberusStreetDataset(Dataset):
                     for val in array:
                         f.write(str(val) + " ")
                     f.write('\n')
+            length += 1
 
-        # Write a txt file so we know we've finisehd
-        with open(os.path.join(self.processed_dir, "processed.txt"), "w") as f:
-            f.write(
-                "Bag files have been successfully written to this directory.")
+        # Write a txt file to save the dataset length & and first sequence index
+        with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
+            f.write(str(length) + " " + str(first_seq))
 
     def len(self):
         return self.length
 
-    def get_position_of_ros_name(self, name):
+    def get_index_of_ros_name(self, name: str):
+        """
+        Given the ROS joint name, return the index
+        in the array that its values can be found.
+        """
+
         for i in range(0, len(self.ros_name_in_index)):
             if name == self.ros_name_in_index[i]:
                 return i
+        raise IndexError("This ROS joint name doesn't exist.")
 
-    def get(self, idx):
+    def load_data_at_ros_seq(self, ros_seq: int):
+        """
+        This helper function opens the file named "ros_seq"
+        and loads the position, velocity, and effort information.
+        """
+
         # Open the file with the proper index
-        positions = []
-        velocities = []
-        efforts = []
-        with open(
-                os.path.join(self.processed_dir,
-                             str(self.first_index + idx) + ".txt"), 'r') as f:
+        positions, velocities, efforts = [], [], []
+        with open(os.path.join(self.processed_dir,
+                               str(ros_seq) + ".txt"), 'r') as f:
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 positions.append(float(line[i]))
@@ -169,12 +179,22 @@ class CerberusStreetDataset(Dataset):
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 efforts.append(float(line[i]))
+        return positions, velocities, efforts
+
+    def get(self, idx):
+        # Bounds check
+        if idx < 0 or idx >= self.length:
+            raise IndexError("Index value out of Dataset bounds.")
+
+        # Load the rosbag information
+        positions, velocities, efforts = self.load_data_at_ros_seq(
+            self.first_index + idx)
 
         # Get the ground truth force labels
         ground_truth_labels = []
         for name in self.ground_truth_ros_names:
             ground_truth_labels.append(
-                efforts[self.get_position_of_ros_name(name)])
+                efforts[self.get_index_of_ros_name(name)])
 
         # Create a note feature matrix
         x = torch.ones((self.A1_URDF.get_num_nodes(), 2), dtype=torch.float)
@@ -186,7 +206,7 @@ class CerberusStreetDataset(Dataset):
             node_index = self.urdf_name_to_index[urdf_node_name]
 
             # Get the msg array index
-            msg_ind = self.get_position_of_ros_name(
+            msg_ind = self.get_index_of_ros_name(
                 self.urdf_to_ros_map[urdf_node_name])
 
             # Add the features to x matrix
