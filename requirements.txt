@@ -3,8 +3,9 @@ matplotlib
 networkx
 urchin
 torch
-pandas
+torchvision
 torch_geometric
+pandas
 rosbags
 pathlib
 gdown
