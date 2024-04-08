@@ -31,7 +31,7 @@ class TestCerberusStreetDataset(unittest.TestCase):
         the data, and that it correctly finds the first sequence number.
         """
 
-        self.bag_path = self.dataset_path / 'raw' / 'street.bag'
+        self.bag_path = self.dataset_path / 'raw' / 'data.bag'
         self.processed_txt_start_path = self.dataset_path / 'processed' / '1597.txt'
         self.processed_txt_end_path = self.dataset_path / 'processed' / '264904.txt'
         self.processed_info_path = self.dataset_path / 'processed' / 'info.txt'

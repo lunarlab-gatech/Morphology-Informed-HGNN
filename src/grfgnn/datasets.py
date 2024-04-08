@@ -16,7 +16,15 @@ from rosbags.interfaces import ConnectionExtRosbag2
 from typing import cast
 
 
-class CerberusStreetDataset(Dataset):
+class CerberusDataset(Dataset):
+    """
+    Dataset class that can be used to load any of the A1 robot
+    rosbag sequences from the Cerberus state estimation dataset
+    and turn it into a GNN.
+
+    Here is where more information can be found on the dataset:
+    https://github.com/ShuoYangRobotics/Cerberus?tab=readme-ov-file
+    """
 
     def __init__(self,
                  root: str,
@@ -93,13 +101,19 @@ class CerberusStreetDataset(Dataset):
             'RR_thigh_joint', 'RR_calf_joint'
         ]
 
+    def get_google_drive_file_id(self):
+        raise NotImplementedError(
+            "Don't call CerberusDataset directly, but use one of \
+            the child classes in order to choose which sequence you want to load."
+        )
+
     @property
     def raw_file_names(self):
-        return ['street.bag']
+        return ['data.bag']
 
     def download(self):
-        download_file_from_google_drive("1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu",
-                                        Path(self.root, 'raw'), "street.bag")
+        download_file_from_google_drive(self.get_google_drive_file_id(),
+                                        Path(self.root, 'raw'), "data.bag")
 
     @property
     def processed_file_names(self):
@@ -118,7 +132,7 @@ class CerberusStreetDataset(Dataset):
         topic = '/hardware_a1/joint_foot'
 
         # Set up a reader to read the rosbag
-        path_to_bag = os.path.join(self.root, 'raw', 'street.bag')
+        path_to_bag = os.path.join(self.root, 'raw', 'data.bag')
         self.reader = AnyReader([Path(path_to_bag)])
         self.reader.open()
         self.joint_gen = self.reader.messages(connections=[
@@ -145,6 +159,8 @@ class CerberusStreetDataset(Dataset):
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
             f.write(str(length) + " " + str(first_seq))
+            # TODO: Add a note saying which dataset this is, and add 
+            # a check to make sure we don't load an improper dataset.
 
     def len(self):
         return self.length
@@ -218,8 +234,27 @@ class CerberusStreetDataset(Dataset):
                      edge_index=self.edge_matrix_tensor,
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
                      num_nodes=self.A1_URDF.get_num_nodes())
-
         return graph
+
+
+class CerberusStreetDataset(CerberusDataset):
+    """
+    This class specifically loads the "street" sequence
+    of the Cerberus state estimation dataset.
+    """
+
+    def get_google_drive_file_id(self):
+        return "1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu"
+
+
+class CerberusTrackDataset(CerberusDataset):
+    """
+    This class specifically loads the "track" sequence
+    of the Cerberus state estimation dataset.
+    """
+
+    def get_google_drive_file_id(self):
+        return "1t2Y2Lp757lmYGsuGqu2T0aVnyKgZlLSW"
 
 
 class HyQDataset(Dataset):

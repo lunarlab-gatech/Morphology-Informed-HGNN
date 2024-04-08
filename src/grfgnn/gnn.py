@@ -1,7 +1,7 @@
 from .datasets import CerberusStreetDataset
 from .urdfParser import RobotURDF
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn.models import GCN
+from torch_geometric.nn.models import MLP, GCN
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
@@ -21,8 +21,8 @@ def test_model(model, evalLoader, device, A1_URDF, ground_truth_indices,
         for batch in evalLoader:
 
             # Run through the GCN
-            out_raw = model(x=batch.x.to(device),
-                            edge_index=batch.edge_index.to(device)).squeeze()
+            out_raw = model(x=batch.x.to(device))  #,
+            # edge_index=batch.edge_index.to(device)).squeeze()
 
             # Reshape so that we have a tensor of (num_nodes, batch_size)
             out_nodes_by_batch = torch.reshape(
@@ -70,26 +70,30 @@ def train_model():
 
     # Create the dataloader and iterate through the batches
     trainLoader: DataLoader = DataLoader(train_set,
-                                         batch_size=32,
+                                         batch_size=100,
                                          shuffle=True)
-    testLoader: DataLoader = DataLoader(test_set, batch_size=32, shuffle=True)
-    valLoader: DataLoader = DataLoader(val_set, batch_size=32, shuffle=True)
+    testLoader: DataLoader = DataLoader(test_set, batch_size=100, shuffle=True)
+    valLoader: DataLoader = DataLoader(val_set, batch_size=100, shuffle=True)
 
     # Set the current training device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Device: ", device)
 
     # Create the model
-    model = GCN(in_channels=dataset[0].x.shape[1],
+    model = MLP(in_channels=dataset[0].x.flatten().shape[0],
                 hidden_channels=256,
-                num_layers=8,
-                out_channels=1)
+                num_layers=4,
+                out_channels=4)
+    #model = GCN(in_channels=dataset[0].x.shape[1],
+    #            hidden_channels=256,
+    #            num_layers=4,
+    #            out_channels=1)
     model.to(device)
 
     # Use the Adam Optimizer with an Adaptive Learning Rate
     prev_lr = 0.03
     optimizer = torch.optim.Adam(model.parameters(), lr=0.03)
-    scheduler = ReduceLROnPlateau(optimizer, 'max', patience=5)
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5)
 
     # Use MSELoss
     mseLoss = torch.nn.MSELoss()
@@ -107,18 +111,22 @@ def train_model():
 
     # Run the training loop
     model.train()
+    best_test_loss = None
     for epoch in range(0, epochs):
         pbar = tqdm(total=len(train_set.indices))
         pbar.set_description(f'Epoch {epoch+1:02d}')
         total_loss = 0
-        best_test_loss = None
         for batch in trainLoader:
             # Reset the gradients
             optimizer.zero_grad()
+            inputs = batch.x.flatten() # TAKE OUT FOR GCN
+            print("Batch.x: ", batch.x)
 
             # Run through the GCN
-            out_raw = model(x=batch.x.to(device),
-                            edge_index=batch.edge_index.to(device)).squeeze()
+            #out_raw = model(x=batch.x.to(device),
+            #                edge_index=batch.edge_index.to(device)).squeeze()
+            out_raw = model(x=inputs.to(device))
+            print("out_raw: ", out_raw)
 
             # Reshape so that we have a tensor of (num_nodes, batch_size)
             out_nodes_by_batch = torch.reshape(

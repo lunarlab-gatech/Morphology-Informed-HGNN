@@ -9,3 +9,5 @@ pandas
 rosbags
 pathlib
 gdown
+lightning
+wandb
