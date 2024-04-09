@@ -15,6 +15,8 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from rosbags.interfaces import ConnectionExtRosbag2
 from typing import cast
 
+# TODO: Make a flag that returns information for MLP format
+
 
 class CerberusDataset(Dataset):
     """
@@ -29,7 +31,6 @@ class CerberusDataset(Dataset):
     def __init__(self,
                  root: str,
                  robotURDF: RobotURDF,
-                 entries_to_use: int = None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -44,10 +45,6 @@ class CerberusDataset(Dataset):
             data = f.readline().split(" ")
             self.length = int(data[0])
             self.first_index = int(data[1])
-
-        # Use less entries if we want to
-        if entries_to_use is not None and entries_to_use <= self.length:
-            self.length = entries_to_use
 
         # Open up the A1 urdf file and get the edge matrix
         self.A1_URDF = robotURDF
@@ -222,6 +219,10 @@ class CerberusDataset(Dataset):
         """
         This helper function opens the file named "ros_seq"
         and loads the position, velocity, and effort information.
+
+        Parameters:
+            ros_seq (int): The sequence number of the ros message
+                whose data should be loaded.
         """
 
         # Open the file with the proper index
@@ -529,6 +530,8 @@ def a1_test():
     #     rotate=False,
     #     font_size=7)
     plt.savefig("drawnGraph.png")
+
+    # TODO: Make a method for drawing the graph
 
 
 def main():

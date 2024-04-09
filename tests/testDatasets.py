@@ -1,12 +1,13 @@
 import unittest
 from pathlib import Path
-from grfgnn import RobotURDF, CerberusStreetDataset
+from grfgnn import RobotURDF, CerberusStreetDataset, CerberusTrackDataset
+from rosbags.highlevel import AnyReader
 
 
-class TestCerberusStreetDataset(unittest.TestCase):
+class TestCerberusDatasets(unittest.TestCase):
     """
-    Test that the Cerberus Street Dataset class properly downloads,
-    processes, and reads the info for creating graph datasets. We
+    Test that the Cerberus Dataset classes properly download,
+    process, and read the info for creating graph datasets. We
     used webviz.io in order to inspect the rosbag and genereate 
     regression test cases.
     """
@@ -18,12 +19,28 @@ class TestCerberusStreetDataset(unittest.TestCase):
         A1_URDF = RobotURDF(self.a1_path, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', True)
 
-        # Create the dataset
-        self.dataset_path = Path(
+        # Create the street dataset
+        self.dataset_street_path = Path(
             Path(__file__).cwd(), 'datasets', 'cerberus_street')
-        self.dataset = CerberusStreetDataset(self.dataset_path, A1_URDF)
-        self.dataset_only_first_100 = CerberusStreetDataset(
-            self.dataset_path, A1_URDF, 100)
+        self.dataset_street = CerberusStreetDataset(self.dataset_street_path,
+                                                    A1_URDF)
+
+        # Create the track dataset
+        self.dataset_track_path = Path(
+            Path(__file__).cwd(), 'datasets', 'cerberus_track')
+        self.dataset_track = CerberusTrackDataset(self.dataset_track_path,
+                                                  A1_URDF)
+
+        # Create lists to hold the datasets and paths we want to loop through
+        self.dataset_path_list = [
+            self.dataset_street_path, self.dataset_track_path
+        ]
+        self.dataset_list = [self.dataset_street, self.dataset_track]
+
+        # Ground truth sequence numbers and lengths
+        self.first_seq_nums = [1597, 2603]
+        self.last_seq_nums = [264904, 283736]
+        self.lengths = [263308, 281134]
 
     def test_download_and_processing(self):
         """
@@ -31,37 +48,33 @@ class TestCerberusStreetDataset(unittest.TestCase):
         the data, and that it correctly finds the first sequence number.
         """
 
-        self.bag_path = self.dataset_path / 'raw' / 'data.bag'
-        self.processed_txt_start_path = self.dataset_path / 'processed' / '1597.txt'
-        self.processed_txt_end_path = self.dataset_path / 'processed' / '264904.txt'
-        self.processed_info_path = self.dataset_path / 'processed' / 'info.txt'
+        for i, dataset in enumerate(self.dataset_list):
+            path = self.dataset_path_list[i]
+            self.bag_path = path / 'raw' / 'data.bag'
+            self.processed_info_path = path / 'processed' / 'info.txt'
 
-        self.assertTrue(self.bag_path.is_file())
-        self.assertTrue(self.processed_txt_start_path.is_file())
-        self.assertTrue(self.processed_txt_end_path.is_file())
-        self.assertTrue(self.processed_info_path.is_file())
-        self.assertEqual(1597, self.dataset.first_index)
+            self.assertTrue(self.bag_path.is_file())
+            self.assertTrue(self.processed_info_path.is_file())
+            self.assertEqual(self.first_seq_nums[i], dataset.first_index)
 
     def test_get_index_of_ros_name(self):
         """
         Test that the ROS joint name to index mapping is correct.
         """
 
-        self.assertEqual(4, self.dataset.get_index_of_ros_name('FR1'))
-        self.assertEqual(9, self.dataset.get_index_of_ros_name('RR0'))
-        self.assertEqual(14, self.dataset.get_index_of_ros_name('RL_foot'))
+        self.assertEqual(4, self.dataset_street.get_index_of_ros_name('FR1'))
+        self.assertEqual(9, self.dataset_street.get_index_of_ros_name('RR0'))
+        self.assertEqual(14,
+                         self.dataset_street.get_index_of_ros_name('RL_foot'))
         with self.assertRaises(IndexError):
-            self.dataset.get_index_of_ros_name("Non-existant")
+            self.dataset_street.get_index_of_ros_name("Non-existant")
 
     def test_length(self):
         """
         Test that the length is properly loaded.
         """
-        self.assertEqual(263308, self.dataset.len())
-
-        # Test the length for the dataset where we only use
-        # the first 100
-        self.assertEqual(100, self.dataset_only_first_100.len())
+        for i, dataset in enumerate(self.dataset_list):
+            self.assertEqual(self.lengths[i], dataset.len())
 
     def test_load_data_at_ros_seq(self):
         """
@@ -69,8 +82,8 @@ class TestCerberusStreetDataset(unittest.TestCase):
         at a specific ros sequence number.
         """
 
-        # Test the first entry in the dataset
-        p, v, e = self.dataset.load_data_at_ros_seq(1597)
+        # Test the first entry in the street dataset
+        p, v, e = self.dataset_street.load_data_at_ros_seq(1597)
         des_p = [
             0.19145259261131287, 1.1113770008087158, -2.5523500442504883,
             -0.32268381118774414, 1.0603430271148682, -2.4854280948638916,
@@ -90,8 +103,8 @@ class TestCerberusStreetDataset(unittest.TestCase):
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(e, des_e)
 
-        # Test the last entry in the dataset
-        p, v, e = self.dataset.load_data_at_ros_seq(264904)
+        # Test the last entry in the street dataset
+        p, v, e = self.dataset_street.load_data_at_ros_seq(264904)
         des_p = [
             0.13228477537631989, 0.7995240688323975, -1.3597643375396729,
             -0.10687294602394104, 0.8143579959869385, -1.5252572298049927,
@@ -111,15 +124,53 @@ class TestCerberusStreetDataset(unittest.TestCase):
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(e, des_e)
 
-        # Test with some out of bounds sequence numbers
-        with self.assertRaises(OSError):
-            self.dataset.load_data_at_ros_seq(1596)
-        with self.assertRaises(OSError):
-            self.dataset.load_data_at_ros_seq(264905)
+        # Test that the out of bounds sequence numbers throw an exception,
+        # while those within bounds don't.
+        for i, dataset in enumerate(self.dataset_list):
+            with self.assertRaises(OSError):
+                dataset.load_data_at_ros_seq(self.first_seq_nums[i] - 1)
+            dataset.load_data_at_ros_seq(self.first_seq_nums[i])
+            dataset.load_data_at_ros_seq(self.last_seq_nums[i])
+            with self.assertRaises(OSError):
+                dataset.load_data_at_ros_seq(self.last_seq_nums[i] + 1)
 
-    # TODO: Add test cases for track dataset
-    # TODO: Add test cases to make sure that the names of the indices of
-    # both dataset match up.
+    def test_all_name_indices_line_up(self):
+        """
+        This method makes sure that the name array provided in the messages of all
+        supported datasets match each other. This assumption is critical, as
+        the get_ground_truth_label_indices() method only works if this assumption
+        holds.
+        
+        If this test fails, then the developers will need to implement custom 
+        self.ros_name_in_index values per Dataset child class.
+        """
+
+        names_lists = []
+        for i, dataset in enumerate(self.dataset_list):
+            # Set up a reader to read the rosbag
+            topic = '/hardware_a1/joint_foot'
+            path_to_bag = Path(self.dataset_path_list[i], 'raw', 'data.bag')
+            self.reader = AnyReader([Path(path_to_bag)])
+            self.reader.open()
+            self.joint_gen = self.reader.messages(connections=[
+                x for x in self.reader.connections if x.topic == topic
+            ])
+
+            # Extract the list of ros names from the first ROS message
+            for connection, _timestamp, rawdata in self.joint_gen:
+                msg = self.reader.deserialize(rawdata, connection.msgtype)
+                names_lists.append(msg.name)
+                break
+
+        # Need at least 2 datasets for this test to make sense
+        self.assertTrue(len(names_lists) > 1)
+
+        # Assert that the lists are all identical
+        for i in range(0, len(names_lists) - 1):
+            self.assertSequenceEqual(names_lists[i], names_lists[i + 1])
+
+    # TODO: Add test cases for get() method
+    # TODO: Add test cases for new dataset class methods
 
 
 if __name__ == '__main__':

@@ -182,6 +182,7 @@ def train_model():
     # Save the model
     torch.save(model.state_dict(), "trained_gnn_100.pth")
 
+# TODO: Carry both two methods over to updated GNN
 
 def display_on_axes(axes, estimated, ground_truth, title):
     """

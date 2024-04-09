@@ -166,4 +166,4 @@ cython_debug/
 models/
 
 # Ignore wandb information
-wandb/
+wandb
