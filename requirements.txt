@@ -11,3 +11,4 @@ pathlib
 gdown
 lightning
 wandb
+names

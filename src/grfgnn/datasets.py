@@ -31,9 +31,21 @@ class CerberusDataset(Dataset):
     def __init__(self,
                  root: str,
                  robotURDF: RobotURDF,
+                 data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
+        """
+        Constructor for Cerberus Dataset and child classes.
+        
+        Parameters:
+            data_format (str): Either 'gnn' or 'mlp'. Determines how the
+                get() method returns data so that the dataset can be
+                trained with a gnn or an mlp.
+        """
+        self.data_format = data_format
+        if self.data_format is not 'mlp' and self.data_format is not 'gnn':
+            raise ValueError("Parameter 'data_format' must be 'gnn' or 'mlp'.")
 
         # Setup the directories for raw and processed data
         self.root = root
@@ -238,22 +250,19 @@ class CerberusDataset(Dataset):
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 efforts.append(float(line[i]))
-        return positions, velocities, efforts
-
-    def get(self, idx):
-        # Bounds check
-        if idx < 0 or idx >= self.length:
-            raise IndexError("Index value out of Dataset bounds.")
-
-        # Load the rosbag information
-        positions, velocities, efforts = self.load_data_at_ros_seq(
-            self.first_index + idx)
 
         # Get the ground truth force labels
         ground_truth_labels = []
         for name in self.ground_truth_ros_names:
             ground_truth_labels.append(
                 efforts[self.get_index_of_ros_name(name)])
+
+        return positions, velocities, efforts, ground_truth_labels
+
+    def get_helper_gnn(self, idx):
+        # Load the rosbag information
+        positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
 
         # Create a note feature matrix
         x = torch.ones((self.A1_URDF.get_num_nodes(), 2), dtype=torch.float)
@@ -278,6 +287,29 @@ class CerberusDataset(Dataset):
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
                      num_nodes=self.A1_URDF.get_num_nodes())
         return graph
+
+    def get_helper_mlp(self, idx):
+        # Load the rosbag information
+        positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Make the network inputs
+        x = torch.tensor((positions[:12] + velocities[:12]), dtype=torch.float)
+
+        # Create the ground truth lables
+        y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        return x, y
+
+    def get(self, idx):
+        # Bounds check
+        if idx < 0 or idx >= self.length:
+            raise IndexError("Index value out of Dataset bounds.")
+
+        # Return data in the proper format
+        if self.data_format is 'gnn':
+            return self.get_helper_gnn(idx)
+        elif self.data_format is 'mlp':
+            return self.get_helper_mlp(idx)
 
 
 class CerberusStreetDataset(CerberusDataset):
