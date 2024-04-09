@@ -10,16 +10,19 @@ from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
 import names
+import matplotlib.pyplot as plt
 
 
 class GCN_Lightning(L.LightningModule):
 
-    def __init__(self, num_node_features, y_indices, num_nodes):
+    def __init__(self, num_node_features, hidden_channels, num_layers, y_indices, num_nodes):
         """
         Constructor for GCN_Lightning class. Pytorch Lightning
         wrapper around the Pytorch geometric GCN class.
 
         Parameters:
+            hidden_channels (int) - The hidden size.
+            num_layers (int) - The number of layers in the model.
             num_node_features (int) - The number of features each
                 node embedding has.
             y_indices (list[int]) - The indices of the GCN output
@@ -29,14 +32,18 @@ class GCN_Lightning(L.LightningModule):
         """
         super().__init__()
         self.gcn_model = GCN(in_channels=num_node_features,
-                             hidden_channels=256,
-                             num_layers=4,
+                             hidden_channels=hidden_channels,
+                             num_layers=num_layers,
                              out_channels=1)
         self.y_indices = y_indices
         self.num_nodes = num_nodes
         self.save_hyperparameters()
 
-    def step_helper_function(self, batch, batch_idx):
+    def get_network_output(self, batch, batch_idx):
+        """
+        Helper method that takes a batch as input,
+        and returns the predicted labels
+        """
         out_raw = self.gcn_model(x=batch.x,
                                  edge_index=batch.edge_index).squeeze()
 
@@ -48,13 +55,18 @@ class GCN_Lightning(L.LightningModule):
         truth_tensors = []
         for index in self.y_indices:
             truth_tensors.append(out_nodes_by_batch[:, index])
-        out_predicted = torch.stack(truth_tensors).swapaxes(0, 1)
+        return torch.stack(truth_tensors).swapaxes(0, 1)
 
-        # Get the labels
+    def predict_step(self, batch, batch_idx):
+        out_predicted = self.get_network_output(batch, batch_idx)
         batch_y = torch.reshape(batch.y,
                                 (batch.batch_size, len(self.y_indices)))
+        return out_predicted, batch_y
 
-        # Calculate loss
+    def step_helper_function(self, batch, batch_idx):
+        out_predicted = self.get_network_output(batch, batch_idx)
+        batch_y = torch.reshape(batch.y,
+                                (batch.batch_size, len(self.y_indices)))
         loss = nn.functional.mse_loss(out_predicted, batch_y)
         return loss
 
@@ -78,7 +90,7 @@ class GCN_Lightning(L.LightningModule):
 
 class MLP_Lightning(L.LightningModule):
 
-    def __init__(self, in_channels, hidden_channels, batch_size):
+    def __init__(self, in_channels, hidden_channels, num_layers, batch_size):
         """
         Constructor for MLP_Lightning class. Pytorch Lightning
         wrapper around the Pytorch Torchvision MLP class.
@@ -90,12 +102,35 @@ class MLP_Lightning(L.LightningModule):
         """
         super().__init__()
         self.batch_size = batch_size
-        self.mlp_model = nn.Sequential(
-            nn.Linear(in_channels, hidden_channels), nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels), nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels), nn.ReLU(),
-            nn.Linear(hidden_channels, 4), nn.ReLU())
+
+        # Create the proper number of layers
+        modules = []
+        if num_layers < 1:
+            raise ValueError("num_layers must be 1 or greater")
+        elif num_layers is 1:
+            modules.append(nn.Linear(in_channels, 4))
+            modules.append(nn.ReLU())
+        elif num_layers is 2:
+            modules.append(nn.Linear(in_channels, hidden_channels))
+            modules.append(nn.ReLU())
+            modules.append(nn.Linear(hidden_channels, 4))
+            modules.append(nn.ReLU())
+        else:
+            modules.append(nn.Linear(in_channels, hidden_channels))
+            modules.append(nn.ReLU())
+            for i in range(0, num_layers-2):
+                modules.append(nn.Linear(hidden_channels, hidden_channels))
+                modules.append(nn.ReLU())
+            modules.append(nn.Linear(hidden_channels, 4))
+            modules.append(nn.ReLU())
+
+        self.mlp_model = nn.Sequential(*modules)
         self.save_hyperparameters()
+    
+    def predict_step(self, batch, batch_idx):
+        x, y = batch
+        y_pred = self.mlp_model(x)
+        return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
         x, y = batch
@@ -120,6 +155,84 @@ class MLP_Lightning(L.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=0.003)
         return optimizer
 
+def display_on_axes(axes, estimated, ground_truth, title):
+    """
+    Simple function that displays grounth truth and estimated
+    information on a Matplotlib.pyplot Axes.
+    """
+    axes.plot(ground_truth, label="Ground Truth", linestyle='-.')
+    axes.plot(estimated, label="Estimated")
+    axes.legend()
+    axes.set_title(title)
+
+def visualize_model_outputs(model_type: str, path_to_checkpoint: Path, 
+                            path_to_urdf: Path, path_to_cerberus_track: Path,
+                            num_to_visualize: int, path_to_file: Path = None):
+
+    # Load the A1 urdf
+    A1_URDF = RobotURDF(path_to_urdf, 'package://a1_description/',
+                        'unitree_ros/robots/a1_description', True)
+
+    # Load the test dataset
+    street_dataset = CerberusTrackDataset(path_to_cerberus_track,
+        A1_URDF, model_type)
+
+    # Initialize the model
+    model = None
+    if model_type is 'gnn':
+        model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    elif model_type is 'mlp':
+        model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    else:
+        raise ValueError("model_type must be gnn or mlp.")
+
+    # Create a validation dataloader
+    valLoader: DataLoader = DataLoader(street_dataset, batch_size=num_to_visualize, shuffle=False,
+                                       num_workers=15)
+
+    # Setup four graphs
+    fig, axes = plt.subplots(4, figsize=[20, 10])
+    fig.suptitle('Foot Estimated Forces vs. Ground Truth')
+
+    # Validate with the model
+    trainer = L.Trainer(limit_predict_batches=1)
+    predictions_result = trainer.predict(model, valLoader)
+    pred = predictions_result[0][0].numpy()
+    labels = predictions_result[0][1].numpy()
+
+    # Display the results
+    titles = [
+        "Front Left Foot Forces", "Front Right Foot Forces",
+        "Rear Left Foot Forces", "Rear Right Foot Forces"
+    ]
+    for i in range(0, 4):
+        display_on_axes(axes[i], pred[:, i], labels[:, i],
+                        titles[i])
+        
+    # Show the figure
+    print(path_to_file)
+    if path_to_file is not None:
+        plt.savefig(path_to_file)
+    plt.show()
+
+def initialize_model(model_type: str, dataset, hidden_channels, num_layers, num_nodes, batch_size):
+    """
+    Method for initializing the proper model. CURRENTLY NOT USED.
+    """
+
+    lightning_model = None
+    if model_type is 'gnn':
+        lightning_model = GCN_Lightning(
+            dataset[0].x.shape[1],
+            hidden_channels,
+            num_layers,
+            dataset.get_ground_truth_label_indices(),
+            num_nodes)
+    elif model_type is 'mlp':
+        lightning_model = MLP_Lightning(24, hidden_channels, num_layers, batch_size)
+    else:
+        raise ValueError("Invalid model type.")
+    return lightning_model
 
 def train_model(path_to_urdf: Path, path_to_cerberus_street: Path, 
                 path_to_cerberus_track: Path, model_type: str = 'gnn'):
@@ -138,19 +251,23 @@ def train_model(path_to_urdf: Path, path_to_cerberus_street: Path,
 
     # Set batch size
     batch_size = 100
+    hidden_channels = 256
+    num_layers = 8
 
-    # Initalize the correct model
+    # Create the model
     lightning_model = None
     if model_type is 'gnn':
         lightning_model = GCN_Lightning(
             street_dataset[0].x.shape[1],
+            hidden_channels,
+            num_layers,
             street_dataset.get_ground_truth_label_indices(),
             A1_URDF.get_num_nodes())
     elif model_type is 'mlp':
-        lightning_model = MLP_Lightning(24, 256, batch_size)
+        lightning_model = MLP_Lightning(24, hidden_channels, num_layers, batch_size)
     else:
         raise ValueError("Invalid model type.")
-
+    
     # Create Logger
     run_name = model_type + "-" + names.get_first_name(
     ) + "-" + names.get_last_name()

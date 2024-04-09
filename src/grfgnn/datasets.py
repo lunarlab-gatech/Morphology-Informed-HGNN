@@ -473,72 +473,13 @@ class HyQDataset(Dataset):
         return self.dataset[idx]
 
 
-def hyq_test():
-    # Load the HyQ URDF file & dataset
-    HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf')
-
-    # Extract the edge matrix and convert to tensor
-    edge_matrix = HyQ_URDF.get_edge_index_matrix()
-
-    # Create the dataset
-    dataset = HyQDataset()
-
-    # Extract the first graph
-    graph: Data = dataset[0]
-
-    # Write the edge attributes onto the labels
-    edge_labels = HyQ_URDF.get_edge_connection_to_name_dict()
-    for i in range(0, len(graph.edge_attr)):
-        edge_features = graph.edge_attr[i].numpy()
-
-        # Only write features if they aren't all zeros
-        if (np.sum(edge_features) != 0):
-            # Find connection numbers for this edge
-            connection_matrix = graph.edge_index[:, i].numpy()
-            connection_tuple = (connection_matrix[0], connection_matrix[1])
-
-            # Update the edge label
-            try:
-                label = edge_labels[connection_tuple]
-                label += ": " + str(edge_features)
-                edge_labels[connection_tuple] = label
-            except KeyError:
-                pass
-
-    # Convert to networkx graph
-    nx_graph = torch_geometric.utils.to_networkx(graph, to_undirected=True)
-
-    # Draw the graph
-    spring_layout = networkx.spring_layout(nx_graph)
-    networkx.draw(nx_graph, pos=spring_layout)
-    networkx.draw_networkx_labels(nx_graph,
-                                  pos=spring_layout,
-                                  labels=HyQ_URDF.get_node_num_to_name_dict(),
-                                  verticalalignment='top',
-                                  font_size=8)
-    networkx.draw_networkx_edge_labels(nx_graph,
-                                       pos=spring_layout,
-                                       edge_labels=edge_labels,
-                                       rotate=False,
-                                       font_size=7)
-    plt.show()
-
-
-def a1_test():
-    # Load the A1 URDF file
-    A1_URDF = RobotURDF('urdf_files/A1/a1.urdf', 'package://a1_description/',
-                        'unitree_ros/robots/a1_description', True)
-
-    # Create the dataset
-    dataset = CerberusStreetDataset(
-        '/home/dlittleman/state-estimation-gnn/datasets/cerberus_street',
-        A1_URDF)
-
-    # Extract the first graph
-    graph: Data = dataset[0]
-
+def visualize_graph(graph: Data, urdf: RobotURDF, fig_save_path: Path = None, draw_edges: bool = False):
+    """
+    This helper method visualizes a Data graph object
+    using networkx.
+    """
     # Write the features onto the names
-    node_labels = A1_URDF.get_node_index_to_name_dict()
+    node_labels = urdf.get_node_index_to_name_dict()
     for i in range(0, len(graph.x)):
         label = node_labels[i]
         label += ": " + str(graph.x[i].numpy())
@@ -555,20 +496,16 @@ def a1_test():
                                   labels=node_labels,
                                   verticalalignment='top',
                                   font_size=8)
-    # networkx.draw_networkx_edge_labels(
-    #     nx_graph,
-    #     pos=spring_layout,
-    #     edge_labels=A1_URDF.get_edge_connections_to_name_dict(),
-    #     rotate=False,
-    #     font_size=7)
-    plt.savefig("drawnGraph.png")
+    if draw_edges:
+        networkx.draw_networkx_edge_labels(
+            nx_graph,
+            pos=spring_layout,
+            edge_labels=urdf.get_edge_connections_to_name_dict(),
+            rotate=False,
+            font_size=7)    
+    
+    # Save the figure if requested
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path)
+    plt.show()
 
-    # TODO: Make a method for drawing the graph
-
-
-def main():
-    a1_test()
-
-
-if __name__ == "__main__":
-    main()
