@@ -13,7 +13,6 @@ jobs:
   build-and-test:
     name: "Build & Test Python"
     runs-on: ubuntu-latest
-    needs: free-disk-space
 
     steps:
     - uses: actions/checkout@v3
