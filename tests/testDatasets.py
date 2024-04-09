@@ -117,6 +117,10 @@ class TestCerberusStreetDataset(unittest.TestCase):
         with self.assertRaises(OSError):
             self.dataset.load_data_at_ros_seq(264905)
 
+    # TODO: Add test cases for track dataset
+    # TODO: Add test cases to make sure that the names of the indices of
+    # both dataset match up.
+
 
 if __name__ == '__main__':
     unittest.main()

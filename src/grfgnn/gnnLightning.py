@@ -8,6 +8,7 @@ from .datasets import CerberusStreetDataset, CerberusTrackDataset
 from .urdfParser import RobotURDF
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
+from pathlib import Path
 
 
 # define the LightningModule
@@ -94,10 +95,14 @@ def train_GNN_model():
         street_dataset.get_ground_truth_label_indices(),
         A1_URDF.get_num_nodes())
 
+    # Create Logger
+    wandb_logger = WandbLogger(project="grfgnn")
+
     # Set model parameters
     batch_size = 100
+    wandb_logger.experiment.config["batch_size"] = batch_size
     rand_seed = 10341885
-    path_to_save = "models/GCN"
+    path_to_save = str(Path("models", "GCN", wandb_logger.experiment.name))
     rand_gen = torch.Generator().manual_seed(rand_seed)
 
     # Split the data into training, validation, and testing sets
@@ -122,10 +127,6 @@ def train_GNN_model():
                                         shuffle=False,
                                         num_workers=15)
 
-    # Create Logger
-    wandb_logger = WandbLogger(project="grfgnn")
-    wandb_logger.experiment.config["batch_size"] = batch_size
-
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
                                           filename='{epoch}-{val_loss:.2f}',
@@ -140,6 +141,8 @@ def train_GNN_model():
         devices='auto',
         accelerator="auto",
         max_epochs=100,
+        limit_train_batches=10,
+        limit_val_batches=10,
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
         logger=wandb_logger,
