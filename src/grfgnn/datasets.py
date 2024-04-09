@@ -101,7 +101,48 @@ class CerberusDataset(Dataset):
             'RR_thigh_joint', 'RR_calf_joint'
         ]
 
+    def get_ground_truth_label_indices(self):
+        """
+        This helper method returns the node indices that correspond to 
+        the ground truth forces labels contained in the "y" of each 
+        Data object. The number x in the ith index tells us that 
+        ground truth label i matches up with node x from the GNN output.
+
+        For example, if the graph has 8 nodes, and there are only 4 
+        ground truth labels, this method might return [0, 3, 4, 7].
+        This means that the first ground truth label should match
+        the output of the node at index 0, the second ground truth label
+        should match the output of the node at index 3, and so on.
+
+        Returns:
+            ground_truth_indices (list[int]) - List of the indices of
+            the graph nodes that should output the ground truth labels 
+            at the same corresponding index.
+        """
+        ground_truth_indices = []
+        name_to_index = self.A1_URDF.get_node_name_to_index_dict()
+        for urdf_name in self.ground_truth_urdf_names:
+            ground_truth_indices.append(name_to_index[urdf_name])
+        return ground_truth_indices
+
     def get_google_drive_file_id(self):
+        """
+        Method for child classes to choose which sequence to load.
+        """
+
+        raise NotImplementedError(
+            "Don't call CerberusDataset directly, but use one of \
+            the child classes in order to choose which sequence you want to load."
+        )
+
+    def get_start_and_end_seq_ids(self):
+        """
+        Method for child classes to tell the processing method the
+        numbers of the files they are looking for. It returns
+        the seq id of the first ROS '/hardware_a1/joint_foot' 
+        message, and the seq id of the last.
+        """
+
         raise NotImplementedError(
             "Don't call CerberusDataset directly, but use one of \
             the child classes in order to choose which sequence you want to load."
@@ -123,7 +164,8 @@ class CerberusDataset(Dataset):
         """
 
         processed_file_names = []
-        for i in range(1597, 264904 + 1):
+        start_seq_id, end_seq_id = self.get_start_and_end_seq_ids()
+        for i in range(start_seq_id, end_seq_id + 1):
             processed_file_names.append(str(i) + ".txt")
         processed_file_names.append("info.txt")
         return processed_file_names
@@ -159,7 +201,7 @@ class CerberusDataset(Dataset):
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
             f.write(str(length) + " " + str(first_seq))
-            # TODO: Add a note saying which dataset this is, and add 
+            # TODO: Add a note saying which dataset this is, and add
             # a check to make sure we don't load an improper dataset.
 
     def len(self):
@@ -246,6 +288,9 @@ class CerberusStreetDataset(CerberusDataset):
     def get_google_drive_file_id(self):
         return "1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu"
 
+    def get_start_and_end_seq_ids(self):
+        return 1597, 264904
+
 
 class CerberusTrackDataset(CerberusDataset):
     """
@@ -255,6 +300,9 @@ class CerberusTrackDataset(CerberusDataset):
 
     def get_google_drive_file_id(self):
         return "1t2Y2Lp757lmYGsuGqu2T0aVnyKgZlLSW"
+
+    def get_start_and_end_seq_ids(self):
+        return 2603, 283736
 
 
 class HyQDataset(Dataset):

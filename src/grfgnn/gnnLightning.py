@@ -1,24 +1,32 @@
-import os
 import torch
-from torch import optim, nn, utils, Tensor
-from torchvision.datasets import MNIST
-from torchvision.transforms import ToTensor
+from torch import optim, nn
 import lightning as L
 from lightning.pytorch import seed_everything
 from torch_geometric.nn.models import MLP, GCN
-from torch_geometric.data.lightning import LightningDataset
 from lightning.pytorch.loggers import WandbLogger
-from .datasets import CerberusStreetDataset
+from .datasets import CerberusStreetDataset, CerberusTrackDataset
 from .urdfParser import RobotURDF
 from torch_geometric.loader import DataLoader
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 
 # define the LightningModule
 class GCN_Lightning(L.LightningModule):
 
     def __init__(self, num_node_features, y_indices, num_nodes):
+        """
+        Constructor for GCN_Lightning class. Pytorch Lightning
+        wrapper around the Pytorch geometric GCN class.
+
+        Parameters:
+            num_node_features (int) - The number of features each
+                node embedding has.
+            y_indices (list[int]) - The indices of the GCN output
+                that should match the ground truch labels provided.
+                All other node outputs of the GCN are ignored.
+            num_nodes (int) - The number of nodes in the graph.
+        """
         super().__init__()
-        # define any number of nn.Modules (or use your current ones)
         self.gcn_model = GCN(in_channels=num_node_features,
                              hidden_channels=256,
                              num_layers=4,
@@ -72,39 +80,35 @@ def train_GNN_model():
     A1_URDF = RobotURDF('urdf_files/A1/a1.urdf', 'package://a1_description/',
                         'unitree_ros/robots/a1_description', True)
 
-    # Load and shuffle the dataset
-    dataset = CerberusStreetDataset(
+    # Load the datasets
+    street_dataset = CerberusStreetDataset(
         '/home/dlittleman/state-estimation-gnn/datasets/cerberus_street',
-        A1_URDF, None)
-
-    # Calculate the indices in the output where we look for our calculated forces
-    ground_truth_indices = []
-    name_to_index = A1_URDF.get_node_name_to_index_dict()
-    for urdf_name in dataset.ground_truth_urdf_names:
-        ground_truth_indices.append(name_to_index[urdf_name])
+        A1_URDF)
+    track_dataset = CerberusTrackDataset(
+        '/home/dlittleman/state-estimation-gnn/datasets/cerberus_track',
+        A1_URDF)
 
     # Initialize the Lightning module
-    lightning_model = GCN_Lightning(dataset[0].x.shape[1],
-                                    ground_truth_indices,
-                                    A1_URDF.get_num_nodes())
+    lightning_model = GCN_Lightning(
+        street_dataset[0].x.shape[1],
+        street_dataset.get_ground_truth_label_indices(),
+        A1_URDF.get_num_nodes())
 
     # Set model parameters
     batch_size = 100
+    rand_seed = 10341885
+    path_to_save = "models/GCN"
+    rand_gen = torch.Generator().manual_seed(rand_seed)
 
     # Split the data into training, validation, and testing sets
-    rand_seed = 10341885
-    rand_gen = torch.Generator().manual_seed(rand_seed)
-    train_set, val_set, test_set = torch.utils.data.random_split(
-        dataset, [0.7, 0.2, 0.1], generator=rand_gen)
-    
-    # TODO: VAL AND TEST SHOULD BE DIFFERENT DATASET
+    train_set = street_dataset
+    val_size = int(0.7 * track_dataset.len())
+    test_size = track_dataset.len() - val_size
+    val_set, test_set = torch.utils.data.random_split(track_dataset,
+                                                      [val_size, test_size],
+                                                      generator=rand_gen)
 
-    # Create the dataloader and iterate through the batches
-    # dataModule = LightningDataset(train_set,
-    #                               val_set,
-    #                               test_set,
-    #                               batch_size=batch_size,
-    #                               num_workers=15)
+    # Create the dataloaders
     trainLoader: DataLoader = DataLoader(train_set,
                                          batch_size=100,
                                          shuffle=True,
@@ -122,17 +126,23 @@ def train_GNN_model():
     wandb_logger = WandbLogger(project="grfgnn")
     wandb_logger.experiment.config["batch_size"] = batch_size
 
+    # Set up precise checkpointing
+    checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
+                                          filename='{epoch}-{val_loss:.2f}',
+                                          save_top_k=5,
+                                          monitor="val_loss")
+
     # train the model (hint: here are some helpful Trainer arguments for rapid idea iteration)
     seed_everything(rand_seed, workers=True)
     trainer = L.Trainer(
-        default_root_dir="./models/GCN/",
+        default_root_dir=path_to_save,
         deterministic=True,  # Reproducability
         devices='auto',
         accelerator="auto",
-        #limit_train_batches=100,
         max_epochs=100,
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
-        logger=wandb_logger)
+        logger=wandb_logger,
+        callbacks=[checkpoint_callback])
     trainer.fit(lightning_model, trainLoader, valLoader)
     trainer.test(lightning_model, dataloaders=testLoader)
