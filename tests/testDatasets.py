@@ -83,7 +83,7 @@ class TestCerberusDatasets(unittest.TestCase):
         """
 
         # Test the first entry in the street dataset
-        p, v, e = self.dataset_street.load_data_at_ros_seq(1597)
+        p, v, e, l = self.dataset_street.load_data_at_ros_seq(1597)
         des_p = [
             0.19145259261131287, 1.1113770008087158, -2.5523500442504883,
             -0.32268381118774414, 1.0603430271148682, -2.4854280948638916,
@@ -99,12 +99,14 @@ class TestCerberusDatasets(unittest.TestCase):
             1, 1, 1, 1
         ]
         des_e = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48.2, 43.8, 25.8, 24.6]
+        des_l = [48.2, 43.8, 25.8, 24.6]
         self.assertSequenceEqual(p, des_p)
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(e, des_e)
+        self.assertSequenceEqual(l, des_l)
 
         # Test the last entry in the street dataset
-        p, v, e = self.dataset_street.load_data_at_ros_seq(264904)
+        p, v, e, l = self.dataset_street.load_data_at_ros_seq(264904)
         des_p = [
             0.13228477537631989, 0.7995240688323975, -1.3597643375396729,
             -0.10687294602394104, 0.8143579959869385, -1.5252572298049927,
@@ -120,9 +122,13 @@ class TestCerberusDatasets(unittest.TestCase):
             1, 1, 1
         ]
         des_e = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 98.6, 164.8, 69.2, 69.6]
+        des_l = [98.6, 164.8, 69.2, 69.6]
         self.assertSequenceEqual(p, des_p)
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(e, des_e)
+        self.assertSequenceEqual(l, des_l)
+
+        # TODO: Add specific test case for track dataset
 
         # Test that the out of bounds sequence numbers throw an exception,
         # while those within bounds don't.

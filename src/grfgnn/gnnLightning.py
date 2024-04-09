@@ -121,18 +121,19 @@ class MLP_Lightning(L.LightningModule):
         return optimizer
 
 
-def train_model(model_type: str = 'gnn'):
+def train_model(path_to_urdf: Path, path_to_cerberus_street: Path, 
+                path_to_cerberus_track: Path, model_type: str = 'gnn'):
 
     # Load the A1 urdf
-    A1_URDF = RobotURDF('urdf_files/A1/a1.urdf', 'package://a1_description/',
+    A1_URDF = RobotURDF(path_to_urdf, 'package://a1_description/',
                         'unitree_ros/robots/a1_description', True)
 
     # Initalize the datasets
     street_dataset = CerberusStreetDataset(
-        '/home/dlittleman/state-estimation-gnn/datasets/cerberus_street',
+        path_to_cerberus_street,
         A1_URDF, model_type)
     track_dataset = CerberusTrackDataset(
-        '/home/dlittleman/state-estimation-gnn/datasets/cerberus_track',
+        path_to_cerberus_track,
         A1_URDF, model_type)
 
     # Set batch size
@@ -190,12 +191,15 @@ def train_model(model_type: str = 'gnn'):
                                           save_top_k=5,
                                           monitor="val_loss")
 
+    # Lower precision of operations for faster training
+    torch.set_float32_matmul_precision("medium")
+
     # Train the model and test
     # seed_everything(rand_seed, workers=True)
     trainer = L.Trainer(
         default_root_dir=path_to_save,
         # deterministic=True,  # Reproducability
-        benchmark=True,
+        benchmark=True, 
         devices='auto',
         accelerator="auto",
         max_epochs=100,
