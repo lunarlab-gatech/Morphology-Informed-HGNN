@@ -64,13 +64,20 @@ class CerberusDataset(Dataset):
             self.length = int(data[0])
             self.first_index = int(data[1])
 
-        # Open up the A1 urdf file and get the edge matrix
-        self.A1_URDF = robotURDF
-        self.edge_matrix = self.A1_URDF.get_edge_index_matrix()
+        # Make sure the URDF file we were given properly matches 
+        # what we are expecting
+        passed_urdf_name = robotURDF.robot_urdf.name
+        expected_name = self.get_expected_urdf_name()
+        if passed_urdf_name != expected_name:
+            raise ValueError("Invalid URDF: \"" + passed_urdf_name + "\". This dataset was collected on the \"" + expected_name + "\" robot. Please pass in the URDF file for the \"" + expected_name + "\" robot, not for the \"" + passed_urdf_name + "\" robot.")
+
+        # Open up the urdf file and get the edge matrix
+        self.URDF = robotURDF
+        self.edge_matrix = self.URDF.get_edge_index_matrix()
         self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
                                                dtype=torch.long)
         # Get node name to index mapping
-        self.urdf_name_to_index = self.A1_URDF.get_node_name_to_index_dict()
+        self.urdf_name_to_index = self.URDF.get_node_name_to_index_dict()
 
         # Map ROS names to array positions
         self.ros_name_in_index = [
@@ -156,6 +163,20 @@ class CerberusDataset(Dataset):
         """
         raise self.cerberusError
 
+    def get_expected_urdf_name(self):
+        """
+        Method for child classes to specify what URDF file they are
+        looking for.
+        """
+        raise self.cerberusError
+    
+    def get_joint_msg_topic(self):
+        """
+        Method for child classes to specify the proper message topic
+        depending on the robot.
+        """
+        raise self.cerberusError
+
     @property
     def raw_file_names(self):
         return ['data.bag']
@@ -179,7 +200,7 @@ class CerberusDataset(Dataset):
         return processed_file_names
 
     def process(self):
-        topic = '/hardware_a1/joint_foot'
+        topic = self.get_joint_msg_topic()
 
         # Set up a reader to read the rosbag
         path_to_bag = os.path.join(self.root, 'raw', 'data.bag')
@@ -209,6 +230,7 @@ class CerberusDataset(Dataset):
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
             f.write(str(length) + " " + str(first_seq))
+
             # TODO: Add a note saying which dataset this is, and add
             # a check to make sure we don't load an improper dataset.
 
@@ -268,7 +290,7 @@ class CerberusDataset(Dataset):
             self.first_index + idx)
 
         # Create a note feature matrix
-        x = torch.ones((self.A1_URDF.get_num_nodes(), 2), dtype=torch.float)
+        x = torch.ones((self.URDF.get_num_nodes(), 2), dtype=torch.float)
 
         # For each joint specified
         for urdf_node_name in self.nodes_for_attributes:
@@ -288,7 +310,7 @@ class CerberusDataset(Dataset):
         graph = Data(x=x,
                      edge_index=self.edge_matrix_tensor,
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
-                     num_nodes=self.A1_URDF.get_num_nodes())
+                     num_nodes=self.URDF.get_num_nodes())
         return graph
 
     def get_helper_mlp(self, idx):
@@ -318,8 +340,18 @@ class CerberusDataset(Dataset):
         elif self.data_format is 'mlp':
             return self.get_helper_mlp(idx)
 
+class CerberusA1Dataset(CerberusDataset):
+    """
+    Child class of Cerberus Dataset, but parent class
+    of datasets that use the UniTree A1 robot.
+    """
+    def get_expected_urdf_name(self):
+        return "a1"
+    
+    def get_joint_msg_topic(self):
+        return "/hardware_a1/joint_foot"
 
-class CerberusStreetDataset(CerberusDataset):
+class CerberusStreetDataset(CerberusA1Dataset):
     """
     This class specifically loads the "street" sequence
     of the Cerberus state estimation dataset.
@@ -331,8 +363,7 @@ class CerberusStreetDataset(CerberusDataset):
     def get_start_and_end_seq_ids(self):
         return 1597, 264904
 
-
-class CerberusTrackDataset(CerberusDataset):
+class CerberusTrackDataset(CerberusA1Dataset):
     """
     This class specifically loads the "track" sequence
     of the Cerberus state estimation dataset.
@@ -343,142 +374,29 @@ class CerberusTrackDataset(CerberusDataset):
 
     def get_start_and_end_seq_ids(self):
         return 2603, 283736
-
-
-class HyQDataset(Dataset):
+    
+class CerberusGo1Dataset(CerberusDataset):
     """
-    NOTE: DO NOT USE
-    THIS CLASS IS CURRENTLY DEFUNCT.
+    Child class of Cerberus Dataset, but parent class
+    of datasets that use the UniTree Gp1 robot.
+    """
+    def get_expected_urdf_name(self):
+        return "go1"
+    
+    def get_joint_msg_topic(self):
+        return "/hardware_go1/joint_foot"
+
+class CerberusCampusDataset(CerberusGo1Dataset):
+    """
+    This class specifically loads the "campus" sequence
+    of the Cerberus state estimation dataset.
     """
 
-    def __init__(self,
-                 root=None,
-                 transform=None,
-                 pre_transform=None,
-                 pre_filter=None):
-        super().__init__(root, transform, pre_transform, pre_filter)
-        print("Loading HyQ Dataset: This may take awhile...")
+    def get_google_drive_file_id(self):
+        return "1UinyXOQiVSPG6n2weYvekvP9NVV8_CLe"
 
-        # Load the HyQ URDF file & dataset
-        HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf',
-                             'package://hyq_description/', 'hyq-description')
-        HyQ_CSV = RobotCSV("trot_in_lab_1")
-
-        # Extract the edge matrix and convert to tensor
-        edge_matrix = HyQ_URDF.get_edge_index_matrix()
-        edge_matrix_tensor = torch.tensor(edge_matrix, dtype=torch.long)
-
-        # Create edge attribute matrices
-        joint_to_features_dict = {
-            # LF features
-            'lf_haa_joint': ['LF_HAA_q', 'LF_HAA_qd_f'],
-            'lf_hfe_joint': ['LF_HFE_q', 'LF_HFE_qd_f'],
-            'lf_kfe_joint': ['LF_KFE_q', 'LF_KFE_qd_f'],
-            # LH features
-            'lh_haa_joint': ['LH_HAA_q', 'LH_HAA_qd_f'],
-            'lh_hfe_joint': ['LH_HFE_q', 'LH_HFE_qd_f'],
-            'lh_kfe_joint': ['LH_KFE_q', 'LH_KFE_qd_f'],
-            # RF features
-            'rf_haa_joint': ['RF_HAA_q', 'RF_HAA_qd_f'],
-            'rf_hfe_joint': ['RF_HFE_q', 'RF_HFE_qd_f'],
-            'rf_kfe_joint': ['RF_KFE_q', 'RF_KFE_qd_f'],
-            # RH features
-            'rh_haa_joint': ['RH_HAA_q', 'RH_HAA_qd_f'],
-            'rh_hfe_joint': ['RH_HFE_q', 'RH_HFE_qd_f'],
-            'rh_kfe_joint': ['RH_KFE_q', 'RH_KFE_qd_f'],
-        }
-        features_per_joint = 2
-        edge_attrs_matrices = self._create_edge_attr_matrices(
-            HyQ_CSV, HyQ_URDF, joint_to_features_dict, features_per_joint)
-
-        # Create target matrix
-        target_matrix_names = [
-            'LF_HAA_fm', 'LF_HFE_fm', 'LF_KFE_fm', 'LH_HAA_fm', 'LH_HFE_fm',
-            'LH_KFE_fm', 'RF_HAA_fm', 'RF_HFE_fm', 'RF_KFE_fm', 'RH_HAA_fm',
-            'RH_HFE_fm', 'RH_KFE_fm'
-        ]
-        y_all_graphs = self._create_target_matrix(HyQ_CSV, HyQ_URDF,
-                                                  target_matrix_names)
-
-        # Create a list of Data (graph) objects
-        self.dataset = list()
-        for i in range(0, len(edge_attrs_matrices)):
-            self.dataset.append(
-                Data(edge_index=edge_matrix_tensor,
-                     edge_attr=torch.tensor(edge_attrs_matrices[i],
-                                            dtype=torch.float),
-                     y=torch.tensor(y_all_graphs[i], dtype=torch.float),
-                     num_nodes=HyQ_URDF.get_num_nodes()))
-        print("HyQ data load complete")
-
-    def _find_edge_indexes_from_connections(self, edge_matrix,
-                                            edge_connections):
-        edge_index = list()
-        for i in range(0, len(edge_matrix[0])):
-            vector = edge_matrix[:, i]
-            if (np.array_equal(vector, edge_connections)
-                    or np.array_equal(vector, np.flip(edge_connections))):
-                edge_index.append(i)
-        return edge_index
-
-    def _create_edge_attr_matrices(self, HyQ_CSV, HyQ_URDF: RobotURDF,
-                                   joint_to_features_dict: dict[str,
-                                                                list[str]],
-                                   features_per_joint):
-        # Load the edge matrix
-        edge_matrix = HyQ_URDF.get_edge_index_matrix()
-
-        # Create the edge_attribute matrix
-        edge_attrs = np.zeros((HyQ_CSV.num_dataset_entries(),
-                               len(edge_matrix[0]), features_per_joint))
-
-        # For each joint specified
-        for joint in joint_to_features_dict:
-            # Get the desired feature names
-            feature_names = joint_to_features_dict[joint]
-
-            # Create the feature vector
-            feature_vectors = np.zeros(
-                (HyQ_CSV.num_dataset_entries(), len(feature_names)))
-            for i in range(0, len(feature_names)):
-                feature_vectors[:, i] = HyQ_CSV.pull_values(feature_names[i])
-
-            # Find the indexes of the particular joint
-            edge_name_to_connection_dict = HyQ_URDF.get_edge_name_to_connections_dict(
-            )
-            joint_edges_dict = edge_name_to_connection_dict[joint]
-            joint_edge_indexes = self._find_edge_indexes_from_connections(
-                edge_matrix, joint_edges_dict)
-
-            # Add the feature vectors to the specified indexes
-            for entry_index in range(0, HyQ_CSV.num_dataset_entries()):
-                for edge_index in joint_edge_indexes:
-                    edge_attrs[entry_index,
-                               edge_index, :] = feature_vectors[entry_index, :]
-
-        return edge_attrs
-
-    def _create_target_matrix(self, HyQ_CSV, HyQ_URDF: RobotURDF,
-                              target_matrix_names: list[str]):
-        # Create the target matrix
-        y = np.zeros((HyQ_CSV.num_dataset_entries(), len(target_matrix_names)))
-
-        # For each target name
-        for i in range(0, len(target_matrix_names)):
-            # Pull the desired values for this target
-            target_values = HyQ_CSV.pull_values(target_matrix_names[i])
-
-            # Save it in the target matrix
-            y[:, i] = target_values
-
-        return y
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
-
+    def get_start_and_end_seq_ids(self):
+        return 119, 174560
 
 def visualize_graph(graph: Data,
                     urdf: RobotURDF,
@@ -488,6 +406,7 @@ def visualize_graph(graph: Data,
     This helper method visualizes a Data graph object
     using networkx.
     """
+
     # Write the features onto the names
     node_labels = urdf.get_node_index_to_name_dict()
     for i in range(0, len(graph.x)):

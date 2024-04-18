@@ -1,2 +1,2 @@
 from .urdfParser import RobotURDF
-from .datasets import CerberusStreetDataset, CerberusTrackDataset
+from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset

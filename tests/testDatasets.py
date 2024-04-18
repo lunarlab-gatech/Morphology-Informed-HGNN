@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from grfgnn import RobotURDF, CerberusStreetDataset, CerberusTrackDataset
+from grfgnn import RobotURDF, CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset
 from rosbags.highlevel import AnyReader
 
 
@@ -13,23 +13,27 @@ class TestCerberusDatasets(unittest.TestCase):
     """
 
     def setUp(self):
-        # Load the A1 URDF file
+        # Load the URDF files
         self.a1_path = Path(
             Path(__file__).cwd(), 'urdf_files', 'A1', 'a1.urdf').absolute()
-        A1_URDF = RobotURDF(self.a1_path, 'package://a1_description/',
+        self.go1_path = Path(
+            Path(__file__).cwd(), 'urdf_files', 'Go1', 'go1.urdf').absolute()
+        self.A1_URDF = RobotURDF(self.a1_path, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', True)
+        self.GO1_URDF = RobotURDF(self.go1_path, 'package://go1_description/',
+                            'unitree_ros/robots/go1_description', True)
 
         # Create the street dataset
         self.dataset_street_path = Path(
             Path(__file__).cwd(), 'datasets', 'cerberus_street')
         self.dataset_street = CerberusStreetDataset(self.dataset_street_path,
-                                                    A1_URDF)
+                                                    self.A1_URDF)
 
         # Create the track dataset
         self.dataset_track_path = Path(
             Path(__file__).cwd(), 'datasets', 'cerberus_track')
         self.dataset_track = CerberusTrackDataset(self.dataset_track_path,
-                                                  A1_URDF)
+                                                  self.A1_URDF)
 
         # Create lists to hold the datasets and paths we want to loop through
         self.dataset_path_list = [
@@ -174,6 +178,16 @@ class TestCerberusDatasets(unittest.TestCase):
         # Assert that the lists are all identical
         for i in range(0, len(names_lists) - 1):
             self.assertSequenceEqual(names_lists[i], names_lists[i + 1])
+
+    def test_urdf_name_check(self):
+        """
+        Makes sure the Dataset class properly detects when it's been passed
+        the wrong URDF file.
+        """
+        with self.assertRaises(ValueError):
+            temp = CerberusStreetDataset(self.dataset_street_path, self.GO1_URDF)
+            temp = CerberusTrackDataset(self.dataset_street_path, self.GO1_URDF)
+
 
     # TODO: Add test cases for get() method
     # TODO: Add test cases for new dataset class methods
