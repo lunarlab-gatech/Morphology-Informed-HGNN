@@ -28,6 +28,12 @@ class CerberusDataset(Dataset):
     https://github.com/ShuoYangRobotics/Cerberus?tab=readme-ov-file
     """
 
+    # Used when initalizing the parent class instead of a proper
+    # child classs
+    cerberusError = NotImplementedError(
+        "Don't call CerberusDataset directly, but use one of \
+        the child classes in order to choose which sequence you want to load.")
+
     def __init__(self,
                  root: str,
                  robotURDF: RobotURDF,
@@ -94,13 +100,18 @@ class CerberusDataset(Dataset):
             'RR_foot_fixed': 'RR_foot'
         }
 
-        # Define the names that contain ground truth labels
+        # Define the names and indicies that contain ground truth labels
         self.ground_truth_urdf_names = [
             'FL_foot_fixed', 'FR_foot_fixed', 'RL_foot_fixed', 'RR_foot_fixed'
         ]
         self.ground_truth_ros_names = []
         for urdf_name in self.ground_truth_urdf_names:
             self.ground_truth_ros_names.append(self.urdf_to_ros_map[urdf_name])
+
+        self.ground_truth_indices = []
+        for urdf_name in self.ground_truth_urdf_names:
+            self.ground_truth_indices.append(
+                self.urdf_name_to_index[urdf_name])
 
         # Define the nodes that should recieve features
         self.nodes_for_attributes = [
@@ -128,21 +139,13 @@ class CerberusDataset(Dataset):
             the graph nodes that should output the ground truth labels 
             at the same corresponding index.
         """
-        ground_truth_indices = []
-        name_to_index = self.A1_URDF.get_node_name_to_index_dict()
-        for urdf_name in self.ground_truth_urdf_names:
-            ground_truth_indices.append(name_to_index[urdf_name])
-        return ground_truth_indices
+        return self.ground_truth_indices
 
     def get_google_drive_file_id(self):
         """
         Method for child classes to choose which sequence to load.
         """
-
-        raise NotImplementedError(
-            "Don't call CerberusDataset directly, but use one of \
-            the child classes in order to choose which sequence you want to load."
-        )
+        raise self.cerberusError
 
     def get_start_and_end_seq_ids(self):
         """
@@ -151,11 +154,7 @@ class CerberusDataset(Dataset):
         the seq id of the first ROS '/hardware_a1/joint_foot' 
         message, and the seq id of the last.
         """
-
-        raise NotImplementedError(
-            "Don't call CerberusDataset directly, but use one of \
-            the child classes in order to choose which sequence you want to load."
-        )
+        raise self.cerberusError
 
     @property
     def raw_file_names(self):
@@ -260,6 +259,10 @@ class CerberusDataset(Dataset):
         return positions, velocities, efforts, ground_truth_labels
 
     def get_helper_gnn(self, idx):
+        """
+        Get a dataset entry if we are using a GNN model.
+        """
+
         # Load the rosbag information
         positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
             self.first_index + idx)
@@ -289,6 +292,10 @@ class CerberusDataset(Dataset):
         return graph
 
     def get_helper_mlp(self, idx):
+        """
+        Gets a Dataset entry if we are using an MLP model.
+        """
+
         # Load the rosbag information
         positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
             self.first_index + idx)
@@ -473,7 +480,10 @@ class HyQDataset(Dataset):
         return self.dataset[idx]
 
 
-def visualize_graph(graph: Data, urdf: RobotURDF, fig_save_path: Path = None, draw_edges: bool = False):
+def visualize_graph(graph: Data,
+                    urdf: RobotURDF,
+                    fig_save_path: Path = None,
+                    draw_edges: bool = False):
     """
     This helper method visualizes a Data graph object
     using networkx.
@@ -502,10 +512,9 @@ def visualize_graph(graph: Data, urdf: RobotURDF, fig_save_path: Path = None, dr
             pos=spring_layout,
             edge_labels=urdf.get_edge_connections_to_name_dict(),
             rotate=False,
-            font_size=7)    
-    
+            font_size=7)
+
     # Save the figure if requested
     if fig_save_path is not None:
         plt.savefig(fig_save_path)
     plt.show()
-
