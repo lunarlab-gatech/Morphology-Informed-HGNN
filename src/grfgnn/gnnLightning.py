@@ -58,10 +58,16 @@ class GCN_Lightning(L.LightningModule):
         return torch.stack(truth_tensors).swapaxes(0, 1)
 
     def predict_step(self, batch, batch_idx):
-        out_predicted = self.get_network_output(batch, batch_idx)
-        batch_y = torch.reshape(batch.y,
+        y_pred = self.get_network_output(batch, batch_idx)
+        y = torch.reshape(batch.y,
                                 (batch.batch_size, len(self.y_indices)))
-        return out_predicted, batch_y
+        print("y: ", y)
+        print("y_pred: ", y_pred)
+        loss = nn.functional.mse_loss(y_pred, y)
+        print("mse loss: ", loss)
+        l1_loss = nn.functional.l1_loss(y_pred, y)
+        print("l1_loss:", l1_loss)
+        return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
         out_predicted = self.get_network_output(batch, batch_idx)
@@ -130,6 +136,12 @@ class MLP_Lightning(L.LightningModule):
     def predict_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self.mlp_model(x)
+        print("y: ", y)
+        print("y_pred: ", y_pred)
+        loss = nn.functional.mse_loss(y_pred, y)
+        print("mse loss: ", loss)
+        l1_loss = nn.functional.l1_loss(y_pred, y)
+        print("l1_loss:", l1_loss)
         return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
@@ -214,25 +226,6 @@ def visualize_model_outputs(model_type: str, path_to_checkpoint: Path,
     if path_to_file is not None:
         plt.savefig(path_to_file)
     plt.show()
-
-def initialize_model(model_type: str, dataset, hidden_channels, num_layers, num_nodes, batch_size):
-    """
-    Method for initializing the proper model. CURRENTLY NOT USED.
-    """
-
-    lightning_model = None
-    if model_type is 'gnn':
-        lightning_model = GCN_Lightning(
-            dataset[0].x.shape[1],
-            hidden_channels,
-            num_layers,
-            dataset.get_ground_truth_label_indices(),
-            num_nodes)
-    elif model_type is 'mlp':
-        lightning_model = MLP_Lightning(24, hidden_channels, num_layers, batch_size)
-    else:
-        raise ValueError("Invalid model type.")
-    return lightning_model
 
 def train_model(path_to_urdf: Path, path_to_cerberus_street: Path, 
                 path_to_cerberus_track: Path, model_type: str = 'gnn'):
