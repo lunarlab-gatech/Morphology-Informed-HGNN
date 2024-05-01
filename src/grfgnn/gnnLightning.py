@@ -4,7 +4,7 @@ import lightning as L
 from lightning.pytorch import seed_everything
 from torch_geometric.nn.models import GCN
 from lightning.pytorch.loggers import WandbLogger
-from .datasets import CerberusStreetDataset, CerberusTrackDataset
+from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset
 from .urdfParser import RobotURDF
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -58,10 +58,16 @@ class GCN_Lightning(L.LightningModule):
         return torch.stack(truth_tensors).swapaxes(0, 1)
 
     def predict_step(self, batch, batch_idx):
-        out_predicted = self.get_network_output(batch, batch_idx)
-        batch_y = torch.reshape(batch.y,
+        y_pred = self.get_network_output(batch, batch_idx)
+        y = torch.reshape(batch.y,
                                 (batch.batch_size, len(self.y_indices)))
-        return out_predicted, batch_y
+        print("y: ", y)
+        print("y_pred: ", y_pred)
+        loss = nn.functional.mse_loss(y_pred, y)
+        print("mse loss: ", loss)
+        l1_loss = nn.functional.l1_loss(y_pred, y)
+        print("l1_loss:", l1_loss)
+        return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
         out_predicted = self.get_network_output(batch, batch_idx)
@@ -130,6 +136,12 @@ class MLP_Lightning(L.LightningModule):
     def predict_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self.mlp_model(x)
+        print("y: ", y)
+        print("y_pred: ", y_pred)
+        loss = nn.functional.mse_loss(y_pred, y)
+        print("mse loss: ", loss)
+        l1_loss = nn.functional.l1_loss(y_pred, y)
+        print("l1_loss:", l1_loss)
         return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
@@ -165,38 +177,38 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.legend()
     axes.set_title(title)
 
-def visualize_model_outputs(model_type: str, path_to_checkpoint: Path, 
-                            path_to_urdf: Path, path_to_cerberus_track: Path,
+def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path, 
+                            predict_dataset: CerberusDataset,
                             num_to_visualize: int, path_to_file: Path = None):
-
-    # Load the A1 urdf
-    A1_URDF = RobotURDF(path_to_urdf, 'package://a1_description/',
-                        'unitree_ros/robots/a1_description', True)
-
-    # Load the test dataset
-    street_dataset = CerberusTrackDataset(path_to_cerberus_track,
-        A1_URDF, model_type)
 
     # Initialize the model
     model = None
     if model_type is 'gnn':
         model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+        model.num_nodes = predict_dataset.URDF.get_num_nodes()
+        model.y_indices = predict_dataset.get_ground_truth_label_indices()
     elif model_type is 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     else:
         raise ValueError("model_type must be gnn or mlp.")
 
     # Create a validation dataloader
-    valLoader: DataLoader = DataLoader(street_dataset, batch_size=num_to_visualize, shuffle=False,
-                                       num_workers=15)
+    valLoader: DataLoader = DataLoader(predict_dataset, batch_size=num_to_visualize, 
+                                       shuffle=False, num_workers=15)
 
     # Setup four graphs
     fig, axes = plt.subplots(4, figsize=[20, 10])
     fig.suptitle('Foot Estimated Forces vs. Ground Truth')
 
     # Validate with the model
-    trainer = L.Trainer(limit_predict_batches=1)
+    trainer = L.Trainer(limit_predict_batches=2)
     predictions_result = trainer.predict(model, valLoader)
+    pred = torch.zeros((0, 4))
+    labels = torch.zeros((0, 4))
+    for batch_result in predictions_result:
+        pred.ca #TODO: BROKEN< MAKE IT SO IT CAN SUM THE RESULTS OF THE BATCHES AND CALCULATE TOTAL LOSS.
+    print(predictions_result[0])
+    print(predictions_result[1])
     pred = predictions_result[0][0].numpy()
     labels = predictions_result[0][1].numpy()
 
@@ -214,25 +226,6 @@ def visualize_model_outputs(model_type: str, path_to_checkpoint: Path,
     if path_to_file is not None:
         plt.savefig(path_to_file)
     plt.show()
-
-def initialize_model(model_type: str, dataset, hidden_channels, num_layers, num_nodes, batch_size):
-    """
-    Method for initializing the proper model. CURRENTLY NOT USED.
-    """
-
-    lightning_model = None
-    if model_type is 'gnn':
-        lightning_model = GCN_Lightning(
-            dataset[0].x.shape[1],
-            hidden_channels,
-            num_layers,
-            dataset.get_ground_truth_label_indices(),
-            num_nodes)
-    elif model_type is 'mlp':
-        lightning_model = MLP_Lightning(24, hidden_channels, num_layers, batch_size)
-    else:
-        raise ValueError("Invalid model type.")
-    return lightning_model
 
 def train_model(path_to_urdf: Path, path_to_cerberus_street: Path, 
                 path_to_cerberus_track: Path, model_type: str = 'gnn'):
