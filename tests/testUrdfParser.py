@@ -6,6 +6,7 @@ import copy
 import pandas as pd
 import numpy as np
 import os
+import urchin
 
 
 class TestRobotURDF(unittest.TestCase):
@@ -27,18 +28,18 @@ class TestRobotURDF(unittest.TestCase):
         """
 
         node_names = [
-            'world', 'base_link', 'trunk', 'lf_hipassembly', 'lf_upperleg',
+            'base_link', 'trunk', 'lf_hipassembly', 'lf_upperleg',
             'lf_lowerleg', 'lf_foot', 'rf_hipassembly', 'rf_upperleg',
             'rf_lowerleg', 'rf_foot', 'lh_hipassembly', 'lh_upperleg',
             'lh_lowerleg', 'lh_foot', 'rh_hipassembly', 'rh_upperleg',
             'rh_lowerleg', 'rh_foot'
         ]
         edge_names = [
-            'floating_base_joint', 'floating_base', 'lf_haa_joint',
-            'lf_hfe_joint', 'lf_kfe_joint', 'lf_foot_joint', 'rf_haa_joint',
-            'rf_hfe_joint', 'rf_kfe_joint', 'rf_foot_joint', 'lh_haa_joint',
-            'lh_hfe_joint', 'lh_kfe_joint', 'lh_foot_joint', 'rh_haa_joint',
-            'rh_hfe_joint', 'rh_kfe_joint', 'rh_foot_joint'
+            'floating_base', 'lf_haa_joint', 'lf_hfe_joint', 'lf_kfe_joint',
+            'lf_foot_joint', 'rf_haa_joint', 'rf_hfe_joint', 'rf_kfe_joint',
+            'rf_foot_joint', 'lh_haa_joint', 'lh_hfe_joint', 'lh_kfe_joint',
+            'lh_foot_joint', 'rh_haa_joint', 'rh_hfe_joint', 'rh_kfe_joint',
+            'rh_foot_joint'
         ]
 
         # Check for the normal case: where links become nodes and
@@ -68,8 +69,6 @@ class TestRobotURDF(unittest.TestCase):
         # Additionally, links with multiple children joints get one
         # edge for each child.
         desired_edges = [
-            RobotURDF.Edge('base_link', "floating_base_joint",
-                           "floating_base"),
             RobotURDF.Edge('trunk_to_lf_haa_joint', "floating_base",
                            "lf_haa_joint"),
             RobotURDF.Edge('trunk_to_lh_haa_joint', "floating_base",
@@ -102,6 +101,70 @@ class TestRobotURDF(unittest.TestCase):
                     break
             self.assertTrue(match_found)
         self.assertEqual(0, len(desired_edges))
+
+        # ==================
+        # Check that the nodes are given appropriate
+        # labels based on their position in the graph.
+        # ==================
+
+        # For normal case
+        des_node_type = [
+            'base', 'joint', 'joint', 'joint', 'joint', 'foot', 'joint',
+            'joint', 'joint', 'foot', 'joint', 'joint', 'joint', 'foot',
+            'joint', 'joint', 'joint', 'foot'
+        ]
+        node_names_copy = copy.deepcopy(node_names)
+        num_matches = 0
+        for i, node in enumerate(self.HyQ_URDF.nodes):
+            for j, node_des in enumerate(node_names_copy):
+                if (node.name == node_des):
+                    self.assertEqual(node.get_node_type(), des_node_type[j])
+                    num_matches += 1
+                    break
+        self.assertEqual(num_matches, len(des_node_type))
+
+        # For swappeed links-and-joints
+        des_node_type = [
+            'base', 'joint', 'joint', 'joint', 'foot', 'joint', 'joint',
+            'joint', 'foot', 'joint', 'joint', 'joint', 'foot', 'joint',
+            'joint', 'joint', 'foot'
+        ]
+        edge_names_copy = copy.deepcopy(edge_names)
+        num_matches = 0
+        for i, node in enumerate(self.HyQ_URDF_swapped.nodes):
+            for j, node_des in enumerate(edge_names_copy):
+                if (node.name == node_des):
+                    print("\nNode name: ", node.name)
+                    print("Node Des: ", node_des)
+                    print("desired type: ", des_node_type[j])
+                    print("Node Parent: ", node.edge_parent)
+                    print("Node children: ", node.edge_children)
+                    self.assertEqual(node.get_node_type(), des_node_type[j])
+                    num_matches += 1
+                    break
+        self.assertEqual(num_matches, len(des_node_type))
+
+    def test_get_connections_to_link(self):
+        """
+        Check that we can properly find the connections to the links in the library.
+        """
+
+        edge_parent, edge_children = self.HyQ_URDF.get_connections_to_link(
+            urchin.Link("base_link", None, None, None))
+        self.assertEqual(edge_parent, None)
+        self.assertSequenceEqual(edge_children, ["floating_base"])
+
+        edge_parent, edge_children = self.HyQ_URDF.get_connections_to_link(
+            urchin.Link("trunk", None, None, None))
+        self.assertEqual(edge_parent, "floating_base")
+        self.assertSequenceEqual(
+            edge_children,
+            ["lf_haa_joint", "rf_haa_joint", "lh_haa_joint", "rh_haa_joint"])
+
+        edge_parent, edge_children = self.HyQ_URDF.get_connections_to_link(
+            urchin.Link("lf_foot", None, None, None))
+        self.assertEqual(edge_parent, "lf_foot_joint")
+        self.assertSequenceEqual(edge_children, [])
 
     def test_create_updated_urdf_file(self):
         """
@@ -158,15 +221,15 @@ class TestRobotURDF(unittest.TestCase):
         edge_matrix = self.HyQ_URDF.get_edge_index_matrix()
 
         self.assertEqual(edge_matrix.shape[0], 2)
-        self.assertEqual(edge_matrix.shape[1], 36)
+        self.assertEqual(edge_matrix.shape[1], 34)
 
     def test_get_num_nodes(self):
         """
         Check that the number of nodes are correct. 
         """
 
-        self.assertEqual(self.HyQ_URDF.get_num_nodes(), 19)
-        self.assertEqual(self.HyQ_URDF_swapped.get_num_nodes(), 18)
+        self.assertEqual(self.HyQ_URDF.get_num_nodes(), 18)
+        self.assertEqual(self.HyQ_URDF_swapped.get_num_nodes(), 17)
 
     def test_get_edge_connections_to_name_dict(self):
         """
