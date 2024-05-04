@@ -5,7 +5,7 @@ from lightning.pytorch import seed_everything
 from torch_geometric.nn.models import GCN
 from lightning.pytorch.loggers import WandbLogger
 from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset
-from .urdfParser import RobotURDF
+from .graphParser import NormalRobotGraph
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
@@ -231,7 +231,7 @@ def train_model(path_to_urdf: Path, path_to_cerberus_street: Path,
                 path_to_cerberus_track: Path, model_type: str = 'gnn'):
 
     # Load the A1 urdf
-    A1_URDF = RobotURDF(path_to_urdf, 'package://a1_description/',
+    A1_URDF = NormalRobotGraph(path_to_urdf, 'package://a1_description/',
                         'unitree_ros/robots/a1_description', True)
 
     # Initalize the datasets

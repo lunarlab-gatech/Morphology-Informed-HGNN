@@ -1,25 +1,27 @@
 from pathlib import Path
 import unittest
-from grfgnn import RobotURDF
+from grfgnn import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
 from pathlib import Path
 import copy
 import pandas as pd
 import numpy as np
 import os
 import urchin
+import numpy
 
 
-class TestRobotURDF(unittest.TestCase):
+class TestNormalRobotGraph(unittest.TestCase):
 
     def setUp(self):
         self.hyq_path = Path(
             Path(__file__).cwd(), 'urdf_files', 'HyQ', 'hyq.urdf').absolute()
 
-        self.HyQ_URDF = RobotURDF(self.hyq_path, 'package://hyq_description/',
-                                  'hyq-description', False)
-        self.HyQ_URDF_swapped = RobotURDF(self.hyq_path,
-                                          'package://hyq_description/',
-                                          'hyq-description', True)
+        self.HyQ_URDF = NormalRobotGraph(self.hyq_path,
+                                         'package://hyq_description/',
+                                         'hyq-description', False)
+        self.HyQ_URDF_swapped = NormalRobotGraph(self.hyq_path,
+                                                 'package://hyq_description/',
+                                                 'hyq-description', True)
 
     def test_constructor(self):
         """
@@ -69,26 +71,26 @@ class TestRobotURDF(unittest.TestCase):
         # Additionally, links with multiple children joints get one
         # edge for each child.
         desired_edges = [
-            RobotURDF.Edge('trunk_to_lf_haa_joint', "floating_base",
-                           "lf_haa_joint"),
-            RobotURDF.Edge('trunk_to_lh_haa_joint', "floating_base",
-                           "lh_haa_joint"),
-            RobotURDF.Edge('trunk_to_rf_haa_joint', "floating_base",
-                           "rf_haa_joint"),
-            RobotURDF.Edge('trunk_to_rh_haa_joint', "floating_base",
-                           "rh_haa_joint"),
-            RobotURDF.Edge('lf_hipassembly', "lf_haa_joint", "lf_hfe_joint"),
-            RobotURDF.Edge('lf_upperleg', "lf_hfe_joint", "lf_kfe_joint"),
-            RobotURDF.Edge('lf_lowerleg', "lf_kfe_joint", "lf_foot_joint"),
-            RobotURDF.Edge('rf_hipassembly', "rf_haa_joint", "rf_hfe_joint"),
-            RobotURDF.Edge('rf_upperleg', "rf_hfe_joint", "rf_kfe_joint"),
-            RobotURDF.Edge('rf_lowerleg', "rf_kfe_joint", "rf_foot_joint"),
-            RobotURDF.Edge('lh_hipassembly', "lh_haa_joint", "lh_hfe_joint"),
-            RobotURDF.Edge('lh_upperleg', "lh_hfe_joint", "lh_kfe_joint"),
-            RobotURDF.Edge('lh_lowerleg', "lh_kfe_joint", "lh_foot_joint"),
-            RobotURDF.Edge('rh_hipassembly', "rh_haa_joint", "rh_hfe_joint"),
-            RobotURDF.Edge('rh_upperleg', "rh_hfe_joint", "rh_kfe_joint"),
-            RobotURDF.Edge('rh_lowerleg', "rh_kfe_joint", "rh_foot_joint")
+            RobotGraph.Edge('trunk_to_lf_haa_joint', "floating_base",
+                            "lf_haa_joint"),
+            RobotGraph.Edge('trunk_to_lh_haa_joint', "floating_base",
+                            "lh_haa_joint"),
+            RobotGraph.Edge('trunk_to_rf_haa_joint', "floating_base",
+                            "rf_haa_joint"),
+            RobotGraph.Edge('trunk_to_rh_haa_joint', "floating_base",
+                            "rh_haa_joint"),
+            RobotGraph.Edge('lf_hipassembly', "lf_haa_joint", "lf_hfe_joint"),
+            RobotGraph.Edge('lf_upperleg', "lf_hfe_joint", "lf_kfe_joint"),
+            RobotGraph.Edge('lf_lowerleg', "lf_kfe_joint", "lf_foot_joint"),
+            RobotGraph.Edge('rf_hipassembly', "rf_haa_joint", "rf_hfe_joint"),
+            RobotGraph.Edge('rf_upperleg', "rf_hfe_joint", "rf_kfe_joint"),
+            RobotGraph.Edge('rf_lowerleg', "rf_kfe_joint", "rf_foot_joint"),
+            RobotGraph.Edge('lh_hipassembly', "lh_haa_joint", "lh_hfe_joint"),
+            RobotGraph.Edge('lh_upperleg', "lh_hfe_joint", "lh_kfe_joint"),
+            RobotGraph.Edge('lh_lowerleg', "lh_kfe_joint", "lh_foot_joint"),
+            RobotGraph.Edge('rh_hipassembly', "rh_haa_joint", "rh_hfe_joint"),
+            RobotGraph.Edge('rh_upperleg', "rh_hfe_joint", "rh_kfe_joint"),
+            RobotGraph.Edge('rh_lowerleg', "rh_kfe_joint", "rh_foot_joint")
         ]
         for i, edge in enumerate(self.HyQ_URDF_swapped.edges):
             match_found = False
@@ -134,11 +136,6 @@ class TestRobotURDF(unittest.TestCase):
         for i, node in enumerate(self.HyQ_URDF_swapped.nodes):
             for j, node_des in enumerate(edge_names_copy):
                 if (node.name == node_des):
-                    print("\nNode name: ", node.name)
-                    print("Node Des: ", node_des)
-                    print("desired type: ", des_node_type[j])
-                    print("Node Parent: ", node.edge_parent)
-                    print("Node children: ", node.edge_children)
                     self.assertEqual(node.get_node_type(), des_node_type[j])
                     num_matches += 1
                     break
@@ -178,8 +175,8 @@ class TestRobotURDF(unittest.TestCase):
         self.assertFalse(os.path.exists(hyq_path_updated))
 
         # Rebuild it
-        RobotURDF(self.hyq_path, 'package://hyq_description/',
-                  'hyq-description', False)
+        RobotGraph(self.hyq_path, 'package://hyq_description/',
+                   'hyq-description', False)
         self.assertTrue(os.path.exists(hyq_path_updated))
 
     def test_get_node_name_to_index_dict(self):
@@ -282,6 +279,74 @@ class TestRobotURDF(unittest.TestCase):
 
             # Add it to the seen arrays
             seen_arrays.add(array_tuple)
+
+
+class TestHeterogeneousRobotGraph(unittest.TestCase):
+
+    def setUp(self):
+        self.path_to_go1_urdf = Path(
+            Path('.').parent, 'urdf_files', 'Go1', 'go1.urdf').absolute()
+
+        self.GO1_HETERO_GRAPH = HeterogeneousRobotGraph(
+            self.path_to_go1_urdf, 'package://go1_description/',
+            'unitree_ros/robots/go1_description', True)
+
+    def test_get_node_name_to_index_dict(self):
+        """
+        Test that the dictionary properly assigns indices to the nodes.
+        """
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_name_to_index_dict()
+        dict_desired = {
+            'floating_base': 0,
+            'FR_hip_joint': 0,
+            'FR_thigh_joint': 1,
+            'FR_calf_joint': 2,
+            'FL_hip_joint': 3,
+            'FL_thigh_joint': 4,
+            'FL_calf_joint': 5,
+            'RR_hip_joint': 6,
+            'RR_thigh_joint': 7,
+            'RR_calf_joint': 8,
+            'RL_hip_joint': 9,
+            'RL_thigh_joint': 10,
+            'RL_calf_joint': 11,
+            'FR_foot_fixed': 0,
+            'FL_foot_fixed': 1,
+            'RR_foot_fixed': 2,
+            'RL_foot_fixed': 3
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
+    def test_get_num_of_each_node_type(self):
+        """
+        Test that we can properly count the number of each 
+        type of node.
+        """
+
+        number_actual = self.GO1_HETERO_GRAPH.get_num_of_each_node_type()
+        number_desired = [1, 12, 4]
+        self.assertSequenceEqual(number_actual, number_desired)
+
+    def test_get_edge_index_matrices(self):
+        """
+        Test that we construct the correct matrices for a
+        heterogeneous graph.
+        """
+
+        bj, jb, jj, fj, jf = self.GO1_HETERO_GRAPH.get_edge_index_matrices()
+        bj_des = np.array([[0, 0, 0, 0], [0, 3, 6, 9]])
+        jb_des = np.array([[0, 3, 6, 9], [0, 0, 0, 0]])
+        jj_des = np.array([[0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 10, 10, 11],
+                           [1, 0, 2, 1, 4, 3, 5, 4, 7, 6, 8, 7, 10, 9, 11,
+                            10]])
+        fj_des = np.array([[0, 1, 2, 3], [2, 5, 8, 11]])
+        jf_des = np.array([[2, 5, 8, 11], [0, 1, 2, 3]])
+        numpy.testing.assert_array_equal(bj, bj_des)
+        numpy.testing.assert_array_equal(jb, jb_des)
+        numpy.testing.assert_array_equal(jj, jj_des)
+        numpy.testing.assert_array_equal(fj, fj_des)
+        numpy.testing.assert_array_equal(jf, jf_des)
 
 
 if __name__ == '__main__':

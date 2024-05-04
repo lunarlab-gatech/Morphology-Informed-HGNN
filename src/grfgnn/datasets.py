@@ -1,7 +1,7 @@
 import torch
 import torch_geometric
-from torch_geometric.data import Data, Dataset
-from .urdfParser import RobotURDF
+from torch_geometric.data import Data, Dataset, HeteroData
+from .graphParser import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
 import networkx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,21 +31,22 @@ class FlexibleDataset(Dataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: RobotURDF,
+                 robotURDF: RobotGraph,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
         """
         Parameters:
-                data_format (str): Either 'gnn' or 'mlp'. Determines how the
-                    get() method returns data so that the dataset can be
-                    trained with a gnn or an mlp.
+                data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
+                    Determines how the get() method returns data.
         """
         # Check for valid data format
         self.data_format = data_format
-        if self.data_format != 'mlp' and self.data_format != 'gnn':
-            raise ValueError("Parameter 'data_format' must be 'gnn' or 'mlp'.")
+        if self.data_format != 'mlp' and self.data_format != 'gnn' and self.data_format != 'heterogeneous_gnn':
+            raise ValueError(
+                "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'."
+            )
 
         # Setup the directories for raw and processed data
         self.root = root
@@ -72,11 +73,6 @@ class FlexibleDataset(Dataset):
 
         # Save the URDF info
         self.URDF = robotURDF
-
-        # Open up the urdf file and get the edge matrix
-        self.edge_matrix = self.URDF.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
 
         # Get node name to index mapping
         self.urdf_name_to_index = self.URDF.get_node_name_to_index_dict()
@@ -109,14 +105,14 @@ class FlexibleDataset(Dataset):
         should match the output of the node at index 3, and so on.
 
         Returns:
-            ground_truth_indices (list[int]) - List of the indices of
+            ground_truth_graph_indices (list[int]) - List of the indices of
             the graph nodes that should output the ground truth labels 
             at the same corresponding index.
         """
-        if self.get_ground_truth_indices is None:
+        if self.get_ground_truth_graph_indices is None:
             raise self.notImplementedError
         else:
-            return self.ground_truth_indices
+            return self.ground_truth_graph_indices
 
     def get_start_and_end_seq_ids(self):
         """
@@ -160,6 +156,12 @@ class FlexibleDataset(Dataset):
         """
         raise self.notImplementedError
 
+    def get_helper_heterogeneous_gnn(self, idx):
+        """
+        Get a dataset entry if we are using a Heterogeneous GNN model.
+        """
+        raise self.notImplementedError
+
     def get(self, idx):
         # Bounds check
         if idx < 0 or idx >= self.length:
@@ -170,6 +172,8 @@ class FlexibleDataset(Dataset):
             return self.get_helper_gnn(idx)
         elif self.data_format == 'mlp':
             return self.get_helper_mlp(idx)
+        elif self.data_format == 'heterogeneous_gnn':
+            return self.get_helper_heterogeneous_gnn(idx)
 
 
 class Go1SimulatedDataset(FlexibleDataset):
@@ -179,7 +183,7 @@ class Go1SimulatedDataset(FlexibleDataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: RobotURDF,
+                 robotURDF: HeterogeneousRobotGraph,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
@@ -191,35 +195,42 @@ class Go1SimulatedDataset(FlexibleDataset):
                          pre_transform, pre_filter)
 
         # Map urdf names to array indexes
-        # TODO: BELOW NOT VERIFIED
         self.urdf_to_dataset_index = {
-            'FL_hip_joint': 0,
-            'FL_thigh_joint': 1,
-            'FL_calf_joint': 2,
-            'FR_hip_joint': 3,
-            'FR_thigh_joint': 4,
-            'FR_calf_joint': 5,
-            'RL_hip_joint': 6,
-            'RL_thigh_joint': 7,
-            'RL_calf_joint': 8,
-            'RR_hip_joint': 9,
-            'RR_thigh_joint': 10,
-            'RR_calf_joint': 11,
-            'FL_foot_fixed': 0,
-            'FR_foot_fixed': 1,
-            'RL_foot_fixed': 2,
-            'RR_foot_fixed': 3
+            'FR_hip_joint': 0,
+            'FR_thigh_joint': 1,
+            'FR_calf_joint': 2,
+            'FL_hip_joint': 3,
+            'FL_thigh_joint': 4,
+            'FL_calf_joint': 5,
+            'RR_hip_joint': 6,
+            'RR_thigh_joint': 7,
+            'RR_calf_joint': 8,
+            'RL_hip_joint': 9,
+            'RL_thigh_joint': 10,
+            'RL_calf_joint': 11,
+            'FR_foot_fixed': 0,
+            'FL_foot_fixed': 1,
+            'RR_foot_fixed': 2,
+            'RL_foot_fixed': 3,
         }
 
         # Define the names and indicies that contain ground truth labels
         self.ground_truth_urdf_names = [
-            'FL_foot_fixed', 'FR_foot_fixed', 'RL_foot_fixed', 'RR_foot_fixed'
+            'FR_foot_fixed',
+            'FL_foot_fixed',
+            'RR_foot_fixed',
+            'RL_foot_fixed',
         ]
 
-        self.ground_truth_indices = []
+        self.ground_truth_graph_indices = []
         for urdf_name in self.ground_truth_urdf_names:
-            self.ground_truth_indices.append(
+            self.ground_truth_graph_indices.append(
                 self.urdf_name_to_index[urdf_name])
+
+        self.ground_truth_array_indices = []
+        for urdf_name in self.ground_truth_urdf_names:
+            self.ground_truth_array_indices.append(
+                self.urdf_to_dataset_index[urdf_name])
 
         # Define the nodes that should recieve features
         self.nodes_for_attributes = [
@@ -299,8 +310,6 @@ class Go1SimulatedDataset(FlexibleDataset):
                         f.write('\n')
                     curr_seq_num += 1
 
-        print(curr_seq_num)
-
         # Write a txt file to save the dataset length & and first sequence index
         length = curr_seq_num
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
@@ -330,7 +339,12 @@ class Go1SimulatedDataset(FlexibleDataset):
             for i in range(0, len(line)):
                 torques.append(float(line[i]))
 
-        return positions, velocities, torques, grfs
+        # Extract the ground truth labels
+        ground_truth_labels = []
+        for val in self.ground_truth_array_indices:
+            ground_truth_labels.append(grfs[val])
+
+        return positions, velocities, torques, ground_truth_labels
 
     def get_helper_gnn(self, idx):
         # Load the rosbag information
@@ -370,8 +384,55 @@ class Go1SimulatedDataset(FlexibleDataset):
         x = torch.tensor((positions + velocities + torques), dtype=torch.float)
 
         # Create the ground truth lables
-        y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        y = torch.tensor(ground_truth_labels[self.ground_truth_graph_indices],
+                         dtype=torch.float)
         return x, y
+
+    def get_helper_heterogeneous_gnn(self, idx):
+        # Create the Heterogeneous Data object
+        data = HeteroData()
+
+        # Get the edge matrices
+        bj, jb, jj, fj, jf = self.URDF.get_edge_index_matrices()
+        data['base', 'connect', 'joint'].edge_index = bj
+        data['joint', 'connect', 'base'].edge_index = jb
+        data['joint', 'connect', 'joint'].edge_index = jj
+        data['foot', 'connect', 'joint'].edge_index = fj
+        data['joint', 'connect', 'foot'].edge_index = jf
+
+        # Load the rosbag information
+        positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Save the labels and number of nodes
+        data.y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        data.num_nodes = self.URDF.get_num_nodes()
+
+        # Create the feature matrices
+        number_nodes = self.URDF.get_num_of_each_node_type()
+        base_x = torch.ones((number_nodes[0], 0), dtype=torch.float)
+        joint_x = torch.ones((number_nodes[1], 3), dtype=torch.float)
+        foot_x = torch.ones((number_nodes[2], 0), dtype=torch.float)
+
+        # For each joint specified
+        for urdf_node_name in self.nodes_for_attributes:
+
+            # Find the index of this particular node
+            node_index = self.urdf_name_to_index[urdf_node_name]
+
+            # Get the msg array index
+            msg_ind = self.urdf_to_dataset_index[urdf_node_name]
+
+            # Add the features to x matrix
+            joint_x[node_index, 0] = positions[msg_ind]
+            joint_x[node_index, 1] = velocities[msg_ind]
+            joint_x[node_index, 2] = torques[msg_ind]
+
+        # Save the matrices into the HeteroData object
+        data['base'].x = base_x  # [num_papers, num_features_paper]
+        data['joint'].x = joint_x  # [num_authors, num_features_author]
+        data['foot'].x = foot_x  # [num_institutions, num_features_institution]
+        return data
 
 
 class CerberusDataset(FlexibleDataset):
@@ -386,7 +447,7 @@ class CerberusDataset(FlexibleDataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: RobotURDF,
+                 robotURDF: NormalRobotGraph,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
@@ -425,6 +486,11 @@ class CerberusDataset(FlexibleDataset):
             'RR_foot_fixed': 'RR_foot'
         }
 
+        # Open up the urdf file and get the edge matrix
+        self.edge_matrix = self.URDF.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+
         # Define the names and indicies that contain ground truth labels
         self.ground_truth_urdf_names = [
             'FL_foot_fixed', 'FR_foot_fixed', 'RL_foot_fixed', 'RR_foot_fixed'
@@ -434,10 +500,15 @@ class CerberusDataset(FlexibleDataset):
         for urdf_name in self.ground_truth_urdf_names:
             self.ground_truth_ros_names.append(self.urdf_to_ros_map[urdf_name])
 
-        self.ground_truth_indices = []
+        self.ground_truth_graph_indices = []
         for urdf_name in self.ground_truth_urdf_names:
-            self.ground_truth_indices.append(
+            self.ground_truth_graph_indices.append(
                 self.urdf_name_to_index[urdf_name])
+
+        self.ground_truth_array_indices = []
+        for ros_name in self.ground_truth_ros_names:
+            self.ground_truth_array_indices.append(
+                self.get_index_of_ros_name(ros_name))
 
         # Define the nodes that should recieve features
         self.nodes_for_attributes = [
@@ -530,10 +601,10 @@ class CerberusDataset(FlexibleDataset):
                 efforts.append(float(line[i]))
 
         # Get the ground truth force labels
+        # TODO: Write these methods for these functions
         ground_truth_labels = []
-        for name in self.ground_truth_ros_names:
-            ground_truth_labels.append(
-                efforts[self.get_index_of_ros_name(name)])
+        for val in self.ground_truth_array_indices:
+            ground_truth_labels.append(efforts[val])
 
         return positions, velocities, efforts, ground_truth_labels
 
@@ -542,7 +613,7 @@ class CerberusDataset(FlexibleDataset):
         positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
             self.first_index + idx)
 
-        # Create a note feature matrix
+        # Create a node feature matrix
         x = torch.ones((self.URDF.get_num_nodes(), 2), dtype=torch.float)
 
         # For each joint specified
@@ -644,8 +715,8 @@ class CerberusCampusDataset(CerberusGo1Dataset):
         return 119, 174560
 
 
-def visualize_graph(graph: Data,
-                    urdf: RobotURDF,
+def visualize_graph(pytorch_graph: Data,
+                    robot_graph: NormalRobotGraph,
                     fig_save_path: Path = None,
                     draw_edges: bool = False):
     """
@@ -654,14 +725,15 @@ def visualize_graph(graph: Data,
     """
 
     # Write the features onto the names
-    node_labels = urdf.get_node_index_to_name_dict()
-    for i in range(0, len(graph.x)):
+    node_labels = robot_graph.get_node_index_to_name_dict()
+    for i in range(0, len(pytorch_graph.x)):
         label = node_labels[i]
-        label += ": " + str(graph.x[i].numpy())
+        label += ": " + str(pytorch_graph.x[i].numpy())
         node_labels[i] = label
 
     # Convert to networkx graph
-    nx_graph = torch_geometric.utils.to_networkx(graph, to_undirected=True)
+    nx_graph = torch_geometric.utils.to_networkx(pytorch_graph,
+                                                 to_undirected=True)
 
     # Draw the graph
     spring_layout = networkx.spring_layout(nx_graph)
@@ -675,7 +747,7 @@ def visualize_graph(graph: Data,
         networkx.draw_networkx_edge_labels(
             nx_graph,
             pos=spring_layout,
-            edge_labels=urdf.get_edge_connections_to_name_dict(),
+            edge_labels=robot_graph.get_edge_connections_to_name_dict(),
             rotate=False,
             font_size=7)
 

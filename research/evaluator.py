@@ -1,5 +1,5 @@
 from grfgnn.datasets import visualize_graph, CerberusTrackDataset, CerberusStreetDataset, CerberusCampusDataset
-from grfgnn.urdfParser import RobotURDF
+from grfgnn.graphParser import NormalRobotGraph
 from pathlib import Path
 from grfgnn.gnnLightning import evaluate_model_and_visualize
 
@@ -16,9 +16,9 @@ path_to_cerberus_campus = Path(
 #path_to_checkpoint = Path(Path('.').parent, 'models', TODO, 'epoch=6-val_loss=5764.05.ckpt')
 
 # Load URDF files
-A1_URDF = RobotURDF(path_to_a1_urdf, 'package://a1_description/',
+A1_URDF = NormalRobotGraph(path_to_a1_urdf, 'package://a1_description/',
                     'unitree_ros/robots/a1_description', True)
-GO1_URDF = RobotURDF(path_to_go1_urdf, 'package://go1_description/',
+GO1_URDF = NormalRobotGraph(path_to_go1_urdf, 'package://go1_description/',
                      'unitree_ros/robots/go1_description', True)
 model_type = 'mlp'
 

@@ -8,7 +8,7 @@ class InvalidURDFException(Exception):
     pass
 
 
-class RobotURDF():
+class RobotGraph():
 
     class Node():
         """
@@ -22,6 +22,13 @@ class RobotURDF():
             self.edge_parent: str = edge_parent
             self.edge_children: list[str] = edge_children
 
+        @staticmethod
+        def get_list_of_node_types():
+            """
+            Returns a list of all the node types.
+            """
+            return ['base', 'joint', 'foot']
+
         def get_node_type(self):
             """
             Returns the name of the node type for a heterogenous graph,
@@ -30,13 +37,14 @@ class RobotURDF():
             has a parent, it's a 'foot' node. If it only has children, it's a
             'base' node.
             """
+            node_types = self.get_list_of_node_types()
 
             if self.edge_parent is not None and len(self.edge_children) > 0:
-                return 'joint'
+                return node_types[1]
             elif self.edge_parent is not None and len(self.edge_children) == 0:
-                return 'foot'
+                return node_types[2]
             elif self.edge_parent is None and len(self.edge_children) > 0:
-                return 'base'
+                return node_types[0]
             else:
                 raise Exception(
                     "Every node should have a child or parent edge.")
@@ -58,10 +66,10 @@ class RobotURDF():
                  urdf_to_desc_path: str,
                  swap_nodes_and_edges=False):
         """
-        Constructor for RobotURDF class.
+        Constructor for RobotGraph class.
 
         Args:
-            urdf_path (Path): The absolute path from this file (urdfParser.py)
+            urdf_path (Path): The absolute path from this file (graphParser.py)
                 to the desired urdf file to load.
             ros_builtin_path (str): The path ROS uses in the urdf file to navigate
                 to the urdf description directory. An example looks like this:
@@ -70,7 +78,7 @@ class RobotURDF():
             urdf_to_desc_path (str): The relative path from the urdf file to
                 the urdf description directory. This directory typically contains
                 folders like "meshes" and "urdf".
-            swap_nodes_and_edges (bool): If False, links in the URDF will be represented
+            swap_nodes_and_edges (bool): If False, links in the urdf file will be represented
                 as nodes, and joints will be represented as edges. If True, links will
                 be represented as edges, and joints will be represented as nodes. This
                 will drop links that aren't connected to two joints. Default=False.
@@ -131,7 +139,7 @@ class RobotURDF():
                             self.Edge(name=link.name + "_to_" + edge_child,
                                       parent=edge_parent,
                                       child=edge_child))
-                        
+
             # Create nodes from the Joints
             self.nodes = []
             for joint in self.robot_urdf.joints:
@@ -231,9 +239,70 @@ class RobotURDF():
         index.
 
         Returns:
-            (dict[str, int]): A dictinoary that maps node name
+            (dict[str, int]): A dictionary that maps node name
                 to index.
         """
+
+        raise NotImplementedError
+
+    def get_num_nodes(self):
+        """
+        Return the number of nodes in the graph.
+
+        Returns:
+            (int): Number of node nodes in graph.
+        """
+        return len(self.nodes)
+
+    def get_node_from_name(self, node_name):
+        """
+        Helper function that returns a node based
+        on the name provided. If no node with the
+        name is found, None is returned.
+
+        Parameters:
+            node_name (str): Name of the node to return.
+        """
+
+        for node in self.nodes:
+            if node.name == node_name:
+                return node
+        else:
+            return None
+
+    def display_graph_info(self):
+        """
+        Helper function that displays information about the robot
+        graph on the command line in a readable format.
+        """
+
+        print("============ Displaying Robot Links: ============")
+        print("Link name: Mass - Inertia")
+        for link in self.robot_urdf.links:
+            print(f"{link.name}")
+        print("")
+
+        print("============ Displaying Example Link: ============")
+        ex_link = self.robot_urdf.links[7]
+        print("Name: ", ex_link.name)
+        print("Mass: ", ex_link.inertial.mass)
+        print("Inertia: \n", ex_link.inertial.inertia)
+        print("Origin of Inertials: \n", ex_link.inertial.origin)
+        print("")
+
+        print("============ Displaying Robot Joints: ============")
+        for joint in self.robot_urdf.joints:
+            print('{} -> {} <- {}'.format(joint.parent, joint.name,
+                                          joint.child))
+        print("")
+
+
+class NormalRobotGraph(RobotGraph):
+    """
+    Graph where all of the nodes are homogeneous.
+    """
+
+    def get_node_name_to_index_dict(self):
         node_names = []
         for node in self.nodes:
             node_names.append(node.name)
@@ -242,7 +311,7 @@ class RobotURDF():
     def get_node_index_to_name_dict(self):
         """
         Return a dictionary that maps the node index to its
-        name
+        name.
 
         Returns:
             (dict[int, str]): A dictionary that maps node index
@@ -255,7 +324,7 @@ class RobotURDF():
         node_dict = dict(zip(range(len(self.nodes)), node_names))
         return node_dict
 
-    def get_edge_index_matrix(self):
+    def get_edge_index_matrix(self, heterogenous=False):
         """
         Return the edge connectivity matrix, which defines each edge connection
         to each node. This matrix is the 'edge_index' matrix passed to the PyTorch
@@ -267,7 +336,7 @@ class RobotURDF():
                 be put into the matrix twice, as each edge is bidirectional
                 For example, a connection between nodes 0 and 1 will be
                 found in the edge_index matrix as [[0, 1], [1, 0]].
-
+            
         """
         node_dict = self.get_node_name_to_index_dict()
 
@@ -284,15 +353,6 @@ class RobotURDF():
                                              axis=1)
 
         return edge_matrix
-
-    def get_num_nodes(self):
-        """
-        Return the number of nodes in the URDF file.
-
-        Returns:
-            (int): Number of node nodes in URDF.
-        """
-        return len(self.nodes)
 
     def get_edge_connections_to_name_dict(self):
         """
@@ -325,7 +385,7 @@ class RobotURDF():
 
         Returns:
             edge_dict (dict[str, np.array)]): 
-                This dictionary takes the name of an edge in the URDF
+                This dictionary takes the name of an edge in the graph
                 as input. It returns an np.array (N, 2), where N is the
                 number of connections this name supports.
         """
@@ -341,28 +401,121 @@ class RobotURDF():
 
         return edge_dict
 
-    def display_URDF_info(self):
+
+class HeterogeneousRobotGraph(RobotGraph):
+    """
+    Heterogeneous graph, where the nodes are different types.
+    """
+
+    def _get_nodes_organized_by_type(self):
         """
-        Helper function that displays information about the robot
-        URDF on the command line in a readable format.
+        Organizes each node into a type with nodes of its same
+        type.
+
+        Returns:
+            list[list[Node]]: The outer list holds as many lists
+                as there are types, and each inner list holds
+                all of the nodes of that particular type.
+        """
+        types = RobotGraph.Node.get_list_of_node_types()
+        nodes = []
+        for type in types:
+            nodes_of_type = []
+            for node in self.nodes:
+                if node.get_node_type() == type:
+                    nodes_of_type.append(node.name)
+            nodes.append(nodes_of_type)
+        return nodes
+
+    def get_node_name_to_index_dict(self):
+        """
+        Because this graph is heterogenous, the nodes index
+        depends of the type of the node. This also means that
+        multiple nodes can have the same index.
         """
 
-        print("============ Displaying Robot Links: ============")
-        print("Link name: Mass - Inertia")
-        for link in self.robot_urdf.links:
-            print(f"{link.name}")
-        print("")
+        all_lists = []
+        for nodes_of_type in self._get_nodes_organized_by_type():
+            all_lists = all_lists + list(
+                zip(nodes_of_type, range(len(nodes_of_type))))
 
-        print("============ Displaying Example Link: ============")
-        ex_link = self.robot_urdf.links[7]
-        print("Name: ", ex_link.name)
-        print("Mass: ", ex_link.inertial.mass)
-        print("Inertia: \n", ex_link.inertial.inertia)
-        print("Origin of Inertials: \n", ex_link.inertial.origin)
-        print("")
+        return dict(all_lists)
 
-        print("============ Displaying Robot Joints: ============")
-        for joint in self.robot_urdf.joints:
-            print('{} -> {} <- {}'.format(joint.parent, joint.name,
-                                          joint.child))
-        print("")
+    def get_num_of_each_node_type(self):
+        """
+        Returns the numbers of each node type.
+
+        Returns:
+            list[int]: List of number of each node type
+        """
+        nodes = self._get_nodes_organized_by_type()
+        numbers = []
+        for node_list in nodes:
+            numbers.append(len(node_list))
+        return numbers
+
+    def get_edge_index_matrices(self):
+        """
+        Return the edge connectivity matrices.
+
+        Returns:
+            (list[np.array]): Multiple matrices, as outlined below:
+                data['base', 'connect', 'joint'].edge_index -> [2, X]
+                data['joint', 'connect', 'base'].edge_index -> [2, X]
+                data['joint', 'connect', 'joint'].edge_index -> [2, Y]
+                data['foot', 'connect', 'joint'].edge_index -> [2, Z]
+                data['joint', 'connect', 'foot'].edge_index -> [2, Z]
+        """
+
+        def add_to_matrix(matrix, vector):
+            """
+            Helper function for appending to a numpy
+            matrix along the 1st axis.
+            """
+            if matrix is None:
+                matrix = vector
+            else:
+                matrix = np.concatenate((matrix, vector), axis=1)
+            return matrix
+
+        # Get the name to index dictionary
+        node_dict = self.get_node_name_to_index_dict()
+
+        # Define all of the edge matrices
+        base_to_joint_matrix = None
+        joint_to_joint_matrix = None
+        foot_to_joint_matrix = None
+
+        # Iterate through edges
+        for edge in self.edges:
+
+            # Get the nodes for the parent and the child
+            parent_node: RobotGraph.Node = self.get_node_from_name(edge.parent)
+            child_node: RobotGraph.Node = self.get_node_from_name(edge.child)
+
+            # Get their types and indices
+            parent_type = parent_node.get_node_type()
+            child_type = child_node.get_node_type()
+            p_index = node_dict[edge.parent]
+            c_index = node_dict[edge.child]
+
+            # Add their info to the corresponding matrix
+            if parent_type == child_type and parent_type == 'joint':
+                edge_vector = np.array([[p_index, c_index], [c_index,
+                                                             p_index]])
+                joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix, edge_vector)
+            elif parent_type == 'base' and child_type == 'joint':
+                edge_vector = np.array([[p_index], [c_index]])
+                base_to_joint_matrix = add_to_matrix(base_to_joint_matrix, edge_vector)
+            elif parent_type == 'joint' and child_type == 'foot':
+                edge_vector = np.array([[c_index], [p_index]])
+                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix, edge_vector)
+            else:
+                raise Exception("Not possible")
+
+        # Create the last two matrices
+        joint_to_base_matrix = base_to_joint_matrix[[1, 0]]
+        joint_to_foot_matrix = foot_to_joint_matrix[[1, 0]]
+
+        return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
+               foot_to_joint_matrix, joint_to_foot_matrix

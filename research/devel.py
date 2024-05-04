@@ -1,5 +1,5 @@
 from grfgnn.datasets import visualize_graph, CerberusTrackDataset, CerberusStreetDataset, CerberusCampusDataset, Go1SimulatedDataset
-from grfgnn.urdfParser import RobotURDF
+from grfgnn.graphParser import NormalRobotGraph
 from pathlib import Path
 from grfgnn.gnnLightning import evaluate_model_and_visualize
 import os
@@ -20,7 +20,7 @@ def dataset_create():
         Path('.').parent, 'datasets', 'xiong_simulated').absolute()
 
     # Load URDF files
-    GO1_URDF = RobotURDF(path_to_go1_urdf, 'package://go1_description/',
+    GO1_URDF = NormalRobotGraph(path_to_go1_urdf, 'package://go1_description/',
                          'unitree_ros/robots/go1_description', True)
     model_type = 'gnn'
 
