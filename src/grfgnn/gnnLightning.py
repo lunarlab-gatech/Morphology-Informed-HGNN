@@ -61,12 +61,6 @@ class GCN_Lightning(L.LightningModule):
         y_pred = self.get_network_output(batch, batch_idx)
         y = torch.reshape(batch.y,
                                 (batch.batch_size, len(self.y_indices)))
-        print("y: ", y)
-        print("y_pred: ", y_pred)
-        loss = nn.functional.mse_loss(y_pred, y)
-        print("mse loss: ", loss)
-        l1_loss = nn.functional.l1_loss(y_pred, y)
-        print("l1_loss:", l1_loss)
         return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
@@ -136,12 +130,6 @@ class MLP_Lightning(L.LightningModule):
     def predict_step(self, batch, batch_idx):
         x, y = batch
         y_pred = self.mlp_model(x)
-        print("y: ", y)
-        print("y_pred: ", y_pred)
-        loss = nn.functional.mse_loss(y_pred, y)
-        print("mse loss: ", loss)
-        l1_loss = nn.functional.l1_loss(y_pred, y)
-        print("l1_loss:", l1_loss)
         return y_pred, y
 
     def step_helper_function(self, batch, batch_idx):
@@ -179,7 +167,7 @@ def display_on_axes(axes, estimated, ground_truth, title):
 
 def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path, 
                             predict_dataset: CerberusDataset,
-                            num_to_visualize: int, path_to_file: Path = None):
+                            subset_to_visualize: tuple[int], path_to_file: Path = None):
 
     # Initialize the model
     model = None
@@ -193,7 +181,7 @@ def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path,
         raise ValueError("model_type must be gnn or mlp.")
 
     # Create a validation dataloader
-    valLoader: DataLoader = DataLoader(predict_dataset, batch_size=num_to_visualize, 
+    valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, 
                                        shuffle=False, num_workers=15)
 
     # Setup four graphs
@@ -201,16 +189,17 @@ def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path,
     fig.suptitle('Foot Estimated Forces vs. Ground Truth')
 
     # Validate with the model
-    trainer = L.Trainer(limit_predict_batches=2)
+    trainer = L.Trainer()
     predictions_result = trainer.predict(model, valLoader)
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
     for batch_result in predictions_result:
-        pred.ca #TODO: BROKEN< MAKE IT SO IT CAN SUM THE RESULTS OF THE BATCHES AND CALCULATE TOTAL LOSS.
-    print(predictions_result[0])
-    print(predictions_result[1])
-    pred = predictions_result[0][0].numpy()
-    labels = predictions_result[0][1].numpy()
+        pred = torch.cat((pred, batch_result[0]), dim=0)
+        labels = torch.cat((labels, batch_result[1]), dim=0)
+
+    # Only use the specific subset chosen
+    pred = pred.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
+    labels = labels.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
 
     # Display the results
     titles = [
