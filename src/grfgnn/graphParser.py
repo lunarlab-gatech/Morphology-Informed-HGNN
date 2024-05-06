@@ -90,9 +90,10 @@ class RobotGraph():
         self.ros_builtin_path = ros_builtin_path
         self.urdf_to_desc_path = urdf_to_desc_path
 
-        # Regenerate the updated urdf if it isn't already made
-        if not os.path.isfile(self.new_urdf_path):
-            self.create_updated_urdf_file()
+        # Make the updated urdf file, or replace it.
+        # This avoids issues with updating URDF files, 
+        # but the new file not being updated.
+        self.create_updated_urdf_file()
 
         # Load the URDF with updated paths
         self.robot_urdf = URDF.load(self.new_urdf_path)
