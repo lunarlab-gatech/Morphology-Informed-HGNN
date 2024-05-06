@@ -31,7 +31,9 @@ class FlexibleDataset(Dataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: RobotGraph,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
@@ -61,6 +63,12 @@ class FlexibleDataset(Dataset):
 
         # Make sure the URDF file we were given properly matches
         # what we are expecting
+        if self.data_format == 'heterogeneous_gnn':
+            robotURDF = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
+                                                urdf_to_desc_path, True)
+        else:
+            robotURDF = NormalRobotGraph(urdf_path, ros_builtin_path,
+                                         urdf_to_desc_path, True)
         passed_urdf_name = robotURDF.robot_urdf.name
         expected_name = self.get_expected_urdf_name()
         if passed_urdf_name != expected_name:
@@ -109,7 +117,7 @@ class FlexibleDataset(Dataset):
             the graph nodes that should output the ground truth labels 
             at the same corresponding index.
         """
-        if self.get_ground_truth_graph_indices is None:
+        if self.ground_truth_graph_indices is None:
             raise self.notImplementedError
         else:
             return self.ground_truth_graph_indices
@@ -183,7 +191,9 @@ class Go1SimulatedDataset(FlexibleDataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: HeterogeneousRobotGraph,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
@@ -191,8 +201,8 @@ class Go1SimulatedDataset(FlexibleDataset):
         """
         Constructor for Go1 Simulated Dataset provided by Dr. Xiong.
         """
-        super().__init__(root, robotURDF, data_format, transform,
-                         pre_transform, pre_filter)
+        super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
+                         data_format, transform, pre_transform, pre_filter)
 
         # Map urdf names to array indexes
         self.urdf_to_dataset_index = {
@@ -394,11 +404,16 @@ class Go1SimulatedDataset(FlexibleDataset):
 
         # Get the edge matrices
         bj, jb, jj, fj, jf = self.URDF.get_edge_index_matrices()
-        data['base', 'connect', 'joint'].edge_index = bj
-        data['joint', 'connect', 'base'].edge_index = jb
-        data['joint', 'connect', 'joint'].edge_index = jj
-        data['foot', 'connect', 'joint'].edge_index = fj
-        data['joint', 'connect', 'foot'].edge_index = jf
+        data['base', 'connect',
+             'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
+        data['joint', 'connect',
+             'base'].edge_index = torch.tensor(jb, dtype=torch.long)
+        data['joint', 'connect',
+             'joint'].edge_index = torch.tensor(jj, dtype=torch.long)
+        data['foot', 'connect',
+             'joint'].edge_index = torch.tensor(fj, dtype=torch.long)
+        data['joint', 'connect',
+             'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
 
         # Load the rosbag information
         positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
@@ -410,9 +425,9 @@ class Go1SimulatedDataset(FlexibleDataset):
 
         # Create the feature matrices
         number_nodes = self.URDF.get_num_of_each_node_type()
-        base_x = torch.ones((number_nodes[0], 0), dtype=torch.float)
+        base_x = torch.ones((number_nodes[0], 1), dtype=torch.float)
         joint_x = torch.ones((number_nodes[1], 3), dtype=torch.float)
-        foot_x = torch.ones((number_nodes[2], 0), dtype=torch.float)
+        foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float)
 
         # For each joint specified
         for urdf_node_name in self.nodes_for_attributes:
@@ -434,6 +449,23 @@ class Go1SimulatedDataset(FlexibleDataset):
         data['foot'].x = foot_x  # [num_institutions, num_features_institution]
         return data
 
+    def get_data_metadata(self):
+        """
+        Returns the data metadata. Only for use with
+        heterogeneous graph data.
+        """
+        if self.data_format != 'heterogeneous_gnn':
+            raise TypeError(
+                "This function is only for a data_format of 'heterogeneous_gnn'."
+            )
+        node_types = ['base', 'joint', 'foot']
+        edge_types = [('base', 'connect', 'joint'),
+                      ('joint', 'connect', 'base'),
+                      ('joint', 'connect', 'joint'),
+                      ('foot', 'connect', 'joint'),
+                      ('joint', 'connect', 'foot')]
+        return (node_types, edge_types)
+
 
 class CerberusDataset(FlexibleDataset):
     """
@@ -447,7 +479,9 @@ class CerberusDataset(FlexibleDataset):
 
     def __init__(self,
                  root: str,
-                 robotURDF: NormalRobotGraph,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
                  data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
@@ -455,8 +489,8 @@ class CerberusDataset(FlexibleDataset):
         """
         Constructor for Cerberus Dataset and child classes.
         """
-        super().__init__(root, robotURDF, data_format, transform,
-                         pre_transform, pre_filter)
+        super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
+                         data_format, transform, pre_transform, pre_filter)
 
         # Map ROS names to array positions
         self.ros_name_in_index = [

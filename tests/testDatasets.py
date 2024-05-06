@@ -293,15 +293,15 @@ class TestGo1SimulatedDataset(unittest.TestCase):
 
         # Make sure they match
         np.testing.assert_array_equal(
-            heteroData['base', 'connect', 'joint'].edge_index, bj)
+            heteroData['base', 'connect', 'joint'].edge_index.numpy(), bj)
         np.testing.assert_array_equal(
-            heteroData['joint', 'connect', 'base'].edge_index, jb)
+            heteroData['joint', 'connect', 'base'].edge_index.numpy(), jb)
         np.testing.assert_array_equal(
-            heteroData['joint', 'connect', 'joint'].edge_index, jj)
+            heteroData['joint', 'connect', 'joint'].edge_index.numpy(), jj)
         np.testing.assert_array_equal(
-            heteroData['foot', 'connect', 'joint'].edge_index, fj)
+            heteroData['foot', 'connect', 'joint'].edge_index.numpy(), fj)
         np.testing.assert_array_equal(
-            heteroData['joint', 'connect', 'foot'].edge_index, jf)
+            heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
 
         # Check the labels
         labels_des = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
@@ -311,21 +311,6 @@ class TestGo1SimulatedDataset(unittest.TestCase):
         # Check the number of nodes
         number_des = self.GO1_graph.get_num_nodes()
         self.assertEqual(heteroData.num_nodes, number_des)
-
-        des_p = [
-            0.09840758, 1.2600079, -2.0489328, -0.10457229, 0.7454401,
-            -1.8136898, 0.04816602, 0.91943306, -1.9169945, -0.0340704,
-            1.2415031, -2.0689785
-        ]
-        des_v = [
-            0.6230268, -5.9481835, -5.3682613, -0.26720884, 6.455389,
-            -1.3378538, -0.00086710247, 6.2338834, -0.5447279, 0.6295713,
-            -4.582517, -7.406303
-        ]
-        des_t = [
-            -0.4899872, -3.0470033, 0.363765, 5.630082, 5.196147, 11.241279,
-            -1.8939179, 4.083751, 16.447073, -1.3105631, -0.7087057, 0.13933142
-        ]
 
         # Check the node attributes
         base_x = np.array([[]], dtype=np.float32)
