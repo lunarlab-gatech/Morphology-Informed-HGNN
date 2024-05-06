@@ -1,12 +1,10 @@
 import torch
 from torch import optim, nn
 import lightning as L
-from lightning.pytorch import seed_everything
 from torch_geometric.nn.models import GCN, GraphSAGE
 from torch_geometric.nn import to_hetero
 from lightning.pytorch.loggers import WandbLogger
 from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset, Go1SimulatedDataset
-from .graphParser import NormalRobotGraph, HeterogeneousRobotGraph
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
@@ -242,12 +240,9 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.legend()
     axes.set_title(title)
 
-
-def evaluate_model_and_visualize(model_type: str,
-                                 path_to_checkpoint: Path,
-                                 predict_dataset: CerberusDataset,
-                                 num_to_visualize: int,
-                                 path_to_file: Path = None):
+def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path, 
+                            predict_dataset: CerberusDataset,
+                            subset_to_visualize: tuple[int], path_to_file: Path = None):
 
     # Initialize the model
     model = None
@@ -261,26 +256,25 @@ def evaluate_model_and_visualize(model_type: str,
         raise ValueError("model_type must be gnn or mlp.")
 
     # Create a validation dataloader
-    valLoader: DataLoader = DataLoader(predict_dataset,
-                                       batch_size=num_to_visualize,
-                                       shuffle=False,
-                                       num_workers=15)
+    valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, 
+                                       shuffle=False, num_workers=15)
 
     # Setup four graphs
     fig, axes = plt.subplots(4, figsize=[20, 10])
     fig.suptitle('Foot Estimated Forces vs. Ground Truth')
 
     # Validate with the model
-    trainer = L.Trainer(limit_predict_batches=2)
+    trainer = L.Trainer()
     predictions_result = trainer.predict(model, valLoader)
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
     for batch_result in predictions_result:
-        pred.ca  #TODO: BROKEN MAKE IT SO IT CAN SUM THE RESULTS OF THE BATCHES AND CALCULATE TOTAL LOSS.
-    print(predictions_result[0])
-    print(predictions_result[1])
-    pred = predictions_result[0][0].numpy()
-    labels = predictions_result[0][1].numpy()
+        pred = torch.cat((pred, batch_result[0]), dim=0)
+        labels = torch.cat((labels, batch_result[1]), dim=0)
+
+    # Only use the specific subset chosen
+    pred = pred.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
+    labels = labels.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
 
     # Display the results
     titles = [
