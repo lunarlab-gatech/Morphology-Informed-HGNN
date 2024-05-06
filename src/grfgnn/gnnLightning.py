@@ -21,6 +21,10 @@ class Base_Lightning(L.LightningModule):
     optimizer.
     """
 
+    def __init__(self):
+        # Log model type
+        self.log("Model Type", str(type(self)))
+
     def log_losses(self, batch, mse_loss, y, y_pred, step_name: str):
         self.log(step_name + "_MSE_loss",
                  mse_loss,
@@ -345,7 +349,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
                 ground_truth_label_indices, data_metadata):
 
     # Set batch size
-    batch_size = 5
+    batch_size = 100
     hidden_channels = 256
     num_layers = 8
 
@@ -413,10 +417,10 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
         benchmark=True,
         devices='auto',
         accelerator="auto",
-        max_epochs=5,
-        limit_train_batches=100,
-        limit_val_batches=5,
-        limit_test_batches=5,
+        max_epochs=100,
+        # limit_train_batches=100,
+        # limit_val_batches=5,
+        # limit_test_batches=5,
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
         logger=wandb_logger,
