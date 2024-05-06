@@ -32,12 +32,12 @@ that equals "base", and uses it to generate names for its component links and jo
 the origin block defines where the component is w.r.t its parent (in this case the parent
 is the world frame). For more, see http://ros.org/wiki/xacro -->
   <!-- Floating-base Joint -->
-  <link name="world"/>
+  <!-- <link name="world"/>
   <joint name="floating_base_joint" type="floating">
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <parent link="world"/>
     <child link="base_link"/>
-  </joint>
+  </joint> -->
   <joint name="floating_base" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
     <parent link="base_link"/>

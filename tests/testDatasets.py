@@ -1,12 +1,15 @@
 import unittest
 from pathlib import Path
-from grfgnn import RobotURDF, CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset
+from grfgnn import NormalRobotGraph, HeterogeneousRobotGraph, CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset, Go1SimulatedDataset, FlexibleDataset
 from rosbags.highlevel import AnyReader
+import os
+from torch_geometric.data import HeteroData
+import numpy as np
 
 
 class TestCerberusDatasets(unittest.TestCase):
     """
-    Test that the Cerberus Dataset classes properly download,
+    Test that the Cerberus Dataset classes download,
     process, and read the info for creating graph datasets. We
     used webviz.io in order to inspect the rosbag and genereate 
     regression test cases.
@@ -18,22 +21,26 @@ class TestCerberusDatasets(unittest.TestCase):
             Path(__file__).cwd(), 'urdf_files', 'A1', 'a1.urdf').absolute()
         self.go1_path = Path(
             Path(__file__).cwd(), 'urdf_files', 'Go1', 'go1.urdf').absolute()
-        self.A1_URDF = RobotURDF(self.a1_path, 'package://a1_description/',
-                            'unitree_ros/robots/a1_description', True)
-        self.GO1_URDF = RobotURDF(self.go1_path, 'package://go1_description/',
-                            'unitree_ros/robots/go1_description', True)
+        self.A1_URDF = NormalRobotGraph(self.a1_path,
+                                        'package://a1_description/',
+                                        'unitree_ros/robots/a1_description',
+                                        True)
+        self.GO1_URDF = NormalRobotGraph(self.go1_path,
+                                         'package://go1_description/',
+                                         'unitree_ros/robots/go1_description',
+                                         True)
 
         # Create the street dataset
         self.dataset_street_path = Path(
             Path(__file__).cwd(), 'datasets', 'cerberus_street')
         self.dataset_street = CerberusStreetDataset(self.dataset_street_path,
-                                                    self.A1_URDF)
+                                                    self.A1_URDF, 'gnn')
 
         # Create the track dataset
         self.dataset_track_path = Path(
             Path(__file__).cwd(), 'datasets', 'cerberus_track')
         self.dataset_track = CerberusTrackDataset(self.dataset_track_path,
-                                                  self.A1_URDF)
+                                                  self.A1_URDF, 'gnn')
 
         # Create lists to hold the datasets and paths we want to loop through
         self.dataset_path_list = [
@@ -179,18 +186,151 @@ class TestCerberusDatasets(unittest.TestCase):
         for i in range(0, len(names_lists) - 1):
             self.assertSequenceEqual(names_lists[i], names_lists[i + 1])
 
-    def test_urdf_name_check(self):
+    def test_error_messages(self):
         """
-        Makes sure the Dataset class properly detects when it's been passed
-        the wrong URDF file.
+        Make sure all of the proper error messages are thrown when we expect them.
         """
-        with self.assertRaises(ValueError):
-            temp = CerberusStreetDataset(self.dataset_street_path, self.GO1_URDF)
-            temp = CerberusTrackDataset(self.dataset_street_path, self.GO1_URDF)
 
+        # Makes sure the Dataset class properly detects when it's been passed
+        # the wrong URDF file.
+        with self.assertRaises(ValueError) as error:
+            temp = CerberusStreetDataset(self.dataset_street_path,
+                                         self.GO1_URDF)
+        self.assertEqual(
+            "Invalid URDF: \"go1\". This dataset was collected on the \"a1\" robot. Please pass in the URDF file for the \"a1\" robot, not for the \"go1\" robot.",
+            str(error.exception))
+        with self.assertRaises(ValueError) as error:
+            temp = CerberusTrackDataset(self.dataset_track_path, self.GO1_URDF)
+        self.assertEqual(
+            "Invalid URDF: \"go1\". This dataset was collected on the \"a1\" robot. Please pass in the URDF file for the \"a1\" robot, not for the \"go1\" robot.",
+            str(error.exception))
+
+        # Make sure it detects when we pass an invalid model.
+        with self.assertRaises(ValueError) as error:
+            temp = CerberusStreetDataset(self.dataset_street_path,
+                                         self.GO1_URDF, 'fake')
+        self.assertEqual(
+            "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'.",
+            str(error.exception))
+
+        # Make sure we get an error when we initialize a class that isn't meant
+        # to be initialized.
+        with self.assertRaises(NotImplementedError) as error:
+            temp = FlexibleDataset(self.dataset_street_path, self.GO1_URDF)
+        self.assertEqual(
+            "Don't call this class directly, but use one of \
+        the child classes in order to choose which dataset \
+        sequence you want to load.", str(error.exception))
+
+    def test_get_expected_urdf_name(self):
+        """
+        Make sure that the URDF method is properly set.
+        """
+
+        self.assertEqual("a1", self.dataset_street.get_expected_urdf_name())
+        self.assertEqual("a1", self.dataset_track.get_expected_urdf_name())
 
     # TODO: Add test cases for get() method
     # TODO: Add test cases for new dataset class methods
+
+
+@unittest.skipIf(
+    os.getenv('RUN_LOCAL_TESTS', 'False') != 'True',
+    "Not running tests on datasets that can't be downloaded")
+class TestGo1SimulatedDataset(unittest.TestCase):
+    """
+    Test that the Go1 Simulated dataset successfully
+    processes and reads the info for creating graph datasets.
+    """
+
+    def setUp(self):
+        # Set up the Go1 Simulated dataset
+        path_to_go1_urdf = Path(
+            Path('.').parent, 'urdf_files', 'Go1', 'go1.urdf').absolute()
+        path_to_xiong_simulated = Path(
+            Path('.').parent, 'datasets', 'xiong_simulated').absolute()
+        self.GO1_graph = HeterogeneousRobotGraph(
+            path_to_go1_urdf, 'package://go1_description/',
+            'unitree_ros/robots/go1_description', True)
+        model_type = 'gnn'
+        self.go1_sim_dataset = Go1SimulatedDataset(path_to_xiong_simulated,
+                                                   self.GO1_graph, model_type)
+
+    def test_load_data_at_ros_seq(self):
+        """
+        Make sure the data from the 100 rosbags are correctly given sequence
+        numbers for the Go1 Simulated dataset.
+        """
+
+        # Make sure data is loaded properly
+        p, v, t, gt = self.go1_sim_dataset.load_data_at_ros_seq(181916)
+        des_p = [
+            0.09840758, 1.2600079, -2.0489328, -0.10457229, 0.7454401,
+            -1.8136898, 0.04816602, 0.91943306, -1.9169945, -0.0340704,
+            1.2415031, -2.0689785
+        ]
+        des_v = [
+            0.6230268, -5.9481835, -5.3682613, -0.26720884, 6.455389,
+            -1.3378538, -0.00086710247, 6.2338834, -0.5447279, 0.6295713,
+            -4.582517, -7.406303
+        ]
+        des_t = [
+            -0.4899872, -3.0470033, 0.363765, 5.630082, 5.196147, 11.241279,
+            -1.8939179, 4.083751, 16.447073, -1.3105631, -0.7087057, 0.13933142
+        ]
+        des_gt = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        self.assertSequenceEqual(p, des_p)
+        self.assertSequenceEqual(v, des_v)
+        self.assertSequenceEqual(t, des_t)
+        self.assertSequenceEqual(gt, des_gt)
+
+    def test_get_helper_heterogeneous_gnn(self):
+        # Get the HeteroData graph
+        heteroData: HeteroData = self.go1_sim_dataset.get_helper_heterogeneous_gnn(
+            181916)
+        # Get the desired edge matrices
+        bj, jb, jj, fj, jf = self.GO1_graph.get_edge_index_matrices()
+
+        # Make sure they match
+        np.testing.assert_array_equal(
+            heteroData['base', 'connect', 'joint'].edge_index.numpy(), bj)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'base'].edge_index.numpy(), jb)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'joint'].edge_index.numpy(), jj)
+        np.testing.assert_array_equal(
+            heteroData['foot', 'connect', 'joint'].edge_index.numpy(), fj)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
+
+        # Check the labels
+        labels_des = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        np.testing.assert_array_equal(heteroData.y.numpy(),
+                                      np.array(labels_des, dtype=np.float32))
+
+        # Check the number of nodes
+        number_des = self.GO1_graph.get_num_nodes()
+        self.assertEqual(heteroData.num_nodes, number_des)
+
+        # Check the node attributes
+        base_x = np.array([[]], dtype=np.float32)
+        joint_x = np.array([[0.09840758, 0.6230268, -0.4899872],
+                            [1.2600079, -5.9481835, -3.0470033],
+                            [-2.0489328, -5.3682613, 0.363765],
+                            [-0.10457229, -0.26720884, 5.630082],
+                            [0.7454401, 6.455389, 5.196147],
+                            [-1.8136898, -1.3378538, 11.241279],
+                            [0.04816602, -0.00086710247, -1.8939179],
+                            [0.91943306, 6.2338834, 4.083751],
+                            [-1.9169945, -0.5447279, 16.447073],
+                            [-0.0340704, 0.6295713, -1.3105631],
+                            [1.2415031, -4.582517, -0.7087057],
+                            [-2.0689785, -7.406303, 0.13933142]],
+                           dtype=np.float32)
+        foot_x = np.array([[], [], [], []], dtype=np.float32)
+        np.testing.assert_array_equal(heteroData['base'].x.numpy(), base_x)
+        np.testing.assert_array_equal(heteroData['joint'].x.numpy(), joint_x)
+        np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x)
 
 
 if __name__ == '__main__':
