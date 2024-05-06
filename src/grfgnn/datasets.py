@@ -1,7 +1,7 @@
 import torch
 import torch_geometric
-from torch_geometric.data import Data, Dataset
-from .urdfParser import RobotURDF
+from torch_geometric.data import Data, Dataset, HeteroData
+from .graphParser import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
 import networkx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,47 +16,481 @@ from rosbags.interfaces import ConnectionExtRosbag2
 from typing import cast
 
 
-class CerberusStreetDataset(Dataset):
+class FlexibleDataset(Dataset):
+    """
+    Dataset class that can be used for a MLP, normal GNN, or 
+    heterogeneous GNN.
+    """
+
+    # Used when initalizing the parent class instead of a proper
+    # child classs
+    notImplementedError = NotImplementedError(
+        "Don't call this class directly, but use one of \
+        the child classes in order to choose which dataset \
+        sequence you want to load.")
 
     def __init__(self,
-                 root,
-                 robotURDF: RobotURDF,
-                 entries_to_use=None,
+                 root: str,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
+                 data_format: str = 'gnn',
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
+        """
+        Parameters:
+                data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
+                    Determines how the get() method returns data.
+        """
+        # Check for valid data format
+        self.data_format = data_format
+        if self.data_format != 'mlp' and self.data_format != 'gnn' and self.data_format != 'heterogeneous_gnn':
+            raise ValueError(
+                "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'."
+            )
 
         # Setup the directories for raw and processed data
         self.root = root
         super().__init__(root, transform, pre_transform, pre_filter)
 
-        # Setup the reader for reading rosbags
-        path_to_bag = os.path.join(root, 'raw', 'street.bag')
-        reader = AnyReader([Path(path_to_bag)])
-        reader.open()
-        imu_gen = reader.messages(connections=[
-            x for x in reader.connections if x.topic == '/hardware_a1/imu'
-        ])
+        # Get the first index and length of dataset
+        info_path = Path(root, 'processed', 'info.txt')
+        with open(info_path, 'r') as f:
+            data = f.readline().split(" ")
+            self.length = int(data[0])
+            self.first_index = int(data[1])
 
-        # Get the first index of the dataset.
-        for connection, timestamp, rawdata in imu_gen:
-            msg = reader.deserialize(rawdata, connection.msgtype)
-            self.first_index = msg.header.seq
-            break
+        # Make sure the URDF file we were given properly matches
+        # what we are expecting
+        if self.data_format == 'heterogeneous_gnn':
+            robotURDF = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
+                                                urdf_to_desc_path, True)
+        else:
+            robotURDF = NormalRobotGraph(urdf_path, ros_builtin_path,
+                                         urdf_to_desc_path, True)
+        passed_urdf_name = robotURDF.robot_urdf.name
+        expected_name = self.get_expected_urdf_name()
+        if passed_urdf_name != expected_name:
+            raise ValueError(
+                "Invalid URDF: \"" + passed_urdf_name +
+                "\". This dataset was collected on the \"" + expected_name +
+                "\" robot. Please pass in the URDF file for the \"" +
+                expected_name + "\" robot, not for the \"" + passed_urdf_name +
+                "\" robot.")
 
-        # Calculate the length of the dataset
-        self.length = sum(1 for _ in imu_gen)
-        if entries_to_use is not None and entries_to_use <= self.length:
-            self.length = entries_to_use
-        reader.close()
+        # Save the URDF info
+        self.URDF = robotURDF
 
-        # Open up the A1 urdf file and get the edge matrix
-        self.A1_URDF = robotURDF
-        self.edge_matrix = self.A1_URDF.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
         # Get node name to index mapping
-        self.urdf_name_to_index = self.A1_URDF.get_node_name_to_index_dict()
+        self.urdf_name_to_index = self.URDF.get_node_name_to_index_dict()
+
+    @property
+    def processed_file_names(self):
+        """
+        Make the list of all the processed 
+        files we are expecting.
+        """
+
+        processed_file_names = []
+        start_seq_id, end_seq_id = self.get_start_and_end_seq_ids()
+        for i in range(start_seq_id, end_seq_id + 1):
+            processed_file_names.append(str(i) + ".txt")
+        processed_file_names.append("info.txt")
+        return processed_file_names
+
+    def get_ground_truth_label_indices(self):
+        """
+        This helper method returns the node indices that correspond to 
+        the ground truth forces labels contained in the "y" of each 
+        Data object. The number x in the ith index tells us that 
+        ground truth label i matches up with node x from the GNN output.
+
+        For example, if the graph has 8 nodes, and there are only 4 
+        ground truth labels, this method might return [0, 3, 4, 7].
+        This means that the first ground truth label should match
+        the output of the node at index 0, the second ground truth label
+        should match the output of the node at index 3, and so on.
+
+        Returns:
+            ground_truth_graph_indices (list[int]) - List of the indices of
+            the graph nodes that should output the ground truth labels 
+            at the same corresponding index.
+        """
+        if self.ground_truth_graph_indices is None:
+            raise self.notImplementedError
+        else:
+            return self.ground_truth_graph_indices
+
+    def get_start_and_end_seq_ids(self):
+        """
+        Method for child classes to tell the processing method the
+        numbers of the files they are looking for. It returns
+        the seq id of the first ROS '/hardware_a1/joint_foot' 
+        message, and the seq id of the last.
+        """
+        raise self.notImplementedError
+
+    def get_expected_urdf_name(self):
+        """
+        Method for child classes to specify what URDF file they are
+        looking for.
+        """
+        raise self.notImplementedError
+
+    def len(self):
+        return self.length
+
+    def load_data_at_ros_seq(self, ros_seq: int):
+        """
+        This helper function opens the file named "ros_seq"
+        and loads the position, velocity, and effort information.
+
+        Parameters:
+            ros_seq (int): The sequence number of the ros message
+                whose data should be loaded.
+        """
+        raise self.notImplementedError
+
+    def get_helper_gnn(self, idx):
+        """
+        Get a dataset entry if we are using a GNN model.
+        """
+        raise self.notImplementedError
+
+    def get_helper_mlp(self, idx):
+        """
+        Gets a Dataset entry if we are using an MLP model.
+        """
+        raise self.notImplementedError
+
+    def get_helper_heterogeneous_gnn(self, idx):
+        """
+        Get a dataset entry if we are using a Heterogeneous GNN model.
+        """
+        raise self.notImplementedError
+
+    def get(self, idx):
+        # Bounds check
+        if idx < 0 or idx >= self.length:
+            raise IndexError("Index value out of Dataset bounds.")
+
+        # Return data in the proper format
+        if self.data_format == 'gnn':
+            return self.get_helper_gnn(idx)
+        elif self.data_format == 'mlp':
+            return self.get_helper_mlp(idx)
+        elif self.data_format == 'heterogeneous_gnn':
+            return self.get_helper_heterogeneous_gnn(idx)
+
+
+class Go1SimulatedDataset(FlexibleDataset):
+    """
+    Dataset class for the simulated data for the UniTree Go1.
+    """
+
+    def __init__(self,
+                 root: str,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
+                 data_format: str = 'gnn',
+                 transform=None,
+                 pre_transform=None,
+                 pre_filter=None):
+        """
+        Constructor for Go1 Simulated Dataset provided by Dr. Xiong.
+        """
+        super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
+                         data_format, transform, pre_transform, pre_filter)
+
+        # Map urdf names to array indexes
+        self.urdf_to_dataset_index = {
+            'FR_hip_joint': 0,
+            'FR_thigh_joint': 1,
+            'FR_calf_joint': 2,
+            'FL_hip_joint': 3,
+            'FL_thigh_joint': 4,
+            'FL_calf_joint': 5,
+            'RR_hip_joint': 6,
+            'RR_thigh_joint': 7,
+            'RR_calf_joint': 8,
+            'RL_hip_joint': 9,
+            'RL_thigh_joint': 10,
+            'RL_calf_joint': 11,
+            'FR_foot_fixed': 0,
+            'FL_foot_fixed': 1,
+            'RR_foot_fixed': 2,
+            'RL_foot_fixed': 3,
+        }
+
+        # Define the names and indicies that contain ground truth labels
+        self.ground_truth_urdf_names = [
+            'FR_foot_fixed',
+            'FL_foot_fixed',
+            'RR_foot_fixed',
+            'RL_foot_fixed',
+        ]
+
+        self.ground_truth_graph_indices = []
+        for urdf_name in self.ground_truth_urdf_names:
+            self.ground_truth_graph_indices.append(
+                self.urdf_name_to_index[urdf_name])
+
+        self.ground_truth_array_indices = []
+        for urdf_name in self.ground_truth_urdf_names:
+            self.ground_truth_array_indices.append(
+                self.urdf_to_dataset_index[urdf_name])
+
+        # Define the nodes that should recieve features
+        self.nodes_for_attributes = [
+            'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint', 'FR_hip_joint',
+            'FR_thigh_joint', 'FR_calf_joint', 'RL_hip_joint',
+            'RL_thigh_joint', 'RL_calf_joint', 'RR_hip_joint',
+            'RR_thigh_joint', 'RR_calf_joint'
+        ]
+
+    def process(self):
+        bag_numbers = np.linspace(0, 99, 100)
+
+        # Dataset has no sequence numbers, so hardcode first sequence number
+        first_seq = 0
+        curr_seq_num = first_seq
+
+        for val in bag_numbers:
+            # Set up a reader to read the rosbag
+            path_to_bag = os.path.join(
+                self.root, 'raw',
+                'traj_' + str(int(val)).rjust(4, '0') + '.bag')
+            self.reader = AnyReader([Path(path_to_bag)])
+            self.reader.open()
+            grf_gen = self.reader.messages(connections=[
+                x for x in self.reader.connections if x.topic == "grf"
+            ])
+            pos_gen = self.reader.messages(connections=[
+                x for x in self.reader.connections
+                if x.topic == "joint_positions"
+            ])
+            vel_gen = self.reader.messages(connections=[
+                x for x in self.reader.connections
+                if x.topic == "joint_velocities"
+            ])
+            tau_gen = self.reader.messages(connections=[
+                x for x in self.reader.connections
+                if x.topic == "joint_torques"
+            ])
+
+            # Extract all of the relevant data into arrays
+            grf_data = []
+            pos_data = []
+            vel_data = []
+            tau_data = []
+
+            for connection, _timestamp, rawdata in grf_gen:
+                msg = self.reader.deserialize(rawdata, connection.msgtype)
+                grf_data.append(msg.data)
+            for connection, _timestamp, rawdata in pos_gen:
+                msg = self.reader.deserialize(rawdata, connection.msgtype)
+                pos_data.append(msg.data)
+            for connection, _timestamp, rawdata in vel_gen:
+                msg = self.reader.deserialize(rawdata, connection.msgtype)
+                vel_data.append(msg.data)
+            for connection, _timestamp, rawdata in tau_gen:
+                msg = self.reader.deserialize(rawdata, connection.msgtype)
+                tau_data.append(msg.data)
+
+            # Make sure we have the same amount of data in each array
+            # Otherwise, we have an issue
+            if len(grf_data) != len(pos_data) or len(pos_data) != len(vel_data) or \
+                len(vel_data) != len(tau_data):
+                raise ValueError("Dataset has different amounts of data.")
+
+            # Iterate through the arrays and save important data in txt file
+            for i in range(len(grf_data)):
+                with open(
+                        str(
+                            Path(self.processed_dir,
+                                 str(curr_seq_num) + ".txt")), "w") as f:
+                    arrays = [
+                        grf_data[i], pos_data[i], vel_data[i], tau_data[i]
+                    ]
+                    for array in arrays:
+                        for val in array:
+                            f.write(str(val) + " ")
+                        f.write('\n')
+                    curr_seq_num += 1
+
+        # Write a txt file to save the dataset length & and first sequence index
+        length = curr_seq_num
+        with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
+            f.write(str(length) + " " + str(first_seq))
+
+    def get_expected_urdf_name(self):
+        return "go1"
+
+    def get_start_and_end_seq_ids(self):
+        return 0, 249099
+
+    def load_data_at_ros_seq(self, ros_seq: int):
+        # Open the file with the proper index
+        grfs, positions, velocities, torques = [], [], [], []
+        with open(os.path.join(self.processed_dir,
+                               str(ros_seq) + ".txt"), 'r') as f:
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                grfs.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                positions.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                velocities.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                torques.append(float(line[i]))
+
+        # Extract the ground truth labels
+        ground_truth_labels = []
+        for val in self.ground_truth_array_indices:
+            ground_truth_labels.append(grfs[val])
+
+        return positions, velocities, torques, ground_truth_labels
+
+    def get_helper_gnn(self, idx):
+        # Load the rosbag information
+        positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Create a note feature matrix
+        x = torch.ones((self.URDF.get_num_nodes(), 3), dtype=torch.float)
+
+        # For each joint specified
+        for urdf_node_name in self.nodes_for_attributes:
+
+            # Find the index of this particular node
+            node_index = self.urdf_name_to_index[urdf_node_name]
+
+            # Get the msg array index
+            msg_ind = self.urdf_to_dataset_index[urdf_node_name]
+
+            # Add the features to x matrix
+            x[node_index, 0] = positions[msg_ind]
+            x[node_index, 1] = velocities[msg_ind]
+            x[node_index, 2] = torques[msg_ind]
+
+        # Create the graph
+        graph = Data(x=x,
+                     edge_index=self.edge_matrix_tensor,
+                     y=torch.tensor(ground_truth_labels, dtype=torch.float),
+                     num_nodes=self.URDF.get_num_nodes())
+        return graph
+
+    def get_helper_mlp(self, idx):
+        # Load the rosbag information
+        positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Make the network inputs
+        x = torch.tensor((positions + velocities + torques), dtype=torch.float)
+
+        # Create the ground truth lables
+        y = torch.tensor(ground_truth_labels[self.ground_truth_graph_indices],
+                         dtype=torch.float)
+        return x, y
+
+    def get_helper_heterogeneous_gnn(self, idx):
+        # Create the Heterogeneous Data object
+        data = HeteroData()
+
+        # Get the edge matrices
+        bj, jb, jj, fj, jf = self.URDF.get_edge_index_matrices()
+        data['base', 'connect',
+             'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
+        data['joint', 'connect',
+             'base'].edge_index = torch.tensor(jb, dtype=torch.long)
+        data['joint', 'connect',
+             'joint'].edge_index = torch.tensor(jj, dtype=torch.long)
+        data['foot', 'connect',
+             'joint'].edge_index = torch.tensor(fj, dtype=torch.long)
+        data['joint', 'connect',
+             'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
+
+        # Load the rosbag information
+        positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Save the labels and number of nodes
+        data.y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        data.num_nodes = self.URDF.get_num_nodes()
+
+        # Create the feature matrices
+        number_nodes = self.URDF.get_num_of_each_node_type()
+        base_x = torch.ones((number_nodes[0], 1), dtype=torch.float)
+        joint_x = torch.ones((number_nodes[1], 3), dtype=torch.float)
+        foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float)
+
+        # For each joint specified
+        for urdf_node_name in self.nodes_for_attributes:
+
+            # Find the index of this particular node
+            node_index = self.urdf_name_to_index[urdf_node_name]
+
+            # Get the msg array index
+            msg_ind = self.urdf_to_dataset_index[urdf_node_name]
+
+            # Add the features to x matrix
+            joint_x[node_index, 0] = positions[msg_ind]
+            joint_x[node_index, 1] = velocities[msg_ind]
+            joint_x[node_index, 2] = torques[msg_ind]
+
+        # Save the matrices into the HeteroData object
+        data['base'].x = base_x  # [num_papers, num_features_paper]
+        data['joint'].x = joint_x  # [num_authors, num_features_author]
+        data['foot'].x = foot_x  # [num_institutions, num_features_institution]
+        return data
+
+    def get_data_metadata(self):
+        """
+        Returns the data metadata. Only for use with
+        heterogeneous graph data.
+        """
+        if self.data_format != 'heterogeneous_gnn':
+            raise TypeError(
+                "This function is only for a data_format of 'heterogeneous_gnn'."
+            )
+        node_types = ['base', 'joint', 'foot']
+        edge_types = [('base', 'connect', 'joint'),
+                      ('joint', 'connect', 'base'),
+                      ('joint', 'connect', 'joint'),
+                      ('foot', 'connect', 'joint'),
+                      ('joint', 'connect', 'foot')]
+        return (node_types, edge_types)
+
+
+class CerberusDataset(FlexibleDataset):
+    """
+    Dataset class that can be used to load any of the A1 or Go1 robot
+    rosbag sequences from the Cerberus state estimation dataset
+    and turn it into a GNN.
+
+    Here is where more information can be found on the dataset:
+    https://github.com/ShuoYangRobotics/Cerberus?tab=readme-ov-file
+    """
+
+    def __init__(self,
+                 root: str,
+                 urdf_path: Path,
+                 ros_builtin_path: str,
+                 urdf_to_desc_path: str,
+                 data_format: str = 'gnn',
+                 transform=None,
+                 pre_transform=None,
+                 pre_filter=None):
+        """
+        Constructor for Cerberus Dataset and child classes.
+        """
+        super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
+                         data_format, transform, pre_transform, pre_filter)
 
         # Map ROS names to array positions
         self.ros_name_in_index = [
@@ -86,13 +520,29 @@ class CerberusStreetDataset(Dataset):
             'RR_foot_fixed': 'RR_foot'
         }
 
-        # Define the names that contain ground truth labels
+        # Open up the urdf file and get the edge matrix
+        self.edge_matrix = self.URDF.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+
+        # Define the names and indicies that contain ground truth labels
         self.ground_truth_urdf_names = [
             'FL_foot_fixed', 'FR_foot_fixed', 'RL_foot_fixed', 'RR_foot_fixed'
         ]
+
         self.ground_truth_ros_names = []
         for urdf_name in self.ground_truth_urdf_names:
             self.ground_truth_ros_names.append(self.urdf_to_ros_map[urdf_name])
+
+        self.ground_truth_graph_indices = []
+        for urdf_name in self.ground_truth_urdf_names:
+            self.ground_truth_graph_indices.append(
+                self.urdf_name_to_index[urdf_name])
+
+        self.ground_truth_array_indices = []
+        for ros_name in self.ground_truth_ros_names:
+            self.ground_truth_array_indices.append(
+                self.get_index_of_ros_name(ros_name))
 
         # Define the nodes that should recieve features
         self.nodes_for_attributes = [
@@ -102,24 +552,32 @@ class CerberusStreetDataset(Dataset):
             'RR_thigh_joint', 'RR_calf_joint'
         ]
 
+    def get_google_drive_file_id(self):
+        """
+        Method for child classes to choose which sequence to load.
+        """
+        raise self.notImplementedError
+
+    def get_joint_msg_topic(self):
+        """
+        Method for child classes to specify the proper message topic
+        depending on the robot.
+        """
+        raise self.notImplementedError
+
     @property
     def raw_file_names(self):
-        return ['street.bag']
+        return ['data.bag']
 
     def download(self):
-        download_file_from_google_drive("1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu",
-                                        Path(self.root, 'raw'),
-                                        "street.bag")
-
-    @property
-    def processed_file_names(self):
-        return ['processed.txt']
+        download_file_from_google_drive(self.get_google_drive_file_id(),
+                                        Path(self.root, 'raw'), "data.bag")
 
     def process(self):
-        topic = '/hardware_a1/joint_foot'
+        topic = self.get_joint_msg_topic()
 
         # Set up a reader to read the rosbag
-        path_to_bag = os.path.join(self.root, 'raw', 'street.bag')
+        path_to_bag = os.path.join(self.root, 'raw', 'data.bag')
         self.reader = AnyReader([Path(path_to_bag)])
         self.reader.open()
         self.joint_gen = self.reader.messages(connections=[
@@ -127,9 +585,12 @@ class CerberusStreetDataset(Dataset):
         ])
 
         # Iterate through every joint message and save important data in txt file
+        length = 0
+        first_seq = None
         for connection, _timestamp, rawdata in self.joint_gen:
             msg = self.reader.deserialize(rawdata, connection.msgtype)
-
+            if first_seq is None:
+                first_seq = msg.header.seq
             with open(
                     os.path.join(self.processed_dir,
                                  str(msg.header.seq) + ".txt"), "w") as f:
@@ -138,28 +599,31 @@ class CerberusStreetDataset(Dataset):
                     for val in array:
                         f.write(str(val) + " ")
                     f.write('\n')
+            length += 1
 
-        # Write a txt file so we know we've finisehd
-        with open(os.path.join(self.processed_dir, "processed.txt"), "w") as f:
-            f.write(
-                "Bag files have been successfully written to this directory.")
+        # Write a txt file to save the dataset length & and first sequence index
+        with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
+            f.write(str(length) + " " + str(first_seq))
 
-    def len(self):
-        return self.length
+            # TODO: Add a note saying which dataset this is, and add
+            # a check to make sure we don't load an improper dataset.
 
-    def get_position_of_ros_name(self, name):
+    def get_index_of_ros_name(self, name: str):
+        """
+        Given the ROS joint name, return the index
+        in the array that its values can be found.
+        """
+
         for i in range(0, len(self.ros_name_in_index)):
             if name == self.ros_name_in_index[i]:
                 return i
+        raise IndexError("This ROS joint name doesn't exist.")
 
-    def get(self, idx):
+    def load_data_at_ros_seq(self, ros_seq: int):
         # Open the file with the proper index
-        positions = []
-        velocities = []
-        efforts = []
-        with open(
-                os.path.join(self.processed_dir,
-                             str(self.first_index + idx) + ".txt"), 'r') as f:
+        positions, velocities, efforts = [], [], []
+        with open(os.path.join(self.processed_dir,
+                               str(ros_seq) + ".txt"), 'r') as f:
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 positions.append(float(line[i]))
@@ -171,13 +635,20 @@ class CerberusStreetDataset(Dataset):
                 efforts.append(float(line[i]))
 
         # Get the ground truth force labels
+        # TODO: Write these methods for these functions
         ground_truth_labels = []
-        for name in self.ground_truth_ros_names:
-            ground_truth_labels.append(
-                efforts[self.get_position_of_ros_name(name)])
+        for val in self.ground_truth_array_indices:
+            ground_truth_labels.append(efforts[val])
 
-        # Create a note feature matrix
-        x = torch.ones((self.A1_URDF.get_num_nodes(), 2), dtype=torch.float)
+        return positions, velocities, efforts, ground_truth_labels
+
+    def get_helper_gnn(self, idx):
+        # Load the rosbag information
+        positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
+
+        # Create a node feature matrix
+        x = torch.ones((self.URDF.get_num_nodes(), 2), dtype=torch.float)
 
         # For each joint specified
         for urdf_node_name in self.nodes_for_attributes:
@@ -186,7 +657,7 @@ class CerberusStreetDataset(Dataset):
             node_index = self.urdf_name_to_index[urdf_node_name]
 
             # Get the msg array index
-            msg_ind = self.get_position_of_ros_name(
+            msg_ind = self.get_index_of_ros_name(
                 self.urdf_to_ros_map[urdf_node_name])
 
             # Add the features to x matrix
@@ -197,219 +668,106 @@ class CerberusStreetDataset(Dataset):
         graph = Data(x=x,
                      edge_index=self.edge_matrix_tensor,
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
-                     num_nodes=self.A1_URDF.get_num_nodes())
-
+                     num_nodes=self.URDF.get_num_nodes())
         return graph
 
+    def get_helper_mlp(self, idx):
+        # Load the rosbag information
+        positions, velocities, efforts, ground_truth_labels = self.load_data_at_ros_seq(
+            self.first_index + idx)
 
-class HyQDataset(Dataset):
+        # Make the network inputs
+        x = torch.tensor((positions[:12] + velocities[:12]), dtype=torch.float)
+
+        # Create the ground truth lables
+        y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        return x, y
+
+
+class CerberusA1Dataset(CerberusDataset):
     """
-    NOTE: DO NOT USE
-    THIS CLASS IS CURRENTLY DEFUNCT.
+    Child class of Cerberus Dataset, but parent class
+    of datasets that use the UniTree A1 robot.
     """
 
-    def __init__(self,
-                 root=None,
-                 transform=None,
-                 pre_transform=None,
-                 pre_filter=None):
-        super().__init__(root, transform, pre_transform, pre_filter)
-        print("Loading HyQ Dataset: This may take awhile...")
+    def get_expected_urdf_name(self):
+        return "a1"
 
-        # Load the HyQ URDF file & dataset
-        HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf',
-                             'package://hyq_description/', 'hyq-description')
-        HyQ_CSV = RobotCSV("trot_in_lab_1")
-
-        # Extract the edge matrix and convert to tensor
-        edge_matrix = HyQ_URDF.get_edge_index_matrix()
-        edge_matrix_tensor = torch.tensor(edge_matrix, dtype=torch.long)
-
-        # Create edge attribute matrices
-        joint_to_features_dict = {
-            # LF features
-            'lf_haa_joint': ['LF_HAA_q', 'LF_HAA_qd_f'],
-            'lf_hfe_joint': ['LF_HFE_q', 'LF_HFE_qd_f'],
-            'lf_kfe_joint': ['LF_KFE_q', 'LF_KFE_qd_f'],
-            # LH features
-            'lh_haa_joint': ['LH_HAA_q', 'LH_HAA_qd_f'],
-            'lh_hfe_joint': ['LH_HFE_q', 'LH_HFE_qd_f'],
-            'lh_kfe_joint': ['LH_KFE_q', 'LH_KFE_qd_f'],
-            # RF features
-            'rf_haa_joint': ['RF_HAA_q', 'RF_HAA_qd_f'],
-            'rf_hfe_joint': ['RF_HFE_q', 'RF_HFE_qd_f'],
-            'rf_kfe_joint': ['RF_KFE_q', 'RF_KFE_qd_f'],
-            # RH features
-            'rh_haa_joint': ['RH_HAA_q', 'RH_HAA_qd_f'],
-            'rh_hfe_joint': ['RH_HFE_q', 'RH_HFE_qd_f'],
-            'rh_kfe_joint': ['RH_KFE_q', 'RH_KFE_qd_f'],
-        }
-        features_per_joint = 2
-        edge_attrs_matrices = self._create_edge_attr_matrices(
-            HyQ_CSV, HyQ_URDF, joint_to_features_dict, features_per_joint)
-
-        # Create target matrix
-        target_matrix_names = [
-            'LF_HAA_fm', 'LF_HFE_fm', 'LF_KFE_fm', 'LH_HAA_fm', 'LH_HFE_fm',
-            'LH_KFE_fm', 'RF_HAA_fm', 'RF_HFE_fm', 'RF_KFE_fm', 'RH_HAA_fm',
-            'RH_HFE_fm', 'RH_KFE_fm'
-        ]
-        y_all_graphs = self._create_target_matrix(HyQ_CSV, HyQ_URDF,
-                                                  target_matrix_names)
-
-        # Create a list of Data (graph) objects
-        self.dataset = list()
-        for i in range(0, len(edge_attrs_matrices)):
-            self.dataset.append(
-                Data(edge_index=edge_matrix_tensor,
-                     edge_attr=torch.tensor(edge_attrs_matrices[i],
-                                            dtype=torch.float),
-                     y=torch.tensor(y_all_graphs[i], dtype=torch.float),
-                     num_nodes=HyQ_URDF.get_num_nodes()))
-        print("HyQ data load complete")
-
-    def _find_edge_indexes_from_connections(self, edge_matrix,
-                                            edge_connections):
-        edge_index = list()
-        for i in range(0, len(edge_matrix[0])):
-            vector = edge_matrix[:, i]
-            if (np.array_equal(vector, edge_connections)
-                    or np.array_equal(vector, np.flip(edge_connections))):
-                edge_index.append(i)
-        return edge_index
-
-    def _create_edge_attr_matrices(self, HyQ_CSV, HyQ_URDF: RobotURDF,
-                                   joint_to_features_dict: dict[str,
-                                                                list[str]],
-                                   features_per_joint):
-        # Load the edge matrix
-        edge_matrix = HyQ_URDF.get_edge_index_matrix()
-
-        # Create the edge_attribute matrix
-        edge_attrs = np.zeros((HyQ_CSV.num_dataset_entries(),
-                               len(edge_matrix[0]), features_per_joint))
-
-        # For each joint specified
-        for joint in joint_to_features_dict:
-            # Get the desired feature names
-            feature_names = joint_to_features_dict[joint]
-
-            # Create the feature vector
-            feature_vectors = np.zeros(
-                (HyQ_CSV.num_dataset_entries(), len(feature_names)))
-            for i in range(0, len(feature_names)):
-                feature_vectors[:, i] = HyQ_CSV.pull_values(feature_names[i])
-
-            # Find the indexes of the particular joint
-            edge_name_to_connection_dict = HyQ_URDF.get_edge_name_to_connections_dict(
-            )
-            joint_edges_dict = edge_name_to_connection_dict[joint]
-            joint_edge_indexes = self._find_edge_indexes_from_connections(
-                edge_matrix, joint_edges_dict)
-
-            # Add the feature vectors to the specified indexes
-            for entry_index in range(0, HyQ_CSV.num_dataset_entries()):
-                for edge_index in joint_edge_indexes:
-                    edge_attrs[entry_index,
-                               edge_index, :] = feature_vectors[entry_index, :]
-
-        return edge_attrs
-
-    def _create_target_matrix(self, HyQ_CSV, HyQ_URDF: RobotURDF,
-                              target_matrix_names: list[str]):
-        # Create the target matrix
-        y = np.zeros((HyQ_CSV.num_dataset_entries(), len(target_matrix_names)))
-
-        # For each target name
-        for i in range(0, len(target_matrix_names)):
-            # Pull the desired values for this target
-            target_values = HyQ_CSV.pull_values(target_matrix_names[i])
-
-            # Save it in the target matrix
-            y[:, i] = target_values
-
-        return y
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
+    def get_joint_msg_topic(self):
+        return "/hardware_a1/joint_foot"
 
 
-def hyq_test():
-    # Load the HyQ URDF file & dataset
-    HyQ_URDF = RobotURDF('urdf_files/HyQ/hyq.urdf')
+class CerberusStreetDataset(CerberusA1Dataset):
+    """
+    This class specifically loads the "street" sequence
+    of the Cerberus state estimation dataset.
+    """
 
-    # Extract the edge matrix and convert to tensor
-    edge_matrix = HyQ_URDF.get_edge_index_matrix()
+    def get_google_drive_file_id(self):
+        return "1rVQW3VPx9WwpJAh8vWKELD0eW9yI_8Vu"
 
-    # Create the dataset
-    dataset = HyQDataset()
-
-    # Extract the first graph
-    graph: Data = dataset[0]
-
-    # Write the edge attributes onto the labels
-    edge_labels = HyQ_URDF.get_edge_connection_to_name_dict()
-    for i in range(0, len(graph.edge_attr)):
-        edge_features = graph.edge_attr[i].numpy()
-
-        # Only write features if they aren't all zeros
-        if (np.sum(edge_features) != 0):
-            # Find connection numbers for this edge
-            connection_matrix = graph.edge_index[:, i].numpy()
-            connection_tuple = (connection_matrix[0], connection_matrix[1])
-
-            # Update the edge label
-            try:
-                label = edge_labels[connection_tuple]
-                label += ": " + str(edge_features)
-                edge_labels[connection_tuple] = label
-            except KeyError:
-                pass
-
-    # Convert to networkx graph
-    nx_graph = torch_geometric.utils.to_networkx(graph, to_undirected=True)
-
-    # Draw the graph
-    spring_layout = networkx.spring_layout(nx_graph)
-    networkx.draw(nx_graph, pos=spring_layout)
-    networkx.draw_networkx_labels(nx_graph,
-                                  pos=spring_layout,
-                                  labels=HyQ_URDF.get_node_num_to_name_dict(),
-                                  verticalalignment='top',
-                                  font_size=8)
-    networkx.draw_networkx_edge_labels(nx_graph,
-                                       pos=spring_layout,
-                                       edge_labels=edge_labels,
-                                       rotate=False,
-                                       font_size=7)
-    plt.show()
+    def get_start_and_end_seq_ids(self):
+        return 1597, 264904
 
 
-def a1_test():
-    # Load the A1 URDF file
-    A1_URDF = RobotURDF('urdf_files/A1/a1.urdf', 'package://a1_description/',
-                        'unitree_ros/robots/a1_description', True)
+class CerberusTrackDataset(CerberusA1Dataset):
+    """
+    This class specifically loads the "track" sequence
+    of the Cerberus state estimation dataset.
+    """
 
-    # Create the dataset
-    dataset = CerberusStreetDataset(
-        '/home/dlittleman/state-estimation-gnn/datasets/cerberus_street',
-        A1_URDF)
+    def get_google_drive_file_id(self):
+        return "1t2Y2Lp757lmYGsuGqu2T0aVnyKgZlLSW"
 
-    # Extract the first graph
-    graph: Data = dataset[0]
+    def get_start_and_end_seq_ids(self):
+        return 2603, 283736
+
+
+class CerberusGo1Dataset(CerberusDataset):
+    """
+    Child class of Cerberus Dataset, but parent class
+    of datasets that use the UniTree Gp1 robot.
+    """
+
+    def get_expected_urdf_name(self):
+        return "go1"
+
+    def get_joint_msg_topic(self):
+        return "/hardware_go1/joint_foot"
+
+
+class CerberusCampusDataset(CerberusGo1Dataset):
+    """
+    This class specifically loads the "campus" sequence
+    of the Cerberus state estimation dataset.
+    """
+
+    def get_google_drive_file_id(self):
+        return "1UinyXOQiVSPG6n2weYvekvP9NVV8_CLe"
+
+    def get_start_and_end_seq_ids(self):
+        return 119, 174560
+
+
+def visualize_graph(pytorch_graph: Data,
+                    robot_graph: NormalRobotGraph,
+                    fig_save_path: Path = None,
+                    draw_edges: bool = False):
+    """
+    This helper method visualizes a Data graph object
+    using networkx.
+    """
 
     # Write the features onto the names
-    node_labels = A1_URDF.get_node_index_to_name_dict()
-    for i in range(0, len(graph.x)):
+    node_labels = robot_graph.get_node_index_to_name_dict()
+    for i in range(0, len(pytorch_graph.x)):
         label = node_labels[i]
-        label += ": " + str(graph.x[i].numpy())
+        label += ": " + str(pytorch_graph.x[i].numpy())
         node_labels[i] = label
 
     # Convert to networkx graph
-    nx_graph = torch_geometric.utils.to_networkx(graph, to_undirected=True)
+    nx_graph = torch_geometric.utils.to_networkx(pytorch_graph,
+                                                 to_undirected=True)
 
     # Draw the graph
     spring_layout = networkx.spring_layout(nx_graph)
@@ -419,18 +777,15 @@ def a1_test():
                                   labels=node_labels,
                                   verticalalignment='top',
                                   font_size=8)
-    # networkx.draw_networkx_edge_labels(
-    #     nx_graph,
-    #     pos=spring_layout,
-    #     edge_labels=A1_URDF.get_edge_connections_to_name_dict(),
-    #     rotate=False,
-    #     font_size=7)
-    plt.savefig("drawnGraph.png")
+    if draw_edges:
+        networkx.draw_networkx_edge_labels(
+            nx_graph,
+            pos=spring_layout,
+            edge_labels=robot_graph.get_edge_connections_to_name_dict(),
+            rotate=False,
+            font_size=7)
 
-
-def main():
-    a1_test()
-
-
-if __name__ == "__main__":
-    main()
+    # Save the figure if requested
+    if fig_save_path is not None:
+        plt.savefig(fig_save_path)
+    plt.show()

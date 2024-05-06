@@ -1,3 +1,0 @@
-# Ignore dataset folders so we don't commit something accidentally to GitHub
-*/
-*.bag

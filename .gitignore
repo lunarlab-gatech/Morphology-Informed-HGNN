@@ -164,3 +164,8 @@ cython_debug/
 
 # Ignore models we learn
 models/
+
+# Ignore wandb information and datasets
+datasets/
+wandb/
+lightning_logs/
