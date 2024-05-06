@@ -19,10 +19,6 @@ class Base_Lightning(L.LightningModule):
     optimizer.
     """
 
-    def __init__(self):
-        # Log model type
-        self.log("Model Type", str(type(self)))
-
     def log_losses(self, batch, mse_loss, y, y_pred, step_name: str):
         self.log(step_name + "_MSE_loss",
                  mse_loss,
