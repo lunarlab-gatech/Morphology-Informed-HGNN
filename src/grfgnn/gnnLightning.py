@@ -227,6 +227,7 @@ class MLP_Lightning(Base_Lightning):
         return loss, y, y_pred, batch_size
 
 
+
 def display_on_axes(axes, estimated, ground_truth, title):
     """
     Simple function that displays grounth truth and estimated
@@ -244,16 +245,26 @@ def evaluate_model_and_visualize(model_type: str,
                                  subset_to_visualize: tuple[int],
                                  path_to_file: Path = None):
 
+    # Get the full dataset if necessary
+    predict_full_dataset = None
+    try:
+        predict_dataset.get_ground_truth_label_indices()
+        predict_full_dataset = predict_dataset
+    except AttributeError:
+        predict_full_dataset = predict_dataset.dataset
+    
     # Initialize the model
     model = None
-    if model_type is 'gnn':
+    if model_type == 'gnn':
         model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
-        model.num_nodes = predict_dataset.URDF.get_num_nodes()
-        model.y_indices = predict_dataset.get_ground_truth_label_indices()
-    elif model_type is 'mlp':
+        model.y_indices = predict_full_dataset.get_ground_truth_label_indices()
+    elif model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    elif model_type == 'heterogeneous_gnn':
+        model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+        model.y_indices = predict_full_dataset.get_ground_truth_label_indices()
     else:
-        raise ValueError("model_type must be gnn or mlp.")
+        raise ValueError("model_type must be gnn, mlp, or heterogeneous_gnn.")
 
     # Create a validation dataloader
     valLoader: DataLoader = DataLoader(predict_dataset,
@@ -292,66 +303,12 @@ def evaluate_model_and_visualize(model_type: str,
         plt.savefig(path_to_file)
     plt.show()
 
-
-def train_model_cerberus(path_to_urdf, path_to_cerberus_street,
-                         path_to_cerberus_track, model_type):
-
-    # Initalize the datasets
-    street_dataset = CerberusStreetDataset(
-        path_to_cerberus_street, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type)
-    track_dataset = CerberusTrackDataset(path_to_cerberus_track, path_to_urdf,
-                                         'package://a1_description/',
-                                         'unitree_ros/robots/a1_description',
-                                         model_type)
-
-    # Split the data into training, validation, and testing sets
-    rand_seed = 10341885
-    rand_gen = torch.Generator().manual_seed(rand_seed)
-    val_size = int(0.7 * track_dataset.len())
-    test_size = track_dataset.len() - val_size
-    val_dataset, test_dataset = torch.utils.data.random_split(
-        track_dataset, [val_size, test_size], generator=rand_gen)
-
-    # Train the model
-    train_model(street_dataset, val_dataset, test_dataset, model_type,
-                street_dataset.get_ground_truth_label_indices(), None)
-
-
-def train_model_go1_simulated(path_to_urdf, path_to_go1_simulated):
-    model_type = 'mlp'
-
-    # Initalize the dataset
-    go1_sim_dataset = Go1SimulatedDataset(
-        path_to_go1_simulated, path_to_urdf, 'package://go1_description/',
-        'unitree_ros/robots/go1_description', model_type)
-
-    # Split the data into training, validation, and testing sets
-    rand_seed = 10341885
-    rand_gen = torch.Generator().manual_seed(rand_seed)
-    train_size = int(0.7 * go1_sim_dataset.len())
-    val_size = int(0.2 * go1_sim_dataset.len())
-    test_size = go1_sim_dataset.len() - (train_size + val_size)
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        go1_sim_dataset, [train_size, val_size, test_size], generator=rand_gen)
-
-    # Train the model
-    if model_type == 'heterogeneous_gnn':
-        train_model(train_dataset, val_dataset, test_dataset, model_type,
-                    go1_sim_dataset.get_ground_truth_label_indices(),
-                    go1_sim_dataset.get_data_metadata())
-    elif model_type == 'mlp':
-        train_model(train_dataset, val_dataset, test_dataset, model_type,
-                    go1_sim_dataset.get_ground_truth_label_indices(),
-                    None)
-
-
 def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
                 ground_truth_label_indices, data_metadata):
 
     # Set batch size
     batch_size = 100
-    hidden_channels = 256
+    hidden_channels = 3
     num_layers = 8
 
     # Create the dataloaders
