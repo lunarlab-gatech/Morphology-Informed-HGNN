@@ -237,9 +237,12 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.legend()
     axes.set_title(title)
 
-def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path, 
-                            predict_dataset: CerberusDataset,
-                            subset_to_visualize: tuple[int], path_to_file: Path = None):
+
+def evaluate_model_and_visualize(model_type: str,
+                                 path_to_checkpoint: Path,
+                                 predict_dataset: CerberusDataset,
+                                 subset_to_visualize: tuple[int],
+                                 path_to_file: Path = None):
 
     # Initialize the model
     model = None
@@ -253,8 +256,10 @@ def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path,
         raise ValueError("model_type must be gnn or mlp.")
 
     # Create a validation dataloader
-    valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, 
-                                       shuffle=False, num_workers=15)
+    valLoader: DataLoader = DataLoader(predict_dataset,
+                                       batch_size=100,
+                                       shuffle=False,
+                                       num_workers=15)
 
     # Setup four graphs
     fig, axes = plt.subplots(4, figsize=[20, 10])
@@ -270,8 +275,8 @@ def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path,
         labels = torch.cat((labels, batch_result[1]), dim=0)
 
     # Only use the specific subset chosen
-    pred = pred.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
-    labels = labels.numpy()[subset_to_visualize[0]:subset_to_visualize[1]+1]
+    pred = pred.numpy()[subset_to_visualize[0]:subset_to_visualize[1] + 1]
+    labels = labels.numpy()[subset_to_visualize[0]:subset_to_visualize[1] + 1]
 
     # Display the results
     titles = [

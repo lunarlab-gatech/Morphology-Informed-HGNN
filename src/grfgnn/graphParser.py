@@ -91,7 +91,7 @@ class RobotGraph():
         self.urdf_to_desc_path = urdf_to_desc_path
 
         # Make the updated urdf file, or replace it.
-        # This avoids issues with updating URDF files, 
+        # This avoids issues with updating URDF files,
         # but the new file not being updated.
         self.create_updated_urdf_file()
 
@@ -442,6 +442,10 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         return dict(all_lists)
 
+    def get_node_index_to_name_dict(self):
+        name_to_index = self.get_node_name_to_index_dict()
+        return dict((i, n) for n, i in name_to_index.items())
+
     def get_num_of_each_node_type(self):
         """
         Returns the numbers of each node type.
@@ -504,13 +508,16 @@ class HeterogeneousRobotGraph(RobotGraph):
             if parent_type == child_type and parent_type == 'joint':
                 edge_vector = np.array([[p_index, c_index], [c_index,
                                                              p_index]])
-                joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix, edge_vector)
+                joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix,
+                                                      edge_vector)
             elif parent_type == 'base' and child_type == 'joint':
                 edge_vector = np.array([[p_index], [c_index]])
-                base_to_joint_matrix = add_to_matrix(base_to_joint_matrix, edge_vector)
+                base_to_joint_matrix = add_to_matrix(base_to_joint_matrix,
+                                                     edge_vector)
             elif parent_type == 'joint' and child_type == 'foot':
                 edge_vector = np.array([[c_index], [p_index]])
-                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix, edge_vector)
+                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix,
+                                                     edge_vector)
             else:
                 raise Exception("Not possible")
 
