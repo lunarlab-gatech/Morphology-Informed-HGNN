@@ -19,16 +19,16 @@ class Base_Lightning(L.LightningModule):
     optimizer.
     """
 
-    def log_losses(self, batch, mse_loss, y, y_pred, step_name: str):
+    def log_losses(self, batch_size, mse_loss, y, y_pred, step_name: str):
         self.log(step_name + "_MSE_loss",
                  mse_loss,
-                 batch_size=batch.batch_size)
+                 batch_size=batch_size)
         self.log(step_name + "_RMSE_loss",
                  torch.sqrt(mse_loss),
-                 batch_size=batch.batch_size)
+                 batch_size=batch_size)
         self.log(step_name + "_L1_loss",
                  nn.functional.l1_loss(y, y_pred),
-                 batch_size=batch.batch_size)
+                 batch_size=batch_size)
 
         # Log losses per individual leg
         for i in range(0, 4):
@@ -37,29 +37,29 @@ class Base_Lightning(L.LightningModule):
             leg_mse_loss = nn.functional.mse_loss(y_leg, y_pred_leg)
             self.log(step_name + "_MSE_loss:leg_" + str(i),
                      leg_mse_loss,
-                     batch_size=batch.batch_size)
+                     batch_size=batch_size)
             self.log(step_name + "_RMSE_loss:leg_" + str(i),
                      torch.sqrt(leg_mse_loss),
-                     batch_size=batch.batch_size)
+                     batch_size=batch_size)
             self.log(step_name + "_L1_loss:leg_" + str(i),
                      nn.functional.l1_loss(y_leg, y_pred_leg),
-                     batch_size=batch.batch_size)
+                     batch_size=batch_size)
 
     def training_step(self, batch, batch_idx):
-        mse_loss, y, y_pred = self.step_helper_function(batch, batch_idx)
-        self.log_losses(batch, mse_loss, y, y_pred, "train")
+        mse_loss, y, y_pred, batch_size = self.step_helper_function(batch, batch_idx)
+        self.log_losses(batch_size, mse_loss, y, y_pred, "train")
         return mse_loss
 
     def validation_step(self, batch, batch_idx):
-        mse_loss, y, y_pred = self.step_helper_function(batch, batch_idx)
-        self.log_losses(batch, mse_loss, y, y_pred, "val")
+        mse_loss, y, y_pred, batch_size = self.step_helper_function(batch, batch_idx)
+        self.log_losses(batch_size, mse_loss, y, y_pred, "val")
 
     def test_step(self, batch, batch_idx):
-        mse_loss, y, y_pred = self.step_helper_function(batch, batch_idx)
-        self.log_losses(batch, mse_loss, y, y_pred, "test")
+        mse_loss, y, y_pred, batch_size = self.step_helper_function(batch, batch_idx)
+        self.log_losses(batch_size, mse_loss, y, y_pred, "test")
 
     def predict_step(self, batch, batch_idx):
-        mse_loss, y, y_pred = self.step_helper_function(batch, batch_idx)
+        mse_loss, y, y_pred, batch_size = self.step_helper_function(batch, batch_idx)
         return y_pred, y
 
     def configure_optimizers(self):
@@ -123,7 +123,7 @@ class GCN_Lightning(Base_Lightning):
         # Calculate loss
         y = torch.reshape(batch.y, (batch.batch_size, len(self.y_indices)))
         loss = nn.functional.mse_loss(y, y_pred)
-        return loss, y, y_pred
+        return loss, y, y_pred, batch.batch_size
 
 
 class Heterogeneous_GNN_Lightning(Base_Lightning):
@@ -177,7 +177,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         # Calculate loss
         y = torch.reshape(batch.y, (batch.batch_size, len(self.y_indices)))
         loss = nn.functional.mse_loss(y_pred, y)
-        return loss, y, y_pred
+        return loss, y, y_pred, batch.batch_size
 
 
 class MLP_Lightning(Base_Lightning):
@@ -223,7 +223,8 @@ class MLP_Lightning(Base_Lightning):
         x, y = batch
         y_pred = self.mlp_model(x)
         loss = nn.functional.mse_loss(y_pred, y)
-        return loss, y, y_pred
+        batch_size = x.shape[0]
+        return loss, y, y_pred, batch_size
 
 
 def display_on_axes(axes, estimated, ground_truth, title):
@@ -313,7 +314,7 @@ def train_model_cerberus(path_to_urdf, path_to_cerberus_street,
 
 
 def train_model_go1_simulated(path_to_urdf, path_to_go1_simulated):
-    model_type = 'heterogeneous_gnn'
+    model_type = 'mlp'
 
     # Initalize the dataset
     go1_sim_dataset = Go1SimulatedDataset(
@@ -330,9 +331,14 @@ def train_model_go1_simulated(path_to_urdf, path_to_go1_simulated):
         go1_sim_dataset, [train_size, val_size, test_size], generator=rand_gen)
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, model_type,
-                go1_sim_dataset.get_ground_truth_label_indices(),
-                go1_sim_dataset.get_data_metadata())
+    if model_type == 'heterogeneous_gnn':
+        train_model(train_dataset, val_dataset, test_dataset, model_type,
+                    go1_sim_dataset.get_ground_truth_label_indices(),
+                    go1_sim_dataset.get_data_metadata())
+    elif model_type == 'mlp':
+        train_model(train_dataset, val_dataset, test_dataset, model_type,
+                    go1_sim_dataset.get_ground_truth_label_indices(),
+                    None)
 
 
 def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
@@ -371,7 +377,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
                                         ground_truth_label_indices, False,
                                         None, True)
     elif model_type == 'mlp':
-        lightning_model = MLP_Lightning(24, hidden_channels, num_layers,
+        lightning_model = MLP_Lightning(train_dataset[0][0].shape[0], hidden_channels, num_layers,
                                         batch_size)
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
@@ -392,7 +398,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
-                                          filename='{epoch}-{val_loss:.2f}',
+                                          filename='{epoch}-{val_MSE_loss:.5f}',
                                           save_top_k=5,
                                           monitor="val_MSE_loss")
 

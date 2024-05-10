@@ -394,7 +394,7 @@ class Go1SimulatedDataset(FlexibleDataset):
         x = torch.tensor((positions + velocities + torques), dtype=torch.float)
 
         # Create the ground truth lables
-        y = torch.tensor(ground_truth_labels[self.ground_truth_graph_indices],
+        y = torch.tensor(ground_truth_labels,
                          dtype=torch.float)
         return x, y
 
