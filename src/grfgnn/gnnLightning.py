@@ -248,7 +248,7 @@ def evaluate_model_and_visualize(model_type: str,
     # Get the full dataset if necessary
     predict_full_dataset = None
     try:
-        predict_dataset.get_ground_truth_label_indices()
+        predict_dataset.get_foot_node_indices()
         predict_full_dataset = predict_dataset
     except AttributeError:
         predict_full_dataset = predict_dataset.dataset
@@ -257,12 +257,12 @@ def evaluate_model_and_visualize(model_type: str,
     model = None
     if model_type == 'gnn':
         model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
-        model.y_indices = predict_full_dataset.get_ground_truth_label_indices()
+        model.y_indices = predict_full_dataset.get_foot_node_indices()
     elif model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
-        model.y_indices = predict_full_dataset.get_ground_truth_label_indices()
+        model.y_indices = predict_full_dataset.get_foot_node_indices()
     else:
         raise ValueError("model_type must be gnn, mlp, or heterogeneous_gnn.")
 

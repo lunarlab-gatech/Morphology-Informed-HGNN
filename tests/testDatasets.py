@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from grfgnn import NormalRobotGraph, HeterogeneousRobotGraph, CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset, Go1SimulatedDataset, FlexibleDataset
+from grfgnn import CerberusStreetDataset, CerberusTrackDataset, Go1SimulatedDataset, FlexibleDataset, QuadSDKDataset
 from rosbags.highlevel import AnyReader
 import os
 from torch_geometric.data import HeteroData
@@ -227,10 +227,6 @@ class TestCerberusDatasets(unittest.TestCase):
     # TODO: Add test cases for get() method
     # TODO: Add test cases for new dataset class methods
 
-
-@unittest.skipIf(
-    os.getenv('RUN_LOCAL_TESTS', 'False') != 'True',
-    "Not running tests on datasets that can't be downloaded")
 class TestGo1SimulatedDataset(unittest.TestCase):
     """
     Test that the Go1 Simulated dataset successfully
@@ -238,11 +234,17 @@ class TestGo1SimulatedDataset(unittest.TestCase):
     """
 
     def setUp(self):
-        # Set up the Go1 Simulated dataset
         path_to_go1_urdf = Path(
             Path('.').parent, 'urdf_files', 'Go1', 'go1.urdf').absolute()
         path_to_xiong_simulated = Path(
             Path('.').parent, 'datasets', 'xiong_simulated').absolute()
+        
+        # Skip this test if the dataset isn't available
+        # (Since we can't automatically download it from the Internet)
+        if not path_to_xiong_simulated.exists():
+            self.skipTest("QuadSDK-NormalSequence Dataset not available")
+
+        # Set up the Go1 Simulated dataset
         model_type = 'heterogeneous_gnn'
         self.go1_sim_dataset = Go1SimulatedDataset(path_to_xiong_simulated,
             path_to_go1_urdf, 'package://go1_description/', 'unitree_ros/robots/go1_description', model_type)
@@ -280,7 +282,7 @@ class TestGo1SimulatedDataset(unittest.TestCase):
         heteroData: HeteroData = self.go1_sim_dataset.get_helper_heterogeneous_gnn(
             181916)
         # Get the desired edge matrices
-        bj, jb, jj, fj, jf = self.go1_sim_dataset.URDF.get_edge_index_matrices()
+        bj, jb, jj, fj, jf = self.go1_sim_dataset.robotGraph.get_edge_index_matrices()
 
         # Make sure they match
         np.testing.assert_array_equal(
@@ -300,7 +302,7 @@ class TestGo1SimulatedDataset(unittest.TestCase):
                                       np.array(labels_des, dtype=np.float32))
 
         # Check the number of nodes
-        number_des = self.go1_sim_dataset.URDF.get_num_nodes()
+        number_des = self.go1_sim_dataset.robotGraph.get_num_nodes()
         self.assertEqual(heteroData.num_nodes, number_des)
 
         # Check the node attributes
@@ -323,6 +325,105 @@ class TestGo1SimulatedDataset(unittest.TestCase):
         np.testing.assert_array_equal(heteroData['joint'].x.numpy(), joint_x)
         np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x)
 
+class TestQuadSDKDataset(unittest.TestCase):
+    """
+    Test that the QuadSDK dataset successfully
+    processes and reads the info for creating graph datasets.
+    """
+
+    def setUp(self):
+        # Get the paths to the URDF file and the dataset
+        path_to_a1_urdf = Path(
+            Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
+        path_to_normal_sequence = Path(
+            Path('.').parent, 'datasets', 'QuadSDK-NormalSequence').absolute()
+        
+        # Skip this test if the dataset isn't available
+        # (Since we can't automatically download it from the Internet)
+        if not path_to_normal_sequence.exists():
+            self.skipTest("QuadSDK-NormalSequence Dataset not available")
+
+        # Set up the Go1 Simulated dataset
+        model_type = 'heterogeneous_gnn'
+        self.go1_sim_dataset = QuadSDKDataset(path_to_normal_sequence,
+            path_to_a1_urdf, 'package://a1_description/',
+                            'unitree_ros/robots/a1_description', model_type)
+
+    def test_load_data_at_ros_seq(self):
+        """
+        Make sure the data from the 100 rosbags are correctly given sequence
+        numbers for the Go1 Simulated dataset.
+        """
+
+        # Make sure data is loaded properly
+        p, v, t, gt = self.go1_sim_dataset.load_data_at_ros_seq(181916)
+        des_p = [
+            0.09840758, 1.2600079, -2.0489328, -0.10457229, 0.7454401,
+            -1.8136898, 0.04816602, 0.91943306, -1.9169945, -0.0340704,
+            1.2415031, -2.0689785
+        ]
+        des_v = [
+            0.6230268, -5.9481835, -5.3682613, -0.26720884, 6.455389,
+            -1.3378538, -0.00086710247, 6.2338834, -0.5447279, 0.6295713,
+            -4.582517, -7.406303
+        ]
+        des_t = [
+            -0.4899872, -3.0470033, 0.363765, 5.630082, 5.196147, 11.241279,
+            -1.8939179, 4.083751, 16.447073, -1.3105631, -0.7087057, 0.13933142
+        ]
+        des_gt = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        self.assertSequenceEqual(p, des_p)
+        self.assertSequenceEqual(v, des_v)
+        self.assertSequenceEqual(t, des_t)
+        self.assertSequenceEqual(gt, des_gt)
+
+    def test_get_helper_heterogeneous_gnn(self):
+        # Get the HeteroData graph
+        heteroData: HeteroData = self.go1_sim_dataset.get_helper_heterogeneous_gnn(
+            181916)
+        # Get the desired edge matrices
+        bj, jb, jj, fj, jf = self.go1_sim_dataset.robotGraph.get_edge_index_matrices()
+
+        # Make sure they match
+        np.testing.assert_array_equal(
+            heteroData['base', 'connect', 'joint'].edge_index.numpy(), bj)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'base'].edge_index.numpy(), jb)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'joint'].edge_index.numpy(), jj)
+        np.testing.assert_array_equal(
+            heteroData['foot', 'connect', 'joint'].edge_index.numpy(), fj)
+        np.testing.assert_array_equal(
+            heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
+
+        # Check the labels
+        labels_des = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        np.testing.assert_array_equal(heteroData.y.numpy(),
+                                      np.array(labels_des, dtype=np.float32))
+
+        # Check the number of nodes
+        number_des = self.go1_sim_dataset.robotGraph.get_num_nodes()
+        self.assertEqual(heteroData.num_nodes, number_des)
+
+        # Check the node attributes
+        base_x = np.array([[1,1,1,1,1,1]], dtype=np.float32)
+        joint_x = np.array([[0.09840758, 0.6230268, -0.4899872],
+                            [1.2600079, -5.9481835, -3.0470033],
+                            [-2.0489328, -5.3682613, 0.363765],
+                            [-0.10457229, -0.26720884, 5.630082],
+                            [0.7454401, 6.455389, 5.196147],
+                            [-1.8136898, -1.3378538, 11.241279],
+                            [0.04816602, -0.00086710247, -1.8939179],
+                            [0.91943306, 6.2338834, 4.083751],
+                            [-1.9169945, -0.5447279, 16.447073],
+                            [-0.0340704, 0.6295713, -1.3105631],
+                            [1.2415031, -4.582517, -0.7087057],
+                            [-2.0689785, -7.406303, 0.13933142]],
+                           dtype=np.float32)
+        foot_x = np.array([[1], [1], [1], [1]], dtype=np.float32)
+        np.testing.assert_array_equal(heteroData['base'].x.numpy(), base_x)
+        np.testing.assert_array_equal(heteroData['joint'].x.numpy(), joint_x)
+        np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x)
 
 if __name__ == '__main__':
     unittest.main()
