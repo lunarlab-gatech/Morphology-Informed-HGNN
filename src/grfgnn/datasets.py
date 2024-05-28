@@ -66,10 +66,10 @@ class FlexibleDataset(Dataset):
         if self.data_format == 'heterogeneous_gnn':
             self.robotGraph = HeterogeneousRobotGraph(urdf_path,
                                                       ros_builtin_path,
-                                                      urdf_to_desc_path, True)
+                                                      urdf_to_desc_path)
         else:
             self.robotGraph = NormalRobotGraph(urdf_path, ros_builtin_path,
-                                               urdf_to_desc_path, True)
+                                               urdf_to_desc_path)
             
         # Make sure the URDF file we were given properly matches
         # what we are expecting
@@ -441,7 +441,7 @@ class QuadSDKDataset(FlexibleDataset):
         # Get the edge matrices
         bj, jb, jj, fj, jf = self.robotGraph.get_edge_index_matrices()
         data['base', 'connect',
-             'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
+               'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
         data['joint', 'connect',
              'base'].edge_index = torch.tensor(jb, dtype=torch.long)
         data['joint', 'connect',
@@ -450,6 +450,19 @@ class QuadSDKDataset(FlexibleDataset):
              'joint'].edge_index = torch.tensor(fj, dtype=torch.long)
         data['joint', 'connect',
              'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
+        
+        # Set the edge attributes
+        bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
+        data['base', 'connect',
+               'joint'].edge_attr = torch.tensor(bj_attr, dtype=torch.long)
+        data['joint', 'connect',
+             'base'].edge_attr = torch.tensor(jb_attr, dtype=torch.long)
+        data['joint', 'connect',
+             'joint'].edge_attr = torch.tensor(jj_attr, dtype=torch.long)
+        data['foot', 'connect',
+             'joint'].edge_attr = torch.tensor(fj_attr, dtype=torch.long)
+        data['joint', 'connect',
+             'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.long)
 
         # Load the rosbag information
         lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_sorted(

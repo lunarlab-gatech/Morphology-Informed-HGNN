@@ -309,7 +309,7 @@ class NormalRobotGraph(RobotGraph):
         node_dict = dict(zip(range(len(self.nodes)), node_names))
         return node_dict
 
-    def get_edge_index_matrix(self, heterogenous=False):
+    def get_edge_index_matrix(self):
         """
         Return the edge connectivity matrix, which defines each edge connection
         to each node. This matrix is the 'edge_index' matrix passed to the PyTorch
@@ -509,6 +509,84 @@ class HeterogeneousRobotGraph(RobotGraph):
         # Create the last two matrices
         joint_to_base_matrix = base_to_joint_matrix[[1, 0]]
         joint_to_foot_matrix = foot_to_joint_matrix[[1, 0]]
+
+        return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
+               foot_to_joint_matrix, joint_to_foot_matrix
+    
+    def get_edge_attr_matrices(self):
+        """
+        Return the edge attribute matrices.
+
+        Returns:
+            (list[np.array]): Multiple matrices, as outlined below, where N
+                is the number of edge attributes. Currently, N is 7, with 1
+                attribute for mass, and 7 for the inertia matrix:
+                data['base', 'connect', 'joint'].edge_attr -> [X, N]
+                data['joint', 'connect', 'base'].edge_attr -> [X, N]
+                data['joint', 'connect', 'joint'].edge_attr -> [Y, N]
+                data['foot', 'connect', 'joint'].edge_attr -> [Z, N]
+                data['joint', 'connect', 'foot'].edge_attr -> [Z, N]
+        """
+
+        def add_edge_attributes(edge, matrix: np.array, index: int) -> np.array:
+            I = edge.link.inertial.inertia
+            attri = [edge.link.inertial.mass, I[0][0], I[0][1], I[0][2], I[1][1], I[1][2], I[2][2]]
+            matrix[index] = attri
+            return matrix
+
+        # Define the number of attributes
+        N = 7
+
+        # Get the edge attribute matrices
+        bj, jb, jj, fj, jf = self.get_edge_index_matrices()
+
+        # Get the name to index dictionary
+        node_dict = self.get_node_name_to_index_dict()
+
+        # Define all of the edge matrices
+        base_to_joint_matrix = np.ones([bj.shape[1], N])
+        joint_to_joint_matrix = np.ones([jj.shape[1], N])
+        joint_to_foot_matrix = np.ones([jf.shape[1], N])
+
+        # Iterate through edges
+        for edge in self.edges:
+            # Get the nodes for the parent and the child
+            parent_node: RobotGraph.Node = self.get_node_from_name(edge.parent)
+            child_node: RobotGraph.Node = self.get_node_from_name(edge.child)
+
+            # Get their types and indices
+            parent_type = parent_node.get_node_type()
+            child_type = child_node.get_node_type()
+            p_index = node_dict[edge.parent]
+            c_index = node_dict[edge.child]
+
+            # Add their info to the corresponding matrix
+            if parent_type == child_type and parent_type == 'joint':
+                for j in range(0, len(jj[0])-1):
+
+                    # Find the index in the edge index matrix that matches this edge
+                    if jj[0][j] == p_index and jj[1][j] == c_index and \
+                       jj[0][j+1] == c_index and jj[1][j+1] == p_index:
+                        
+                        # Add the edge attributes
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j)
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j+1)
+
+            elif parent_type == 'base' and child_type == 'joint':
+                 for j in range(0, len(bj[0])):
+                     if bj[0][j] == p_index and bj[1][j] == c_index:
+                        base_to_joint_matrix = add_edge_attributes(edge, base_to_joint_matrix, j)
+
+            elif parent_type == 'joint' and child_type == 'foot':
+                for j in range(0, len(jf[0])):
+                     if jf[0][j] == p_index and jf[1][j] == c_index:
+                        joint_to_foot_matrix = add_edge_attributes(edge, joint_to_foot_matrix, j)
+            else:
+                raise Exception("Not possible")
+            
+        # Create the last two matrices
+        joint_to_base_matrix = base_to_joint_matrix
+        foot_to_joint_matrix = joint_to_foot_matrix
 
         return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
                foot_to_joint_matrix, joint_to_foot_matrix
