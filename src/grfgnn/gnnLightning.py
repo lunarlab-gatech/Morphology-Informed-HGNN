@@ -4,7 +4,8 @@ import lightning as L
 from torch_geometric.nn.models import GCN, GraphSAGE
 from torch_geometric.nn import to_hetero
 from lightning.pytorch.loggers import WandbLogger
-from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset, Go1SimulatedDataset
+from .datasets_deprecated import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset, Go1SimulatedDataset
+from .datasets import QuadSDKDataset
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
@@ -351,7 +352,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
     # Create Logger
     run_name = model_type + "-" + names.get_first_name(
     ) + "-" + names.get_last_name()
-    wandb_logger = WandbLogger(project="grfgnn-Version2", name=run_name)
+    wandb_logger = WandbLogger(project="grfgnn-QuadSDK", name=run_name)
     wandb_logger.watch(lightning_model, log="all")
 
     # Set model parameters

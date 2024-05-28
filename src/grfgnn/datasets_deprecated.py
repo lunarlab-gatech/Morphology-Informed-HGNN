@@ -203,6 +203,9 @@ class Go1SimulatedDataset(FlexibleDataset):
             x[node_index, 2] = torques[msg_ind]
 
         # Create the graph
+        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
         graph = Data(x=x,
                      edge_index=self.edge_matrix_tensor,
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),
@@ -342,11 +345,6 @@ class CerberusDataset(FlexibleDataset):
             'RL_foot_fixed': 'RL_foot',
             'RR_foot_fixed': 'RR_foot'
         }
-
-        # Open up the urdf file and get the edge matrix
-        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
 
         # Define the names and indicies that contain ground truth labels
         self.foot_urdf_names = [
@@ -488,6 +486,9 @@ class CerberusDataset(FlexibleDataset):
             x[node_index, 1] = velocities[msg_ind]
 
         # Create the graph
+        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
         graph = Data(x=x,
                      edge_index=self.edge_matrix_tensor,
                      y=torch.tensor(ground_truth_labels, dtype=torch.float),

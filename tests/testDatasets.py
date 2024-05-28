@@ -345,7 +345,7 @@ class TestQuadSDKDataset(unittest.TestCase):
 
         # Set up the Go1 Simulated dataset
         model_type = 'heterogeneous_gnn'
-        self.go1_sim_dataset = QuadSDKDataset(path_to_normal_sequence,
+        self.quad_sdk_dataset = QuadSDKDataset(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', model_type)
 
@@ -355,23 +355,25 @@ class TestQuadSDKDataset(unittest.TestCase):
         numbers for the Go1 Simulated dataset.
         """
 
+        # TODO: Verify that the dataset enteries inside the dataset have the proper
+        # most recent ROS messages
+
         # Make sure data is loaded properly
-        p, v, t, gt = self.go1_sim_dataset.load_data_at_ros_seq(181916)
+        la, av, p, v, t, gt = self.quad_sdk_dataset.load_data_at_dataset_seq(14973)
+        des_la = [0.051917279436213506, -0.3388206025562939, 10.431142687408848]
+        des_av = [0.042171715199002736, 0.08603726244389077, -0.0004939939681741953]
         des_p = [
-            0.09840758, 1.2600079, -2.0489328, -0.10457229, 0.7454401,
-            -1.8136898, 0.04816602, 0.91943306, -1.9169945, -0.0340704,
-            1.2415031, -2.0689785
+            0.012585129280024532,0.7506705348026959,1.312375393869778,-0.15342791403898026,0.3725592052364286,1.2010136473202389,0.10648644037804633,0.41771433153947246,1.2560539486951967,0.0460617990056047,0.7198842185898737,1.2232693367462089
         ]
         des_v = [
-            0.6230268, -5.9481835, -5.3682613, -0.26720884, 6.455389,
-            -1.3378538, -0.00086710247, 6.2338834, -0.5447279, 0.6295713,
-            -4.582517, -7.406303
+            -0.0630377445899227,0.29317922706218247,0.19101350083753876,-0.018676861120108783,0.47864302503484435,0.3749528264309599,-0.0727984794236061,0.2887144537724729,0.11197447543325509,-0.07395783624617305,0.4014568747126774,0.4080045806572458 
         ]
         des_t = [
-            -0.4899872, -3.0470033, 0.363765, 5.630082, 5.196147, 11.241279,
-            -1.8939179, 4.083751, 16.447073, -1.3105631, -0.7087057, 0.13933142
+            -3.2944837117798227,-1.2847036402444743,6.045042601855347,-2.040973443526994,1.3744733902657487,4.943340101162825,2.76236804388072,1.2100160823330153,4.563897880420952,3.283623688917122,-1.2645530511487044,6.027049747813169
         ]
-        des_gt = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        des_gt = [34.9074179562946, 35.680794532426155, 33.086351867541104, 33.245698338040306]
+        self.assertSequenceEqual(la, des_la)
+        self.assertSequenceEqual(av, des_av)
         self.assertSequenceEqual(p, des_p)
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(t, des_t)
@@ -379,10 +381,10 @@ class TestQuadSDKDataset(unittest.TestCase):
 
     def test_get_helper_heterogeneous_gnn(self):
         # Get the HeteroData graph
-        heteroData: HeteroData = self.go1_sim_dataset.get_helper_heterogeneous_gnn(
-            181916)
+        heteroData: HeteroData = self.quad_sdk_dataset.get_helper_heterogeneous_gnn(14973)
+
         # Get the desired edge matrices
-        bj, jb, jj, fj, jf = self.go1_sim_dataset.robotGraph.get_edge_index_matrices()
+        bj, jb, jj, fj, jf = self.quad_sdk_dataset.robotGraph.get_edge_index_matrices()
 
         # Make sure they match
         np.testing.assert_array_equal(
@@ -397,28 +399,32 @@ class TestQuadSDKDataset(unittest.TestCase):
             heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
 
         # Check the labels
-        labels_des = [-0.0063045006, 55.528183, 83.40855, -0.006935571]
+        labels_des = [33.086351867541104, 34.9074179562946, 33.245698338040306, 35.680794532426155]
         np.testing.assert_array_equal(heteroData.y.numpy(),
                                       np.array(labels_des, dtype=np.float32))
+    
+        # Check the foot node indices matching labels
+        np.testing.assert_array_equal([0, 1, 2, 3], self.quad_sdk_dataset.get_foot_node_indices_matching_labels())
 
         # Check the number of nodes
-        number_des = self.go1_sim_dataset.robotGraph.get_num_nodes()
+        number_des = self.quad_sdk_dataset.robotGraph.get_num_nodes()
         self.assertEqual(heteroData.num_nodes, number_des)
 
         # Check the node attributes
-        base_x = np.array([[1,1,1,1,1,1]], dtype=np.float32)
-        joint_x = np.array([[0.09840758, 0.6230268, -0.4899872],
-                            [1.2600079, -5.9481835, -3.0470033],
-                            [-2.0489328, -5.3682613, 0.363765],
-                            [-0.10457229, -0.26720884, 5.630082],
-                            [0.7454401, 6.455389, 5.196147],
-                            [-1.8136898, -1.3378538, 11.241279],
-                            [0.04816602, -0.00086710247, -1.8939179],
-                            [0.91943306, 6.2338834, 4.083751],
-                            [-1.9169945, -0.5447279, 16.447073],
-                            [-0.0340704, 0.6295713, -1.3105631],
-                            [1.2415031, -4.582517, -0.7087057],
-                            [-2.0689785, -7.406303, 0.13933142]],
+        base_x = np.array([[0.051917279436213506, -0.3388206025562939, 10.431142687408848,
+                            0.042171715199002736, 0.08603726244389077, -0.0004939939681741953]], dtype=np.float32)         
+        joint_x = np.array([[0.10648644037804633, -0.0727984794236061, 2.76236804388072],
+                            [0.41771433153947246, 0.2887144537724729, 1.2100160823330153],
+                            [1.2560539486951967, 0.11197447543325509, 4.563897880420952],
+                            [0.012585129280024532, -0.0630377445899227, -3.2944837117798227],
+                            [0.7506705348026959, 0.29317922706218247, -1.2847036402444743],
+                            [1.312375393869778, 0.19101350083753876, 6.045042601855347],
+                            [0.0460617990056047, -0.07395783624617305, 3.283623688917122],
+                            [0.7198842185898737, 0.4014568747126774, -1.2645530511487044],
+                            [1.2232693367462089, 0.4080045806572458, 6.027049747813169],
+                            [-0.15342791403898026, -0.018676861120108783, -2.040973443526994],
+                            [0.3725592052364286, 0.47864302503484435, 1.3744733902657487],
+                            [1.2010136473202389, 0.3749528264309599, 4.943340101162825]],
                            dtype=np.float32)
         foot_x = np.array([[1], [1], [1], [1]], dtype=np.float32)
         np.testing.assert_array_equal(heteroData['base'].x.numpy(), base_x)

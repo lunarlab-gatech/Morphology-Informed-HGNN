@@ -442,9 +442,10 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         return dict(all_lists)
 
-    def get_node_index_to_name_dict(self):
-        name_to_index = self.get_node_name_to_index_dict()
-        return dict((i, n) for n, i in name_to_index.items())
+    # TODO: Doesn't work currently
+    # def get_node_index_to_name_dict(self):
+    #     name_to_index = self.get_node_name_to_index_dict()
+    #     return dict((i, n) for n, i in name_to_index.items())
 
     def get_num_of_each_node_type(self):
         """

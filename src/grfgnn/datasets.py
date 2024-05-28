@@ -70,7 +70,7 @@ class FlexibleDataset(Dataset):
         else:
             self.robotGraph = NormalRobotGraph(urdf_path, ros_builtin_path,
                                                urdf_to_desc_path, True)
-
+            
         # Make sure the URDF file we were given properly matches
         # what we are expecting
         passed_urdf_name = self.robotGraph.robot_urdf.name
@@ -100,7 +100,7 @@ class FlexibleDataset(Dataset):
         processed_file_names.append("info.txt")
         return processed_file_names
 
-    def get_foot_node_indices(self):
+    def get_foot_node_indices_matching_labels(self):
         """
         This helper method returns the foot node indices that correspond 
         to the ground truth GRF labels contained in the "y" of each 
@@ -142,7 +142,7 @@ class FlexibleDataset(Dataset):
     def len(self):
         return self.length
 
-    def load_data_at_ros_seq(self, ros_seq: int):
+    def load_data_at_dataset_seq(self, ros_seq: int):
         """
         This helper function opens the file named "ros_seq"
         and loads the position, velocity, and effort information.
@@ -153,15 +153,15 @@ class FlexibleDataset(Dataset):
         """
         raise self.notImplementedError
 
-    def get_helper_gnn(self, idx):
-        """
-        Get a dataset entry if we are using a GNN model.
-        """
-        raise self.notImplementedError
-
     def get_helper_mlp(self, idx):
         """
         Gets a Dataset entry if we are using an MLP model.
+        """
+        raise self.notImplementedError
+        
+    def get_helper_gnn(self, idx):
+        """
+        Get a dataset entry if we are using a GNN model.
         """
         raise self.notImplementedError
 
@@ -206,22 +206,22 @@ class QuadSDKDataset(FlexibleDataset):
         # Map urdf names to array indexes
         # TODO: Double check this
         self.urdf_name_to_dataset_array_index = {
-            'FR_hip_joint': 0,
-            'FR_thigh_joint': 1,
-            'FR_calf_joint': 2,
-            'FL_hip_joint': 3,
-            'FL_thigh_joint': 4,
-            'FL_calf_joint': 5,
-            'RR_hip_joint': 6,
-            'RR_thigh_joint': 7,
-            'RR_calf_joint': 8,
-            'RL_hip_joint': 9,
-            'RL_thigh_joint': 10,
-            'RL_calf_joint': 11,
-            'FR_foot_fixed': 0,
-            'FL_foot_fixed': 1,
-            'RR_foot_fixed': 2,
-            'RL_foot_fixed': 3,
+            'FR_hip_joint': 6,
+            'FR_thigh_joint': 7,
+            'FR_calf_joint': 8,
+            'FL_hip_joint': 0,
+            'FL_thigh_joint': 1,
+            'FL_calf_joint': 2,
+            'RR_hip_joint': 9,
+            'RR_thigh_joint': 10,
+            'RR_calf_joint': 11,
+            'RL_hip_joint': 3,
+            'RL_thigh_joint': 4,
+            'RL_calf_joint': 5,
+            'FR_foot_fixed': 2,
+            'FL_foot_fixed': 0,
+            'RR_foot_fixed': 3,
+            'RL_foot_fixed': 1,
         }
 
         # Define the node names for the robot feet
@@ -238,11 +238,11 @@ class QuadSDKDataset(FlexibleDataset):
             self.foot_node_indices.append(
                 self.urdf_name_to_graph_index[urdf_name])
 
-        # Get the GT grf array indices that correspond to the feet nodes
+        # Get the GT grf array indices that correspond to the feet nodes order
         self.gt_grf_array_indices = []
         for urdf_name in self.foot_urdf_names:
             self.gt_grf_array_indices.append(
-                self.urdf_to_dataset_index[urdf_name])
+                self.urdf_name_to_dataset_array_index[urdf_name])
 
         # Define the nodes that should recieve features
         self.joint_nodes_for_attributes = [
@@ -253,104 +253,94 @@ class QuadSDKDataset(FlexibleDataset):
         ]
         self.base_nodes_for_attributes = ['floating_base']
 
-    @property
-    def processed_file_names(self):
-        return ["always_process.txt"]
-
-
     def process(self):
         # Set up a reader to read the rosbag
         path_to_bag = os.path.join(
             self.root, 'raw', 'data.bag')
         self.reader = AnyReader([Path(path_to_bag)])
         self.reader.open()
-        grf_gen = self.reader.messages(connections=[
-            x for x in self.reader.connections
-            if x.topic == "/robot_1/state/grfs"
-        ])
-        joint_gen = self.reader.messages(connections=[
-            x for x in self.reader.connections
-            if x.topic == "/robot_1/state/ground_truth"
-        ])
-        imu_gen = self.reader.messages(connections=[
-            x for x in self.reader.connections
-            if x.topic == "/robot_1/state/imu"
-        ])
-
-        # Get the number of messages in each generator.
-        # If they don't match, we have a problem
-        grf_num_msgs = len(list(grf_gen))
-        joint_num_msgs = len(list(joint_gen))
-        imu_num_msgs = len(list(imu_gen))
-        if grf_num_msgs != joint_num_msgs or joint_num_msgs != imu_num_msgs:
-            raise ValueError(
-                "Dataset has different amounts of data per message type.")
+        generator = self.reader.messages(connections=[])
 
         # Iterate through the generators and write important data
         # to a file
-        for i in range(grf_num_msgs):
-            grf_connection, _timestamp, grf_rawdata = next(
-                itertools.islice(grf_gen, i, None))
-            joint_connection, _timestamp, joint_rawdata = next(
-                itertools.islice(joint_gen, i, None))
-            imu_connection, _timestamp, imu_rawdata = next(
-                itertools.islice(imu_gen, i, None))
+        prev_imu_msg, prev_grf_msg = None, None
+        dataset_entries = 0
+        for connection, _timestamp, rawdata in generator:
+            # Save the most recent IMU and GRF ground truth data
+            if connection.topic == '/robot_1/state/imu':
+                prev_imu_msg = (rawdata, connection.msgtype)
+            elif connection.topic == '/robot_1/state/grfs':
+                prev_grf_msg = (rawdata, connection.msgtype)
 
-            grf_data = self.reader.deserialize(grf_rawdata,
-                                               grf_connection.msgtype)
-            joint_data = self.reader.deserialize(joint_rawdata,
-                                                 joint_connection.msgtype)
-            imu_data = self.reader.deserialize(imu_rawdata,
-                                               imu_connection.msgtype)
+            # Create a dataset entry, with the most recent joint
+            # info, and the most recent IMU and GRF Ground Truth
+            elif connection.topic == '/robot_1/state/ground_truth' \
+                and prev_imu_msg is not None \
+                and prev_grf_msg is not NotImplemented:
 
-            with open(str(Path(self.processed_dir,
-                               str(i) + ".txt")), "w") as f:
-                arrays = []
+                grf_data = self.reader.deserialize(prev_grf_msg[0],
+                                                   prev_grf_msg[1])
+                joint_data = self.reader.deserialize(rawdata,
+                                                     connection.msgtype)
+                imu_data = self.reader.deserialize(prev_imu_msg[0],
+                                                   prev_imu_msg[1])
+                
+                with open(str(Path(self.processed_dir,
+                                str(dataset_entries) + ".txt")), "w") as f:
+                    arrays = []
 
-                # Add on the GRF data
-                grf_vec = grf_data.vectors
-                arrays.append([grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
-                               grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
-                               grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
-                               grf_vec[3].x, grf_vec[3].y, grf_vec[3].z])
+                    # Add on the GRF data
+                    grf_vec = grf_data.vectors
+                    arrays.append([grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
+                                grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
+                                grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
+                                grf_vec[3].x, grf_vec[3].y, grf_vec[3].z])
 
-                # Add on the IMU data
-                arrays.append([
-                    imu_data.linear_acceleration.x,
-                    imu_data.linear_acceleration.y,
-                    imu_data.linear_acceleration.z
-                ])
-                arrays.append([
-                    imu_data.angular_velocity.x, 
-                    imu_data.angular_velocity.y,
-                    imu_data.angular_velocity.z
-                ])
+                    # Add on the IMU data
+                    arrays.append([
+                        imu_data.linear_acceleration.x,
+                        imu_data.linear_acceleration.y,
+                        imu_data.linear_acceleration.z
+                    ])
+                    arrays.append([
+                        imu_data.angular_velocity.x, 
+                        imu_data.angular_velocity.y,
+                        imu_data.angular_velocity.z
+                    ])
 
-                # Add on the joint data
-                arrays.append(joint_data.joints.position)
-                arrays.append(joint_data.joints.velocity)
-                arrays.append(joint_data.joints.effort)
+                    # Add on the joint data
+                    arrays.append(joint_data.joints.position)
+                    arrays.append(joint_data.joints.velocity)
+                    arrays.append(joint_data.joints.effort)
 
-                for array in arrays:
-                    for val in array:
-                        f.write(str(val) + " ")
-                    f.write('\n')
+                    for array in arrays:
+                        for val in array:
+                            f.write(str(val) + " ")
+                        f.write('\n')
+
+                # Track how many entries we have
+                dataset_entries += 1
+
+            else: # Ignore other messages in the rosbag
+                continue
 
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(grf_num_msgs) + " " + str(0))
+            f.write(str(dataset_entries) + " " + str(0))
 
     def get_expected_urdf_name(self):
         return "a1"
 
     def get_start_and_end_seq_ids(self):
-        return self.notImplementedError
+        return 0, 14973
 
-    def load_data_at_ros_seq(self, ros_seq: int):
-        # Open the file with the proper index
+    def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        Loads data from the dataset at the provided sequence number.
+        """
         grfs, lin_acc, ang_vel, positions, velocities, torques = [], [], [], [], [], []
         with open(os.path.join(self.processed_dir,
-                               str(ros_seq) + ".txt"), 'r') as f:
+                               str(seq_num) + ".txt"), 'r') as f:
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 grfs.append(float(line[i]))
@@ -371,45 +361,41 @@ class QuadSDKDataset(FlexibleDataset):
                 torques.append(float(line[i]))
 
         # Extract the ground truth Z GRF
-        ground_truth_Z_GRF_labels = []
-        for val in self.gt_grf_array_indices:
+        z_grfs = []
+        for val in range(0, 4):
             start_index = val * 3
-            ground_truth_Z_GRF_labels.append(grfs[start_index + 2])
+            z_grfs.append(grfs[start_index + 2])
 
-        return lin_acc, ang_vel, positions, velocities, torques, ground_truth_Z_GRF_labels
+        return lin_acc, ang_vel, positions, velocities, torques, z_grfs
+    
+    def load_data_sorted(self, seq_num: int):
+        """
+        Loads data from the dataset at the provided sequence number.
+        However, the positions, velocities, and torques are sorted so that
+        they match the order found in self.joint_nodes_for_attributes.
+        Additionally, the Z_GRF_labels are sorted so it matches the order
+        found in self.foot_urdf_names.
+        """
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_at_dataset_seq(seq_num)
 
-    def get_helper_gnn(self, idx):
-        # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
-            self.first_index + idx)
+        # Sort the joint information
+        positions_sorted, velocities_sorted, torques_sorted = [], [], []
+        for urdf_node_name in self.joint_nodes_for_attributes:
+            array_index = self.urdf_name_to_dataset_array_index[urdf_node_name]
+            positions_sorted.append(positions[array_index])
+            velocities_sorted.append(velocities[array_index])
+            torques_sorted.append(torques[array_index])
 
-        # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), 3), dtype=torch.float)
+        # Sort the Z_GRF_labels
+        z_grfs_sorted = []
+        for index in self.gt_grf_array_indices:
+            z_grfs_sorted.append(z_grfs[index])
 
-        # For each joint specified
-        for urdf_node_name in self.nodes_for_attributes:
-
-            # Find the index of this particular node
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
-            # Get the msg array index
-            msg_ind = self.urdf_to_dataset_index[urdf_node_name]
-
-            # Add the features to x matrix
-            x[node_index, 0] = positions[msg_ind]
-            x[node_index, 1] = velocities[msg_ind]
-            x[node_index, 2] = torques[msg_ind]
-
-        # Create the graph
-        graph = Data(x=x,
-                     edge_index=self.edge_matrix_tensor,
-                     y=torch.tensor(ground_truth_labels, dtype=torch.float),
-                     num_nodes=self.robotGraph.get_num_nodes())
-        return graph
+        return lin_acc, ang_vel, positions_sorted, velocities_sorted, torques_sorted, z_grfs_sorted
 
     def get_helper_mlp(self, idx):
         # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels = self.load_data_sorted(
             self.first_index + idx)
 
         # Make the network inputs
@@ -418,6 +404,35 @@ class QuadSDKDataset(FlexibleDataset):
         # Create the ground truth lables
         y = torch.tensor(ground_truth_labels, dtype=torch.float)
         return x, y
+    
+    def get_helper_gnn(self, idx):
+        # Load the rosbag information
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_sorted(
+            self.first_index + idx)
+
+        # Create a note feature matrix
+        x = torch.ones((self.robotGraph.get_num_nodes(), 3), dtype=torch.float)
+
+        # For each joint specified
+        for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
+
+            # Find the index of this particular node
+            node_index = self.urdf_name_to_graph_index[urdf_node_name]
+
+            # Add the features to x matrix
+            x[node_index, 0] = positions[i]
+            x[node_index, 1] = velocities[i]
+            x[node_index, 2] = torques[i]
+
+        # Create the graph
+        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+        graph = Data(x=x,
+                     edge_index=self.edge_matrix_tensor,
+                     y=torch.tensor(z_grfs, dtype=torch.float),
+                     num_nodes=self.robotGraph.get_num_nodes())
+        return graph
 
     def get_helper_heterogeneous_gnn(self, idx):
         # Create the Heterogeneous Data object
@@ -437,11 +452,11 @@ class QuadSDKDataset(FlexibleDataset):
              'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
 
         # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels = self.load_data_at_ros_seq(
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_sorted(
             self.first_index + idx)
 
         # Save the labels and number of nodes
-        data.y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        data.y = torch.tensor(z_grfs, dtype=torch.float)
         data.num_nodes = self.robotGraph.get_num_nodes()
 
         # Create the feature matrices
@@ -451,32 +466,29 @@ class QuadSDKDataset(FlexibleDataset):
         foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float)
 
         # For each joint specified
-        for urdf_node_name in self.joint_nodes_for_attributes:
+        for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
 
             # Find the index of this particular node
             node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
-            # Get the msg array index
-            msg_ind = self.urdf_name_to_dataset_array_index[urdf_node_name]
-
             # Add the features to x matrix
-            joint_x[node_index, 0] = positions[msg_ind]
-            joint_x[node_index, 1] = velocities[msg_ind]
-            joint_x[node_index, 2] = torques[msg_ind]
+            joint_x[node_index, 0] = positions[i]
+            joint_x[node_index, 1] = velocities[i]
+            joint_x[node_index, 2] = torques[i]
 
         # For each base specified (should be 1)
         for urdf_node_name in self.base_nodes_for_attributes:
 
-             # Find the index of this particular node
+            # Find the index of this particular node
             node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
             # Add the features to x matrix
             base_x[node_index, 0] = lin_acc[0]
             base_x[node_index, 1] = lin_acc[1]
             base_x[node_index, 2] = lin_acc[2]
-            base_x[node_index, 0] = ang_vel[0]
-            base_x[node_index, 1] = ang_vel[1]
-            base_x[node_index, 2] = ang_vel[2]
+            base_x[node_index, 3] = ang_vel[0]
+            base_x[node_index, 4] = ang_vel[1]
+            base_x[node_index, 5] = ang_vel[2]
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x 
