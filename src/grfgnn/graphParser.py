@@ -1,8 +1,8 @@
 from urchin import URDF
 import os
 import numpy as np
+import urchin
 from pathlib import Path
-
 
 class InvalidURDFException(Exception):
     pass
@@ -17,10 +17,11 @@ class RobotGraph():
         """
 
         def __init__(self, name: str, edge_parent: str,
-                     edge_children: list[str]):
+                     edge_children: list[str], joint: urchin.Joint):
             self.name: str = name
             self.edge_parent: str = edge_parent
             self.edge_children: list[str] = edge_children
+            self.joint = joint
 
         @staticmethod
         def get_list_of_node_types():
@@ -55,16 +56,16 @@ class RobotGraph():
         the names of both connections.
         """
 
-        def __init__(self, name: str, parent: str, child: str):
+        def __init__(self, name: str, parent: str, child: str, link: urchin.Link):
             self.name = name
             self.parent = parent
             self.child = child
+            self.link = link
 
     def __init__(self,
                  urdf_path: Path,
                  ros_builtin_path: str,
-                 urdf_to_desc_path: str,
-                 swap_nodes_and_edges=False):
+                 urdf_to_desc_path: str):
         """
         Constructor for RobotGraph class.
 
@@ -78,10 +79,6 @@ class RobotGraph():
             urdf_to_desc_path (str): The relative path from the urdf file to
                 the urdf description directory. This directory typically contains
                 folders like "meshes" and "urdf".
-            swap_nodes_and_edges (bool): If False, links in the urdf file will be represented
-                as nodes, and joints will be represented as edges. If True, links will
-                be represented as edges, and joints will be represented as nodes. This
-                will drop links that aren't connected to two joints. Default=False.
         """
 
         # Define paths
@@ -98,70 +95,57 @@ class RobotGraph():
         # Load the URDF with updated paths
         self.robot_urdf = URDF.load(self.new_urdf_path)
 
-        # Setup nodes and edges
-        if not swap_nodes_and_edges:
-            self.nodes = []
-            for link in self.robot_urdf.links:
-                edge_parent, edge_children = self.get_connections_to_link(link)
-                self.nodes.append(
-                    self.Node(name=link.name,
-                              edge_parent=edge_parent,
-                              edge_children=edge_children))
-            self.edges = []
-            for joint in self.robot_urdf.joints:
+        # Create edges from the links
+        self.edges = []
+        for link in self.robot_urdf.links:
+            edge_parent, edge_children = self.get_connections_to_link(link)
+
+            # If link doesn't have a parent and at least one child, drop it.
+            # We can't make an edge out of it.
+            if edge_parent is None and len(edge_children) == 0:
+                raise InvalidURDFException("Link connected to no joints.")
+            elif edge_parent is None or len(edge_children) == 0:
+                continue
+
+            # Create an edge from each link parent to each link child
+            new_edge = None
+            if (len(edge_children) == 1):
                 self.edges.append(
-                    self.Edge(name=joint.name,
-                              parent=joint.parent,
-                              child=joint.child))
-        else:
-            # Create edges from the links
-            self.edges = []
-            for link in self.robot_urdf.links:
-                edge_parent, edge_children = self.get_connections_to_link(link)
-
-                # If link doesn't have a parent and at least one child, drop it.
-                # We can't make an edge out of it.
-                if edge_parent is None and len(edge_children) == 0:
-                    raise InvalidURDFException("Link connected to no joints.")
-                elif edge_parent is None or len(edge_children) == 0:
-                    continue
-
-                # Create an edge from each link parent to each link child
-                new_edge = None
-                if (len(edge_children) == 1):
+                    self.Edge(name=link.name,
+                                parent=edge_parent,
+                                child=edge_children[0],
+                                link=link))
+            else:  # If there are multiple edges for this one link
+                # give them each a unique name.
+                for edge_child in edge_children:
                     self.edges.append(
-                        self.Edge(name=link.name,
-                                  parent=edge_parent,
-                                  child=edge_children[0]))
-                else:  # If there are multiple edges for this one link
-                    # give them each a unique name.
-                    for edge_child in edge_children:
-                        self.edges.append(
-                            self.Edge(name=link.name + "_to_" + edge_child,
-                                      parent=edge_parent,
-                                      child=edge_child))
+                        self.Edge(name=link.name + "_to_" + edge_child,
+                                    parent=edge_parent,
+                                    child=edge_child,
+                                    link=link))
 
-            # Create nodes from the Joints
-            self.nodes = []
-            for joint in self.robot_urdf.joints:
-                # Make sure the edge parent hasn't been pruned, and find
-                # the updated name
-                edge_parent = None
-                for edge in self.edges:
-                    if joint.parent in edge.name and joint.name == edge.child:
-                        edge_parent = edge.name
+        # Create nodes from the Joints
+        self.nodes = []
+        for joint in self.robot_urdf.joints:
+            # Make sure the edge parent hasn't been pruned, and find
+            # the updated name
+            edge_parent = None
+            for edge in self.edges:
+                if joint.parent in edge.name and joint.name == edge.child:
+                    edge_parent = edge.name
 
-                # Make sure the edge child hasn't been pruned, and find
-                # the updated name
-                edge_child = []
-                for edge in self.edges:
-                    if joint.child in edge.name and joint.name == edge.parent:
-                        edge_child.append(edge.name)
+            # Make sure the edge child hasn't been pruned, and find
+            # the updated name
+            edge_child = []
+            for edge in self.edges:
+                if joint.child in edge.name and joint.name == edge.parent:
+                    edge_child.append(edge.name)
 
-                new_node = self.Node(name=joint.name,
-                                     edge_parent=edge_parent,
-                                     edge_children=edge_child)
-                self.nodes.append(new_node)
+            new_node = self.Node(name=joint.name,
+                                    edge_parent=edge_parent,
+                                    edge_children=edge_child,
+                                    joint=joint)
+            self.nodes.append(new_node)
 
     def get_connections_to_link(self, link):
         """
