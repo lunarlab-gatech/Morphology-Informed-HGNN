@@ -82,6 +82,12 @@ class FlexibleDataset(Dataset):
         # Save the URDF info
         self.URDF = robotURDF
 
+        # Open up the urdf file and get the edge matrix
+        self.edge_matrix = self.URDF.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+
+
         # Get node name to index mapping
         self.urdf_name_to_index = self.URDF.get_node_name_to_index_dict()
 
@@ -519,11 +525,6 @@ class CerberusDataset(FlexibleDataset):
             'RL_foot_fixed': 'RL_foot',
             'RR_foot_fixed': 'RR_foot'
         }
-
-        # Open up the urdf file and get the edge matrix
-        self.edge_matrix = self.URDF.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
 
         # Define the names and indicies that contain ground truth labels
         self.ground_truth_urdf_names = [

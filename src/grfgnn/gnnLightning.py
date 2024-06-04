@@ -199,10 +199,10 @@ class MLP_Lightning(Base_Lightning):
         modules = []
         if num_layers < 1:
             raise ValueError("num_layers must be 1 or greater")
-        elif num_layers is 1:
+        elif num_layers == 1:
             modules.append(nn.Linear(in_channels, 4))
             modules.append(nn.ReLU())
-        elif num_layers is 2:
+        elif num_layers == 2:
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(nn.ReLU())
             modules.append(nn.Linear(hidden_channels, 4))
@@ -237,8 +237,7 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.set_title(title)
 
 def evaluate_model_and_visualize(model_type: str, path_to_checkpoint: Path, 
-                            predict_dataset: CerberusDataset,
-                            subset_to_visualize: tuple[int], path_to_file: Path = None):
+                            predict_dataset, subset_to_visualize: tuple[int], path_to_file: Path = None):
 
     # Initialize the model
     model = None
@@ -313,7 +312,7 @@ def train_model_cerberus(path_to_urdf, path_to_cerberus_street,
 
 
 def train_model_go1_simulated(path_to_urdf, path_to_go1_simulated):
-    model_type = 'heterogeneous_gnn'
+    model_type = 'gnn'
 
     # Initalize the dataset
     go1_sim_dataset = Go1SimulatedDataset(
@@ -332,7 +331,7 @@ def train_model_go1_simulated(path_to_urdf, path_to_go1_simulated):
     # Train the model
     train_model(train_dataset, val_dataset, test_dataset, model_type,
                 go1_sim_dataset.get_ground_truth_label_indices(),
-                go1_sim_dataset.get_data_metadata())
+                None)
 
 
 def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
@@ -368,8 +367,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
     if model_type == 'gnn':
         lightning_model = GCN_Lightning(train_dataset[0].x.shape[1],
                                         hidden_channels, num_layers,
-                                        ground_truth_label_indices, False,
-                                        None, True)
+                                        ground_truth_label_indices)
     elif model_type == 'mlp':
         lightning_model = MLP_Lightning(24, hidden_channels, num_layers,
                                         batch_size)
@@ -392,7 +390,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
-                                          filename='{epoch}-{val_loss:.2f}',
+                                          filename='{epoch}-{val_MSE_loss:.2f}',
                                           save_top_k=5,
                                           monitor="val_MSE_loss")
 
@@ -408,7 +406,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
         devices='auto',
         accelerator="auto",
         max_epochs=100,
-        # limit_train_batches=100,
+        # limit_train_batches=10,
         # limit_val_batches=5,
         # limit_test_batches=5,
         check_val_every_n_epoch=1,
