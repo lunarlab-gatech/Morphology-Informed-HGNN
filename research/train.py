@@ -47,19 +47,19 @@ def train_model_quad_sdk(path_to_urdf, path_to_quad_sdk):
         a1_sim_dataset, [train_size, val_size, test_size], generator=rand_gen)
 
     # Train the model
-    if model_type == 'heterogeneous_gnn':
-        train_model(train_dataset, val_dataset, test_dataset, model_type,
-                    a1_sim_dataset.get_foot_node_indices_matching_labels(),
-                    a1_sim_dataset.get_data_metadata())
-    elif model_type == 'mlp':
-        train_model(train_dataset, val_dataset, test_dataset, model_type,
-                    a1_sim_dataset.get_ground_truth_label_indices(),
-                    None)
+    # if model_type == 'heterogeneous_gnn':
+    #     train_model(train_dataset, val_dataset, test_dataset, model_type,
+    #                 a1_sim_dataset.get_foot_node_indices_matching_labels(),
+    #                 a1_sim_dataset.get_data_metadata())
+    # elif model_type == 'mlp':
+    #     train_model(train_dataset, val_dataset, test_dataset, model_type,
+    #                 a1_sim_dataset.get_ground_truth_label_indices(),
+    #                 None)
 
 def main():
         path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
         path_to_quad_sdk = Path(
-                Path('.').parent, 'datasets', 'QuadSDK-NormalSequence').absolute()
+                Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
         train_model_quad_sdk(path_to_urdf, path_to_quad_sdk)
 
 if __name__ == '__main__':

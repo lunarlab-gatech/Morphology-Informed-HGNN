@@ -36,11 +36,14 @@ class FlexibleDataset(Dataset):
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
+                 history_length: int = 1,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
         """
         Parameters:
+                history_length (int): The length of the history of inputs to use
+                    for our graph entries.
                 data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
                     Determines how the get() method returns data.
         """
@@ -259,35 +262,43 @@ class QuadSDKDataset(FlexibleDataset):
             self.root, 'raw', 'data.bag')
         self.reader = AnyReader([Path(path_to_bag)])
         self.reader.open()
-        generator = self.reader.messages(connections=[])
+        connections = [x for x in self.reader.connections if x.topic == '/quadruped_dataset_entries']
 
         # Iterate through the generators and write important data
         # to a file
-        prev_imu_msg, prev_grf_msg = None, None
+        prev_grf_time, prev_joint_time, prev_imu_time = 0, 0, 0
         dataset_entries = 0
-        for connection, _timestamp, rawdata in generator:
-            # Save the most recent IMU and GRF ground truth data
-            if connection.topic == '/robot_1/state/imu':
-                prev_imu_msg = (rawdata, connection.msgtype)
-            elif connection.topic == '/robot_1/state/grfs':
-                prev_grf_msg = (rawdata, connection.msgtype)
-
-            # Create a dataset entry, with the most recent joint
-            # info, and the most recent IMU and GRF Ground Truth
-            elif connection.topic == '/robot_1/state/ground_truth' \
-                and prev_imu_msg is not None \
-                and prev_grf_msg is not NotImplemented:
-
-                grf_data = self.reader.deserialize(prev_grf_msg[0],
-                                                   prev_grf_msg[1])
-                joint_data = self.reader.deserialize(rawdata,
-                                                     connection.msgtype)
-                imu_data = self.reader.deserialize(prev_imu_msg[0],
-                                                   prev_imu_msg[1])
+        for connection, _timestamp, rawdata in self.reader.messages(connections=connections):
                 
+                data = self.reader.deserialize(rawdata, connection.msgtype)
+                grf_data = data.grfs
+                joint_data = data.joints
+                imu_data = data.imu
+
+                # Ensure that the messages are in time order
+                # If they are, then we won't throw an error, so we can
+                # guarantee then are in order if it works
+
+                # We do assume that if two messages have the same exact timestamp, the one
+                # that came after is after time-wise
+                grf_time = grf_data.header.stamp.sec + (grf_data.header.stamp.nanosec / 1e9)
+                joint_time = joint_data.header.stamp.sec + (joint_data.header.stamp.nanosec / 1e9)
+                imu_time = imu_data.header.stamp.sec + (imu_data.header.stamp.nanosec / 1e9)
+
+                if prev_grf_time > grf_time or prev_joint_time > joint_time or prev_imu_time > imu_time:
+                    raise ValueError("Rosbag entries aren't in timestamp order.")
+
+                prev_grf_time = grf_time
+                prev_joint_time = joint_time
+                prev_imu_time = imu_time
+                
+                # Save the important data
                 with open(str(Path(self.processed_dir,
                                 str(dataset_entries) + ".txt")), "w") as f:
                     arrays = []
+
+                    # Add on the timestamp info
+                    arrays.append([grf_time, joint_time, imu_time])
 
                     # Add on the GRF data
                     grf_vec = grf_data.vectors
@@ -321,12 +332,58 @@ class QuadSDKDataset(FlexibleDataset):
                 # Track how many entries we have
                 dataset_entries += 1
 
-            else: # Ignore other messages in the rosbag
-                continue
+        # Calculate accelerations using discrete methods
+        av_2back, av_1back, av_curr = None, None, None
+        jv_2back, jv_1back, jv_curr = None, None, None
+        ts_2back, ts_1back, ts_curr = None, None, None
+        for i in range(0, dataset_entries):
+            with open(str(Path(self.processed_dir, str(i) + ".txt")), "r") as f:
+                # Get the angular velocity, joint velocities, and timestamp info
+                timestamp_info = f.readline().split(" ")[:-1]
+                ts_curr = float(timestamp_info[2])
+
+                line = f.readline()
+                line = f.readline()
+                av_curr = f.readline().split(" ")[:-1]
+
+                line = f.readline()
+                jv_curr = f.readline().split(" ")[:-1]
+
+                # Calculate the angular acceleration and
+                # joint accelerations (if possible) through 
+                # centered finite differences
+                if i >= 2:
+                    two_delta_ts = ts_curr - ts_2back
+                    aa = []
+                    ja = []
+                    for j in range(0, len(av_curr)):
+                        aa.append((float(av_curr[j]) - float(av_2back[j])) / two_delta_ts)
+                    for j in range(0, len(jv_curr)):
+                        ja.append((float(jv_curr[j]) - float(jv_2back[j])) / two_delta_ts)
+
+
+                    with open(str(Path(self.processed_dir, str(i-1) + ".txt")), "a") as prev_f:
+                        for val in aa:
+                            prev_f.write(str(val) + " ")
+                        prev_f.write('\n')
+                        for val in ja:
+                            prev_f.write(str(val) + " ")
+
+                # Shift all of the measurements by 1
+                av_2back = av_1back
+                av_1back = av_curr
+                av_curr = None
+                jv_2back = jv_1back
+                jv_1back = jv_curr
+                jv_curr = None
+                ts_2back = ts_1back
+                ts_1back = ts_curr
+                ts_curr = None
 
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(dataset_entries) + " " + str(0))
+            # First and last don't have accelerations, so ignore them
+            f.write(str(dataset_entries - 2) + " " + str(1))
 
     def get_expected_urdf_name(self):
         return "a1"
@@ -338,9 +395,14 @@ class QuadSDKDataset(FlexibleDataset):
         """
         Loads data from the dataset at the provided sequence number.
         """
-        grfs, lin_acc, ang_vel, positions, velocities, torques = [], [], [], [], [], []
+        grfs, lin_acc, ang_vel, positions, velocities, torques, ang_acc, joint_accelerations = [], [], [], [], [], [], [], []
         with open(os.path.join(self.processed_dir,
                                str(seq_num) + ".txt"), 'r') as f:
+            
+            # Skip the timestamp info
+            line = f.readline().split(" ")[:-1]
+
+            # Start reading data
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 grfs.append(float(line[i]))
@@ -359,6 +421,12 @@ class QuadSDKDataset(FlexibleDataset):
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 torques.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                ang_acc.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                joint_accelerations.append(float(line[i]))
 
         # Extract the ground truth Z GRF
         z_grfs = []
@@ -366,7 +434,7 @@ class QuadSDKDataset(FlexibleDataset):
             start_index = val * 3
             z_grfs.append(grfs[start_index + 2])
 
-        return lin_acc, ang_vel, positions, velocities, torques, z_grfs
+        return lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_accelerations
     
     def load_data_sorted(self, seq_num: int):
         """
@@ -376,30 +444,31 @@ class QuadSDKDataset(FlexibleDataset):
         Additionally, the Z_GRF_labels are sorted so it matches the order
         found in self.foot_urdf_names.
         """
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
-        positions_sorted, velocities_sorted, torques_sorted = [], [], []
+        positions_sorted, velocities_sorted, torques_sorted, joint_acc_sorted  = [], [], [], []
         for urdf_node_name in self.joint_nodes_for_attributes:
             array_index = self.urdf_name_to_dataset_array_index[urdf_node_name]
             positions_sorted.append(positions[array_index])
             velocities_sorted.append(velocities[array_index])
             torques_sorted.append(torques[array_index])
+            joint_acc_sorted.append(joint_acc[array_index])
 
         # Sort the Z_GRF_labels
         z_grfs_sorted = []
         for index in self.gt_grf_array_indices:
             z_grfs_sorted.append(z_grfs[index])
 
-        return lin_acc, ang_vel, positions_sorted, velocities_sorted, torques_sorted, z_grfs_sorted
+        return lin_acc, ang_vel, positions_sorted, velocities_sorted, torques_sorted, z_grfs_sorted, ang_acc, joint_acc_sorted
 
     def get_helper_mlp(self, idx):
         # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels = self.load_data_sorted(
+        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(
             self.first_index + idx)
 
         # Make the network inputs
-        x = torch.tensor((lin_acc + ang_vel + positions + velocities + torques), dtype=torch.float)
+        x = torch.tensor((lin_acc + ang_vel + positions + velocities + torques + ang_acc + joint_acc), dtype=torch.float)
 
         # Create the ground truth lables
         y = torch.tensor(ground_truth_labels, dtype=torch.float)
@@ -407,11 +476,11 @@ class QuadSDKDataset(FlexibleDataset):
     
     def get_helper_gnn(self, idx):
         # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_sorted(
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
             self.first_index + idx)
 
         # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), 3), dtype=torch.float)
+        x = torch.ones((self.robotGraph.get_num_nodes(), 4), dtype=torch.float)
 
         # For each joint specified
         for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
@@ -422,7 +491,8 @@ class QuadSDKDataset(FlexibleDataset):
             # Add the features to x matrix
             x[node_index, 0] = positions[i]
             x[node_index, 1] = velocities[i]
-            x[node_index, 2] = torques[i]
+            x[node_index, 2] = joint_acc[i]
+            x[node_index, 3] = torques[i]
 
         # Create the graph
         self.edge_matrix = self.robotGraph.get_edge_index_matrix()
@@ -465,7 +535,7 @@ class QuadSDKDataset(FlexibleDataset):
              'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.long)
 
         # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs = self.load_data_sorted(
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
             self.first_index + idx)
 
         # Save the labels and number of nodes
@@ -474,8 +544,8 @@ class QuadSDKDataset(FlexibleDataset):
 
         # Create the feature matrices
         number_nodes = self.robotGraph.get_num_of_each_node_type()
-        base_x = torch.ones((number_nodes[0], 6), dtype=torch.float)
-        joint_x = torch.ones((number_nodes[1], 3), dtype=torch.float)
+        base_x = torch.ones((number_nodes[0], 9), dtype=torch.float)
+        joint_x = torch.ones((number_nodes[1], 4), dtype=torch.float)
         foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float)
 
         # For each joint specified
@@ -487,7 +557,8 @@ class QuadSDKDataset(FlexibleDataset):
             # Add the features to x matrix
             joint_x[node_index, 0] = positions[i]
             joint_x[node_index, 1] = velocities[i]
-            joint_x[node_index, 2] = torques[i]
+            joint_x[node_index, 2] = joint_acc[i]
+            joint_x[node_index, 3] = torques[i]
 
         # For each base specified (should be 1)
         for urdf_node_name in self.base_nodes_for_attributes:
@@ -502,6 +573,9 @@ class QuadSDKDataset(FlexibleDataset):
             base_x[node_index, 3] = ang_vel[0]
             base_x[node_index, 4] = ang_vel[1]
             base_x[node_index, 5] = ang_vel[2]
+            base_x[node_index, 6] = ang_acc[0]
+            base_x[node_index, 7] = ang_acc[1]
+            base_x[node_index, 8] = ang_acc[2]
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x 

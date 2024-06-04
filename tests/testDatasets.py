@@ -336,12 +336,12 @@ class TestQuadSDKDataset(unittest.TestCase):
         path_to_a1_urdf = Path(
             Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
         path_to_normal_sequence = Path(
-            Path('.').parent, 'datasets', 'QuadSDK-NormalSequence').absolute()
+            Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
         
         # Skip this test if the dataset isn't available
         # (Since we can't automatically download it from the Internet)
         if not path_to_normal_sequence.exists():
-            self.skipTest("QuadSDK-NormalSequence Dataset not available")
+            self.skipTest("QuadSDK-A1Speed1.0 Dataset not available")
 
         # Set up the Go1 Simulated dataset
         model_type = 'heterogeneous_gnn'
@@ -351,33 +351,42 @@ class TestQuadSDKDataset(unittest.TestCase):
 
     def test_load_data_at_ros_seq(self):
         """
-        Make sure the data from the 100 rosbags are correctly given sequence
-        numbers for the Go1 Simulated dataset.
+        Make sure the data is loaded properly from the file, and that
+        the angular acceleration and joint acceleration are calculated
+        correctly.
+
+        TODO: Verify that aa and ja aren't noisy.
         """
 
-        # TODO: Verify that the dataset enteries inside the dataset have the proper
-        # most recent ROS messages
-
         # Make sure data is loaded properly
-        la, av, p, v, t, gt = self.quad_sdk_dataset.load_data_at_dataset_seq(14973)
-        des_la = [0.051917279436213506, -0.3388206025562939, 10.431142687408848]
-        des_av = [0.042171715199002736, 0.08603726244389077, -0.0004939939681741953]
-        des_p = [
-            0.012585129280024532,0.7506705348026959,1.312375393869778,-0.15342791403898026,0.3725592052364286,1.2010136473202389,0.10648644037804633,0.41771433153947246,1.2560539486951967,0.0460617990056047,0.7198842185898737,1.2232693367462089
-        ]
-        des_v = [
-            -0.0630377445899227,0.29317922706218247,0.19101350083753876,-0.018676861120108783,0.47864302503484435,0.3749528264309599,-0.0727984794236061,0.2887144537724729,0.11197447543325509,-0.07395783624617305,0.4014568747126774,0.4080045806572458 
-        ]
-        des_t = [
-            -3.2944837117798227,-1.2847036402444743,6.045042601855347,-2.040973443526994,1.3744733902657487,4.943340101162825,2.76236804388072,1.2100160823330153,4.563897880420952,3.283623688917122,-1.2645530511487044,6.027049747813169
-        ]
-        des_gt = [34.9074179562946, 35.680794532426155, 33.086351867541104, 33.245698338040306]
+        la, av, p, v, t, gt, aa, ja = self.quad_sdk_dataset.load_data_at_dataset_seq(10000)
+        des_la = [-0.06452160178213015, -0.366493877667443, 9.715652148737323]
+        des_av = [-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]
+        des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, -0.1931352599922853,  
+                 0.4076711540455795,  0.9424138768126973,  0.11254642823264671, 0.5695073200020913, 
+                 0.9825683053175158, 0.22800622574234453, 0.4399285706508147, 1.1786520769378077]
+        des_v = [-1.015061543404335, 0.459564643757568, 0.15804277355899754, 1.9489188274516005,
+                  1.3299772937985548, 3.644698146547278, -1.2845189574751656, 2.2337115054710917,
+                  3.4964483387811476, 1.020374615076573, -0.34825271015763287, 0.3185087654826033]
+        des_t = [-3.658930090797254, -3.858403899440098, 12.475195605359755, 0.6111713969715354,
+                 -0.11888726638996594, -0.24871924601280232, -0.6701594400127251,-0.48841280756095506,
+                 -0.1350813273560049, 3.6351217639084576, 4.456326408036115, 7.829759255207876]
+        des_gt = [64.74924447333427, 0, 0, 64.98097097053076]
+        des_aa = [-4.5464778570261578, 0.3070732088085122, 2.46972771844984]
+        des_ja = [3.4197760000000077, -0.23180600000000107, -0.7501079999999993, 4.2857779999999845,
+                  17.511218000000017, 6.572418000000013, 12.040650000000008, -6.890848000000016,
+                  11.833873999999955, 6.934245999999988, 2.426315999999995, 2.532692000000003]
         self.assertSequenceEqual(la, des_la)
         self.assertSequenceEqual(av, des_av)
         self.assertSequenceEqual(p, des_p)
         self.assertSequenceEqual(v, des_v)
         self.assertSequenceEqual(t, des_t)
         self.assertSequenceEqual(gt, des_gt)
+        np.testing.assert_array_almost_equal(aa, des_aa, 12)
+        np.testing.assert_array_almost_equal(ja, des_ja, 6)
+
+    def test_load_data_sorted(self):
+
 
     def test_get_helper_heterogeneous_gnn(self):
         # Get the HeteroData graph
@@ -397,6 +406,9 @@ class TestQuadSDKDataset(unittest.TestCase):
             heteroData['foot', 'connect', 'joint'].edge_index.numpy(), fj)
         np.testing.assert_array_equal(
             heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
+        
+        # Check the edge ATTRIBUTES
+        self.assertTrue(False) # TODO: Write these tests
 
         # Check the labels
         labels_des = [33.086351867541104, 34.9074179562946, 33.245698338040306, 35.680794532426155]
