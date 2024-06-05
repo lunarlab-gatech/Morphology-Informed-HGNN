@@ -229,6 +229,18 @@ class RobotGraph():
         """
 
         raise NotImplementedError
+    
+    def get_node_index_to_name_dict(self):
+        """
+        Return a dictionary that maps the node index to its
+        name.
+
+        Returns:
+            (dict[int, str]): A dictionary that maps node index
+                to name.
+        """
+
+        raise NotImplementedError
 
     def get_num_nodes(self):
         """
@@ -392,7 +404,7 @@ class HeterogeneousRobotGraph(RobotGraph):
     Heterogeneous graph, where the nodes are different types.
     """
 
-    def _get_nodes_organized_by_type(self):
+    def _get_nodes_organized_by_type(self) -> list[list[RobotGraph.Node]]:
         """
         Organizes each node into a type with nodes of its same
         type.
@@ -408,7 +420,7 @@ class HeterogeneousRobotGraph(RobotGraph):
             nodes_of_type = []
             for node in self.nodes:
                 if node.get_node_type() == type:
-                    nodes_of_type.append(node.name)
+                    nodes_of_type.append(node)
             nodes.append(nodes_of_type)
         return nodes
 
@@ -421,15 +433,21 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         all_lists = []
         for nodes_of_type in self._get_nodes_organized_by_type():
+            nodes_names_of_type = [x.name for x in nodes_of_type]
             all_lists = all_lists + list(
-                zip(nodes_of_type, range(len(nodes_of_type))))
+                zip(nodes_names_of_type, range(len(nodes_names_of_type))))
 
         return dict(all_lists)
 
-    # TODO: Doesn't work currently
-    # def get_node_index_to_name_dict(self):
-    #     name_to_index = self.get_node_name_to_index_dict()
-    #     return dict((i, n) for n, i in name_to_index.items())
+    def get_node_index_to_name_dict(self, joint_type):
+        """
+        Must specify the joint type to use, as nodes across different
+        types can share indexes.
+        """
+        for nodes_of_type in self._get_nodes_organized_by_type():
+            if nodes_of_type[0].get_node_type() == joint_type:
+                nodes_names_of_type = [x.name for x in nodes_of_type]
+                return dict(zip(range(len(nodes_names_of_type)), nodes_names_of_type))
 
     def get_num_of_each_node_type(self):
         """

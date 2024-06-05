@@ -312,6 +312,44 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
         }
         self.assertDictEqual(dict_actual, dict_desired)
 
+    def test_get_node_index_to_name_dict(self):
+        """
+        Test that the dictionary properly tracks indexes to node
+        names for the given type.
+        """
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('base')
+        dict_desired = {
+            0: 'floating_base' 
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('foot')
+        dict_desired = {
+            0: 'FR_foot_fixed',
+            1: 'FL_foot_fixed',
+            2: 'RR_foot_fixed',
+            3: 'RL_foot_fixed'
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('joint')
+        dict_desired = {
+            0: 'FR_hip_joint',
+            1: 'FR_thigh_joint',
+            2: 'FR_calf_joint',
+            3: 'FL_hip_joint',
+            4: 'FL_thigh_joint',
+            5: 'FL_calf_joint',
+            6: 'RR_hip_joint',
+            7: 'RR_thigh_joint',
+            8: 'RR_calf_joint',
+            9: 'RL_hip_joint',
+            10: 'RL_thigh_joint',
+            11: 'RL_calf_joint'
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
     def test_get_num_of_each_node_type(self):
         """
         Test that we can properly count the number of each 
@@ -332,8 +370,7 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
         bj_des = np.array([[0, 0, 0, 0], [0, 3, 6, 9]])
         jb_des = np.array([[0, 3, 6, 9], [0, 0, 0, 0]])
         jj_des = np.array([[0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 10, 10, 11],
-                           [1, 0, 2, 1, 4, 3, 5, 4, 7, 6, 8, 7, 10, 9, 11,
-                            10]])
+                           [1, 0, 2, 1, 4, 3, 5, 4, 7, 6, 8, 7, 10, 9, 11, 10]])
         fj_des = np.array([[0, 1, 2, 3], [2, 5, 8, 11]])
         jf_des = np.array([[2, 5, 8, 11], [0, 1, 2, 3]])
         numpy.testing.assert_array_equal(bj, bj_des)

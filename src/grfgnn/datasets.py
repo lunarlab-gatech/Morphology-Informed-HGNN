@@ -1,20 +1,9 @@
 import torch
-import torch_geometric
 from torch_geometric.data import Data, Dataset, HeteroData
-from .graphParser import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
-import networkx
-import numpy as np
-import matplotlib.pyplot as plt
+from .graphParser import NormalRobotGraph, HeterogeneousRobotGraph
 from rosbags.highlevel import AnyReader
 from pathlib import Path
-from itertools import islice
 import os
-from torchvision.datasets.utils import download_file_from_google_drive
-from rosbags.rosbag2 import Writer
-from rosbags.typesys import Stores, get_typestore, get_types_from_msg
-from rosbags.interfaces import ConnectionExtRosbag2
-from typing import cast
-import itertools
 
 
 class FlexibleDataset(Dataset):
@@ -249,10 +238,10 @@ class QuadSDKDataset(FlexibleDataset):
 
         # Define the nodes that should recieve features
         self.joint_nodes_for_attributes = [
-            'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint', 'FR_hip_joint',
-            'FR_thigh_joint', 'FR_calf_joint', 'RL_hip_joint',
-            'RL_thigh_joint', 'RL_calf_joint', 'RR_hip_joint',
-            'RR_thigh_joint', 'RR_calf_joint'
+            'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint', 
+            'FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint', 
+            'RL_hip_joint', 'RL_thigh_joint', 'RL_calf_joint', 
+            'RR_hip_joint', 'RR_thigh_joint', 'RR_calf_joint'
         ]
         self.base_nodes_for_attributes = ['floating_base']
 
@@ -286,6 +275,9 @@ class QuadSDKDataset(FlexibleDataset):
                 imu_time = imu_data.header.stamp.sec + (imu_data.header.stamp.nanosec / 1e9)
 
                 if prev_grf_time > grf_time or prev_joint_time > joint_time or prev_imu_time > imu_time:
+                    print(grf_time)
+                    print(joint_time)
+                    print(imu_time)
                     raise ValueError("Rosbag entries aren't in timestamp order.")
 
                 prev_grf_time = grf_time
@@ -439,8 +431,8 @@ class QuadSDKDataset(FlexibleDataset):
     def load_data_sorted(self, seq_num: int):
         """
         Loads data from the dataset at the provided sequence number.
-        However, the positions, velocities, and torques are sorted so that
-        they match the order found in self.joint_nodes_for_attributes.
+        However, the positions, velocities, joint acceleratinos, and torques 
+        are sorted so that they match the order found in self.joint_nodes_for_attributes.
         Additionally, the Z_GRF_labels are sorted so it matches the order
         found in self.foot_urdf_names.
         """
@@ -524,29 +516,29 @@ class QuadSDKDataset(FlexibleDataset):
         # Set the edge attributes
         bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
         data['base', 'connect',
-               'joint'].edge_attr = torch.tensor(bj_attr, dtype=torch.long)
+               'joint'].edge_attr = torch.tensor(bj_attr, dtype=torch.float64)
         data['joint', 'connect',
-             'base'].edge_attr = torch.tensor(jb_attr, dtype=torch.long)
+             'base'].edge_attr = torch.tensor(jb_attr, dtype=torch.float64)
         data['joint', 'connect',
-             'joint'].edge_attr = torch.tensor(jj_attr, dtype=torch.long)
+             'joint'].edge_attr = torch.tensor(jj_attr, dtype=torch.float64)
         data['foot', 'connect',
-             'joint'].edge_attr = torch.tensor(fj_attr, dtype=torch.long)
+             'joint'].edge_attr = torch.tensor(fj_attr, dtype=torch.float64)
         data['joint', 'connect',
-             'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.long)
+             'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
 
         # Load the rosbag information
         lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
             self.first_index + idx)
 
         # Save the labels and number of nodes
-        data.y = torch.tensor(z_grfs, dtype=torch.float)
+        data.y = torch.tensor(z_grfs, dtype=torch.float64)
         data.num_nodes = self.robotGraph.get_num_nodes()
 
         # Create the feature matrices
         number_nodes = self.robotGraph.get_num_of_each_node_type()
-        base_x = torch.ones((number_nodes[0], 9), dtype=torch.float)
-        joint_x = torch.ones((number_nodes[1], 4), dtype=torch.float)
-        foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float)
+        base_x = torch.ones((number_nodes[0], 9), dtype=torch.float64)
+        joint_x = torch.ones((number_nodes[1], 4), dtype=torch.float64)
+        foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float64)
 
         # For each joint specified
         for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
@@ -599,45 +591,3 @@ class QuadSDKDataset(FlexibleDataset):
                       ('foot', 'connect', 'joint'),
                       ('joint', 'connect', 'foot')]
         return (node_types, edge_types)
-
-
-def visualize_graph(pytorch_graph: Data,
-                    robot_graph: NormalRobotGraph,
-                    fig_save_path: Path = None,
-                    draw_edges: bool = False):
-    """
-    This helper method visualizes a Data graph object
-    using networkx.
-    """
-
-    # Write the features onto the names
-    node_labels = robot_graph.get_node_index_to_name_dict()
-    for i in range(0, len(pytorch_graph.x)):
-        label = node_labels[i]
-        label += ": " + str(pytorch_graph.x[i].numpy())
-        node_labels[i] = label
-
-    # Convert to networkx graph
-    nx_graph = torch_geometric.utils.to_networkx(pytorch_graph,
-                                                 to_undirected=True)
-
-    # Draw the graph
-    spring_layout = networkx.spring_layout(nx_graph)
-    networkx.draw(nx_graph, pos=spring_layout)
-    networkx.draw_networkx_labels(nx_graph,
-                                  pos=spring_layout,
-                                  labels=node_labels,
-                                  verticalalignment='top',
-                                  font_size=8)
-    if draw_edges:
-        networkx.draw_networkx_edge_labels(
-            nx_graph,
-            pos=spring_layout,
-            edge_labels=robot_graph.get_edge_connections_to_name_dict(),
-            rotate=False,
-            font_size=7)
-
-    # Save the figure if requested
-    if fig_save_path is not None:
-        plt.savefig(fig_save_path)
-    plt.show()
