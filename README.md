@@ -14,6 +14,13 @@ Then, install the library with the following command:
 pip install .
 ```
 
+## URDF Download
+The necessary URDF files are part of git submodules in this repository, so run the following commands to download them:
+```
+git submodule init
+git submodule update
+```
+
 ## Dataset Installation
 Next, install Dr. Xiong's Quadruped dataset by going to the following link (https://gtvault-my.sharepoint.com/:u:/g/personal/lgan31_gatech_edu/Ee5lmlVVQTZCreMujfQOTFABPJn6RyjK8UDABFXPL86UcA?e=tBGhhO), unzipping the folder, and then placing all of the bag
 files within the following folder:
