@@ -51,7 +51,13 @@ class FlexibleDataset(Dataset):
         info_path = Path(root, 'processed', 'info.txt')
         with open(info_path, 'r') as f:
             data = f.readline().split(" ")
-            self.length = int(data[0])
+
+            # The longer the history, technically the lower number of total dataset entries
+            # we can use, and thus a lower dataset length.
+            self.history_length = history_length
+            self.length = int(data[0]) - (self.history_length - 1)
+            if self.length <= 0:
+                raise ValueError("Dataset has too few entries for the provided 'history_length'.")
             self.first_index = int(data[1])
 
         # Parse the robot graph from the URDF file
@@ -189,14 +195,14 @@ class QuadSDKDataset(FlexibleDataset):
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
+                 history_length: int = 1,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
         super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
-                         data_format, transform, pre_transform, pre_filter)
+                         data_format, history_length, transform, pre_transform, pre_filter)
 
         # Map urdf names to array indexes
-        # TODO: Double check this
         self.urdf_name_to_dataset_array_index = {
             'FR_hip_joint': 6,
             'FR_thigh_joint': 7,
@@ -275,9 +281,6 @@ class QuadSDKDataset(FlexibleDataset):
                 imu_time = imu_data.header.stamp.sec + (imu_data.header.stamp.nanosec / 1e9)
 
                 if prev_grf_time > grf_time or prev_joint_time > joint_time or prev_imu_time > imu_time:
-                    print(grf_time)
-                    print(joint_time)
-                    print(imu_time)
                     raise ValueError("Rosbag entries aren't in timestamp order.")
 
                 prev_grf_time = grf_time
@@ -381,7 +384,7 @@ class QuadSDKDataset(FlexibleDataset):
         return "a1"
 
     def get_start_and_end_seq_ids(self):
-        return 0, 14973
+        return 0, 17530
 
     def load_data_at_dataset_seq(self, seq_num: int):
         """
@@ -455,45 +458,59 @@ class QuadSDKDataset(FlexibleDataset):
         return lin_acc, ang_vel, positions_sorted, velocities_sorted, torques_sorted, z_grfs_sorted, ang_acc, joint_acc_sorted
 
     def get_helper_mlp(self, idx):
-        # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(
-            self.first_index + idx)
-
         # Make the network inputs
-        x = torch.tensor((lin_acc + ang_vel + positions + velocities + torques + ang_acc + joint_acc), dtype=torch.float)
+        x = None
+
+        # Load the rosbag information
+        for i in range(0, self.history_length):
+            lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + i)
+            tensor = torch.tensor((lin_acc + ang_vel + ang_acc + positions + velocities + joint_acc + torques), dtype=torch.float64).unsqueeze(0)
+            if x is None:
+                x = tensor
+            else:
+                x = torch.cat((x, tensor), 0)
+        if len(x.size()) > 1:
+            x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
 
         # Create the ground truth lables
-        y = torch.tensor(ground_truth_labels, dtype=torch.float)
+        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
+        y = torch.tensor(ground_truth_labels, dtype=torch.float64)
         return x, y
     
     def get_helper_gnn(self, idx):
-        # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
-            self.first_index + idx)
-
         # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), 4), dtype=torch.float)
+        x = torch.ones((self.robotGraph.get_num_nodes(), 4 * self.history_length), dtype=torch.float64)
 
-        # For each joint specified
-        for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
+        # For each dataset entry we include in the history
+        for j in range(0, self.history_length):
+            # Load the data for this entry
+            lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + j)
 
-            # Find the index of this particular node
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
+            # For each joint specified
+            for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
 
-            # Add the features to x matrix
-            x[node_index, 0] = positions[i]
-            x[node_index, 1] = velocities[i]
-            x[node_index, 2] = joint_acc[i]
-            x[node_index, 3] = torques[i]
+                # Find the index of this particular node
+                node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
-        # Create the graph
+                # Add the features to x matrix
+                x[node_index, 0*self.history_length+j] = positions[i]
+                x[node_index, 1*self.history_length+j] = velocities[i]
+                x[node_index, 2*self.history_length+j] = joint_acc[i]
+                x[node_index, 3*self.history_length+j] = torques[i]
+
+        # Create the edge matrix
         self.edge_matrix = self.robotGraph.get_edge_index_matrix()
         self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
                                                dtype=torch.long)
-        graph = Data(x=x,
-                     edge_index=self.edge_matrix_tensor,
-                     y=torch.tensor(z_grfs, dtype=torch.float),
-                     num_nodes=self.robotGraph.get_num_nodes())
+        
+        # Create the labels
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
+            self.first_index + idx + self.history_length - 1)
+        y = torch.tensor(z_grfs, dtype=torch.float64)
+
+        # Create the graph
+        graph = Data(x=x, edge_index=self.edge_matrix_tensor,
+                     y=y, num_nodes=self.robotGraph.get_num_nodes())
         return graph
 
     def get_helper_heterogeneous_gnn(self, idx):
@@ -526,48 +543,51 @@ class QuadSDKDataset(FlexibleDataset):
         data['joint', 'connect',
              'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
 
-        # Load the rosbag information
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
-            self.first_index + idx)
-
         # Save the labels and number of nodes
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
+            self.first_index + idx + self.history_length - 1)
         data.y = torch.tensor(z_grfs, dtype=torch.float64)
         data.num_nodes = self.robotGraph.get_num_nodes()
 
         # Create the feature matrices
         number_nodes = self.robotGraph.get_num_of_each_node_type()
-        base_x = torch.ones((number_nodes[0], 9), dtype=torch.float64)
-        joint_x = torch.ones((number_nodes[1], 4), dtype=torch.float64)
+        base_x = torch.ones((number_nodes[0], 9 * self.history_length), dtype=torch.float64)
+        joint_x = torch.ones((number_nodes[1], 4 * self.history_length), dtype=torch.float64)
         foot_x = torch.ones((number_nodes[2], 1), dtype=torch.float64)
 
-        # For each joint specified
-        for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
+        # For each dataset entry we include in the history
+        for j in range(0, self.history_length):
+            # Load the data for this entry
+            lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + j)
 
-            # Find the index of this particular node
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
+            # For each joint specified
+            for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
 
-            # Add the features to x matrix
-            joint_x[node_index, 0] = positions[i]
-            joint_x[node_index, 1] = velocities[i]
-            joint_x[node_index, 2] = joint_acc[i]
-            joint_x[node_index, 3] = torques[i]
+                # Find the index of this particular node
+                node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
-        # For each base specified (should be 1)
-        for urdf_node_name in self.base_nodes_for_attributes:
+                # Add the features to x matrix
+                joint_x[node_index, 0*self.history_length+j] = positions[i]
+                joint_x[node_index, 1*self.history_length+j] = velocities[i]
+                joint_x[node_index, 2*self.history_length+j] = joint_acc[i]
+                joint_x[node_index, 3*self.history_length+j] = torques[i]
 
-            # Find the index of this particular node
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
+            # For each base specified (should be 1)
+            for urdf_node_name in self.base_nodes_for_attributes:
 
-            # Add the features to x matrix
-            base_x[node_index, 0] = lin_acc[0]
-            base_x[node_index, 1] = lin_acc[1]
-            base_x[node_index, 2] = lin_acc[2]
-            base_x[node_index, 3] = ang_vel[0]
-            base_x[node_index, 4] = ang_vel[1]
-            base_x[node_index, 5] = ang_vel[2]
-            base_x[node_index, 6] = ang_acc[0]
-            base_x[node_index, 7] = ang_acc[1]
-            base_x[node_index, 8] = ang_acc[2]
+                # Find the index of this particular node
+                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+
+                # Add the features to x matrix
+                base_x[node_index, 0*self.history_length+j] = lin_acc[0]
+                base_x[node_index, 1*self.history_length+j] = lin_acc[1]
+                base_x[node_index, 2*self.history_length+j] = lin_acc[2]
+                base_x[node_index, 3*self.history_length+j] = ang_vel[0]
+                base_x[node_index, 4*self.history_length+j] = ang_vel[1]
+                base_x[node_index, 5*self.history_length+j] = ang_vel[2]
+                base_x[node_index, 6*self.history_length+j] = ang_acc[0]
+                base_x[node_index, 7*self.history_length+j] = ang_acc[1]
+                base_x[node_index, 8*self.history_length+j] = ang_acc[2]
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x 

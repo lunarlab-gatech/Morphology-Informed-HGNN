@@ -19,6 +19,7 @@ class Go1SimulatedDataset(FlexibleDataset):
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
+                 history_length: int = 1,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -26,7 +27,7 @@ class Go1SimulatedDataset(FlexibleDataset):
         Constructor for Go1 Simulated Dataset provided by Dr. Xiong.
         """
         super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
-                         data_format, transform, pre_transform, pre_filter)
+                         data_format, history_length, transform, pre_transform, pre_filter)
 
         # Map urdf names to array indexes
         self.urdf_to_dataset_index = {
@@ -309,6 +310,7 @@ class CerberusDataset(FlexibleDataset):
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
+                 history_length: int = 1,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -316,7 +318,7 @@ class CerberusDataset(FlexibleDataset):
         Constructor for Cerberus Dataset and child classes.
         """
         super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
-                         data_format, transform, pre_transform, pre_filter)
+                         data_format, history_length, transform, pre_transform, pre_filter)
 
         # Map ROS names to array positions
         self.ros_name_in_index = [
