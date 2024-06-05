@@ -41,7 +41,7 @@ def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
         color = 'tab:orange'
         axes[i].plot(np.array(joint_acc_by_joint[i], dtype=np.float64)[0:num_to_visualize], linestyle='-.', color=color)
         axes[i].set_title(titles[i])
-        axes[i].set_xlabel("Dataset Entry  (about 530 per second)")
+        axes[i].set_xlabel("Dataset Entry (about 530 per second)")
         axes[i].set_ylabel("Joint Acceleration (Calculated)", color=color)
         axes[i].tick_params(axis='y', labelcolor=color)
 
@@ -52,7 +52,44 @@ def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
         ax_twin.tick_params(axis='y', labelcolor=color)
 
     plt.tight_layout()
-    plt.savefig("DerivativesFig.pdf")
+    plt.savefig("JointAcceleration.pdf")
+
+    # Extract IMU data
+    ang_vel_over_time = [[], [], []]
+    ang_acc_over_time = [[], [], []]
+    for i in range(0, dataset_len):
+        graph: HeteroData = dataset.get(i)
+        ang_attr: torch.Tensor = graph['base'].x
+        ang_vel = ang_attr[0,3:6]
+        ang_acc = ang_attr[0,6:9]
+        for j in range(0, 3):
+            ang_acc_over_time[j].append(ang_acc[j])
+            ang_vel_over_time[j].append(ang_vel[j])
+        
+    # Setup 3 graphs
+    fig, axes = plt.subplots(3, figsize=[15, 15])
+    fig.suptitle('Calculated IMU Angular Accelerations via Derivative')
+
+    # Get the titles
+    titles = ['X', 'Y', 'Z']
+
+    # Plot the results
+    for i in range(0, 3):
+        color = 'tab:orange'
+        axes[i].plot(np.array(ang_acc_over_time[i], dtype=np.float64)[0:num_to_visualize], linestyle='-.', color=color)
+        axes[i].set_title(titles[i])
+        axes[i].set_xlabel("Dataset Entry (about 530 per second)")
+        axes[i].set_ylabel("Angular Acceleration (Calculated)", color=color)
+        axes[i].tick_params(axis='y', labelcolor=color)
+
+        ax_twin = axes[i].twinx()
+        color = 'tab:blue'
+        ax_twin.plot(np.array(ang_vel_over_time[i], dtype=np.float64)[0:num_to_visualize], color=color)
+        ax_twin.set_ylabel("Angular Velocity", color=color)
+        ax_twin.tick_params(axis='y', labelcolor=color)
+
+    plt.tight_layout()
+    plt.savefig("AngularAcceleration.pdf")
 
 def visualize_graph(pytorch_graph: Data,
                     robot_graph: NormalRobotGraph,
