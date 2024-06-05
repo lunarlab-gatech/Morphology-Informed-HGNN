@@ -1,8 +1,9 @@
 import torch
+import torch.nn.functional as F
 from torch import optim, nn
 import lightning as L
 from torch_geometric.nn.models import GCN, GraphSAGE
-from torch_geometric.nn import to_hetero
+from torch_geometric.nn import to_hetero, Linear, HeteroConv, GCNConv
 from lightning.pytorch.loggers import WandbLogger
 from .datasets_deprecated import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset, Go1SimulatedDataset
 from .datasets import QuadSDKDataset
@@ -12,6 +13,35 @@ from pathlib import Path
 import names
 import matplotlib.pyplot as plt
 
+class GRFHGNN(torch.nn.Module):
+    """
+    The Ground Reaction Force Heterogeneous Graph Neural Network model.
+    """
+    def __init__(self, in_channels, hidden_channels, num_layers, out_channels, data_metadata):
+        super().__init__()
+
+        # Create dictionary that maps 
+
+        
+        self.convs = torch.nn.ModuleList()
+        for _ in range(num_layers):
+            conv = HeteroConv({
+                ('paper', 'cites', 'paper'): GCNConv(-1, hidden_channels),
+                ('author', 'writes', 'paper'): GCNConv(-1, hidden_channels),
+                ('paper', 'rev_writes', 'author'): GCNConv(-1, hidden_channels),
+            }, aggr='sum')
+            self.convs.append(conv)
+
+        self.linear = Linear(hidden_channels, out_channels)
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+        x = self.conv2(x, edge_index)
+
+        return F.log_softmax(x, dim=1)
 
 class Base_Lightning(L.LightningModule):
     """
@@ -78,7 +108,52 @@ class Base_Lightning(L.LightningModule):
             y_pred: The predicted model output.
         """
         raise NotImplementedError
+    
+class MLP_Lightning(Base_Lightning):
 
+    def __init__(self, in_channels, hidden_channels, num_layers, batch_size):
+        """
+        Constructor for MLP_Lightning class. Pytorch Lightning
+        wrapper around the Pytorch Torchvision MLP class.
+
+        Parameters:
+            in_channels (int) - Number of input parameters to the model.
+            hidden_channels (int) - The hidden size.
+            batch_size (int) - The size of the batches from the dataloaders.
+        """
+        super().__init__()
+        self.batch_size = batch_size
+
+        # Create the proper number of layers
+        modules = []
+        if num_layers < 1:
+            raise ValueError("num_layers must be 1 or greater")
+        elif num_layers is 1:
+            modules.append(nn.Linear(in_channels, 4))
+            modules.append(nn.ReLU())
+        elif num_layers is 2:
+            modules.append(nn.Linear(in_channels, hidden_channels))
+            modules.append(nn.ReLU())
+            modules.append(nn.Linear(hidden_channels, 4))
+            modules.append(nn.ReLU())
+        else:
+            modules.append(nn.Linear(in_channels, hidden_channels))
+            modules.append(nn.ReLU())
+            for i in range(0, num_layers - 2):
+                modules.append(nn.Linear(hidden_channels, hidden_channels))
+                modules.append(nn.ReLU())
+            modules.append(nn.Linear(hidden_channels, 4))
+            modules.append(nn.ReLU())
+
+        self.mlp_model = nn.Sequential(*modules)
+        self.save_hyperparameters()
+
+    def step_helper_function(self, batch, batch_idx):
+        x, y = batch
+        y_pred = self.mlp_model(x)
+        loss = nn.functional.mse_loss(y_pred, y)
+        batch_size = x.shape[0]
+        return loss, y, y_pred, batch_size
 
 class GCN_Lightning(Base_Lightning):
 
@@ -142,7 +217,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
             y_indices (list[int]) - The indices of the output
                 that should match the ground truch labels provided.
                 All other node outputs of the GNN are ignored.
-            data_metadata (tuple) - See https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?          highlight=to_hetero#torch_geometric.nn.to_hetero_transformer.to_hetero for details.
+            data_metadata (tuple) - See https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=to_hetero#torch_geometric.nn.to_hetero_transformer.to_hetero for details.
             dummy_batch - Used to initialize the lazy modules.
         """
         super().__init__()
@@ -179,54 +254,6 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         y = torch.reshape(batch.y, (batch.batch_size, len(self.y_indices)))
         loss = nn.functional.mse_loss(y_pred, y)
         return loss, y, y_pred, batch.batch_size
-
-
-class MLP_Lightning(Base_Lightning):
-
-    def __init__(self, in_channels, hidden_channels, num_layers, batch_size):
-        """
-        Constructor for MLP_Lightning class. Pytorch Lightning
-        wrapper around the Pytorch Torchvision MLP class.
-
-        Parameters:
-            in_channels (int) - Number of input parameters to the model.
-            hidden_channels (int) - The hidden size.
-            batch_size (int) - The size of the batches from the dataloaders.
-        """
-        super().__init__()
-        self.batch_size = batch_size
-
-        # Create the proper number of layers
-        modules = []
-        if num_layers < 1:
-            raise ValueError("num_layers must be 1 or greater")
-        elif num_layers is 1:
-            modules.append(nn.Linear(in_channels, 4))
-            modules.append(nn.ReLU())
-        elif num_layers is 2:
-            modules.append(nn.Linear(in_channels, hidden_channels))
-            modules.append(nn.ReLU())
-            modules.append(nn.Linear(hidden_channels, 4))
-            modules.append(nn.ReLU())
-        else:
-            modules.append(nn.Linear(in_channels, hidden_channels))
-            modules.append(nn.ReLU())
-            for i in range(0, num_layers - 2):
-                modules.append(nn.Linear(hidden_channels, hidden_channels))
-                modules.append(nn.ReLU())
-            modules.append(nn.Linear(hidden_channels, 4))
-            modules.append(nn.ReLU())
-
-        self.mlp_model = nn.Sequential(*modules)
-        self.save_hyperparameters()
-
-    def step_helper_function(self, batch, batch_idx):
-        x, y = batch
-        y_pred = self.mlp_model(x)
-        loss = nn.functional.mse_loss(y_pred, y)
-        batch_size = x.shape[0]
-        return loss, y, y_pred, batch_size
-
 
 
 def display_on_axes(axes, estimated, ground_truth, title):
