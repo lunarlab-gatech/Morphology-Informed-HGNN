@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import optim, nn
 import lightning as L
 from torch_geometric.nn.models import GCN, GraphSAGE
-from torch_geometric.nn import to_hetero, Linear, HeteroConv, GCNConv
+from torch_geometric.nn import to_hetero, Linear, HeteroConv, GATv2Conv, HeteroDictLinear
 from lightning.pytorch.loggers import WandbLogger
 from .datasets_deprecated import CerberusStreetDataset, CerberusTrackDataset, CerberusDataset, Go1SimulatedDataset
 from .datasets import QuadSDKDataset
@@ -13,35 +13,43 @@ from pathlib import Path
 import names
 import matplotlib.pyplot as plt
 
-class GRFHGNN(torch.nn.Module):
+class GRF_HGNN(torch.nn.Module):
     """
     The Ground Reaction Force Heterogeneous Graph Neural Network model.
     """
-    def __init__(self, in_channels, hidden_channels, num_layers, out_channels, data_metadata):
+    def __init__(self, hidden_channels, edge_dim, num_layers, out_channels, data_metadata):
         super().__init__()
 
-        # Create dictionary that maps 
+        # Create the first layer encoder to convert features into embeddings
+        # Hopefully for all node and edge features
+        # TODO: Test that it encodes both node and edge features
+        self.encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0]) 
 
-        
+        # Create dictionary that maps edge connections type to convolutional operator
+        conv_dict = {}
+        for edge_connection in data_metadata[1]:
+            # TODO: Maybe wap this out with an operation that better matches what we want to happen with the edges,
+            # instead of just using it for the attention calculation.
+            conv_dict[edge_connection] = GATv2Conv(hidden_channels, hidden_channels, add_self_loops=False, edge_dim=edge_dim, aggr='sum')
+
+        # Create a convolution for each layer
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
-            conv = HeteroConv({
-                ('paper', 'cites', 'paper'): GCNConv(-1, hidden_channels),
-                ('author', 'writes', 'paper'): GCNConv(-1, hidden_channels),
-                ('paper', 'rev_writes', 'author'): GCNConv(-1, hidden_channels),
-            }, aggr='sum')
+            conv = HeteroConv(conv_dict, aggr='sum')
             self.convs.append(conv)
 
-        self.linear = Linear(hidden_channels, out_channels)
+        # Create the final linear layer (Decoder) -> Just for nodes of type "foot"
+        # Meant to calculate the final GRF values
+        self.decoder = Linear(hidden_channels, out_channels)
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = self.conv2(x, edge_index)
-
-        return F.log_softmax(x, dim=1)
+    def forward(self, x_dict, edge_index_dict):
+        x_dict = self.encoder(x_dict)
+        x_dict = {key: x.relu() for key, x in x_dict.items()}
+        for conv in self.convs:
+            # TODO: Does the RELU actually work?
+            x_dict = conv(x_dict, edge_index_dict)
+            x_dict = {key: x.relu() for key, x in x_dict.items()}
+        return self.decoder(x_dict['foot'])
 
 class Base_Lightning(L.LightningModule):
     """
@@ -204,15 +212,14 @@ class GCN_Lightning(Base_Lightning):
 
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
-    def __init__(self, num_node_features, hidden_channels, num_layers,
+    def __init__(self, hidden_channels, edge_dim, num_layers,
                  y_indices, data_metadata, dummy_batch):
         """
         Constructor for Heterogeneous GNN.
 
         Parameters:
-            num_node_features (int) - The number of features each
-                node embedding has.
             hidden_channels (int) - The hidden size.
+            edge_dim (int) - Edge feature dimensionality
             num_layers (int) - The number of layers in the model.
             y_indices (list[int]) - The indices of the output
                 that should match the ground truch labels provided.
@@ -221,25 +228,24 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
             dummy_batch - Used to initialize the lazy modules.
         """
         super().__init__()
-        self.sage_model = GraphSAGE(in_channels=num_node_features,
-                                    hidden_channels=hidden_channels,
-                                    num_layers=num_layers,
-                                    out_channels=1)
-        self.sage_model = to_hetero(self.sage_model, data_metadata)
+        self.model = GRF_HGNN(hidden_channels=hidden_channels, 
+                              edge_dim=edge_dim, 
+                              num_layers=num_layers, 
+                              out_channels=1, 
+                              data_metadata=data_metadata)
         self.y_indices = y_indices
 
-        # # Initialize lazy modules
+        # Initialize lazy modules
         with torch.no_grad():
-            self.sage_model(x=dummy_batch.x_dict,
-                            edge_index=dummy_batch.edge_index_dict)
+            self.model(x_dict=dummy_batch.x_dict, edge_index_dict=dummy_batch.edge_index_dict)
         self.save_hyperparameters()
 
     def step_helper_function(self, batch, batch_idx):
         # Get the raw foot output
-        out_raw = self.sage_model(x=batch.x_dict,
-                                  edge_index=batch.edge_index_dict)['foot']
+        out_raw = self.model(x_dict=batch.x_dict, edge_index_dict=batch.edge_index_dict)
 
         # Reshape so that we have a tensor of (batch_size, num_foot_nodes)
+        # TODO: Write test cases for this function
         out_nodes_by_batch = torch.reshape(
             out_raw, (batch.batch_size,
                       int(batch['foot'].x.shape[0] / batch.batch_size)))
@@ -273,24 +279,27 @@ def evaluate_model_and_visualize(model_type: str,
                                  subset_to_visualize: tuple[int],
                                  path_to_file: Path = None):
 
+    # Set the dtype to be 64 by default
+    torch.set_default_dtype(torch.float64)
+
     # Get the full dataset if necessary
     predict_full_dataset = None
     try:
-        predict_dataset.get_foot_node_indices()
+        predict_dataset.get_foot_node_indices_matching_labels()
         predict_full_dataset = predict_dataset
     except AttributeError:
         predict_full_dataset = predict_dataset.dataset
     
     # Initialize the model
     model = None
-    if model_type == 'gnn':
-        model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
-        model.y_indices = predict_full_dataset.get_foot_node_indices()
-    elif model_type == 'mlp':
+    if model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    elif model_type == 'gnn':
+        model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+        model.y_indices = predict_full_dataset.get_foot_node_indices_matching_labels()
     elif model_type == 'heterogeneous_gnn':
-        model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
-        model.y_indices = predict_full_dataset.get_foot_node_indices()
+        model: Heterogeneous_GNN_Lightning = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+        model.y_indices = predict_full_dataset.get_foot_node_indices_matching_labels()
     else:
         raise ValueError("model_type must be gnn, mlp, or heterogeneous_gnn.")
 
@@ -304,14 +313,43 @@ def evaluate_model_and_visualize(model_type: str,
     fig, axes = plt.subplots(4, figsize=[20, 10])
     fig.suptitle('Foot Estimated Forces vs. Ground Truth')
 
-    # Validate with the model
-    trainer = L.Trainer()
-    predictions_result = trainer.predict(model, valLoader)
+
+    # Predict with the model
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
-    for batch_result in predictions_result:
-        pred = torch.cat((pred, batch_result[0]), dim=0)
-        labels = torch.cat((labels, batch_result[1]), dim=0)
+    if model_type != 'heterogeneous_gnn':
+        trainer = L.Trainer()
+        predictions_result = trainer.predict(model, valLoader)
+        for batch_result in predictions_result:
+            pred = torch.cat((pred, batch_result[0]), dim=0)
+            labels = torch.cat((labels, batch_result[1]), dim=0)
+
+    else: # for 'heterogeneous_gnn'
+        device = 'cpu' # 'cuda' if torch.cuda.is_available() else
+        model.model = model.model.to(device)
+        with torch.no_grad():
+            for batch in valLoader:
+
+                out_raw = model.model(x_dict=batch.x_dict, edge_index_dict=batch.edge_index_dict)
+
+                # Reshape so that we have a tensor of (batch_size, num_foot_nodes)
+                # TODO: Write test cases for this function
+                out_nodes_by_batch = torch.reshape(
+                    out_raw, (batch.batch_size,
+                            int(batch['foot'].x.shape[0] / batch.batch_size)))
+
+                # Get the outputs from the foot nodes
+                truth_tensors = []
+                for index in model.y_indices:
+                    truth_tensors.append(out_nodes_by_batch[:, index])
+                pred_batch = torch.stack(truth_tensors).swapaxes(0, 1)
+
+                # Get the labels
+                labels_batch = torch.reshape(batch.y, (batch.batch_size, len(model.y_indices)))
+
+                # Append to the previously collected data
+                pred = torch.cat((pred, pred_batch), dim=0)
+                labels = torch.cat((labels, labels_batch), dim=0)
 
     # Only use the specific subset chosen
     pred = pred.numpy()[subset_to_visualize[0]:subset_to_visualize[1] + 1]
@@ -334,9 +372,12 @@ def evaluate_model_and_visualize(model_type: str,
 def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
                 ground_truth_label_indices, data_metadata):
 
-    # Set batch size
+    # Set the dtype to be 64 by default
+    torch.set_default_dtype(torch.float64)
+
+    # Set model parameters
     batch_size = 100
-    hidden_channels = 3
+    hidden_channels = 10
     num_layers = 8
 
     # Create the dataloaders
@@ -371,8 +412,12 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
                                         batch_size)
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
-            -1, hidden_channels, num_layers, ground_truth_label_indices,
-            data_metadata, dummy_batch)
+                 hidden_channels=hidden_channels, 
+                 edge_dim=dummy_batch['base', 'connect','joint'].edge_attr.size()[1],
+                 num_layers=num_layers,
+                 y_indices=ground_truth_label_indices, 
+                 data_metadata=data_metadata, 
+                 dummy_batch=dummy_batch)
     else:
         raise ValueError("Invalid model type.")
 
@@ -404,7 +449,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model_type: str,
         devices='auto',
         accelerator="auto",
         max_epochs=100,
-        # limit_train_batches=100,
+        # limit_train_batches=10,
         # limit_val_batches=5,
         # limit_test_batches=5,
         check_val_every_n_epoch=1,
