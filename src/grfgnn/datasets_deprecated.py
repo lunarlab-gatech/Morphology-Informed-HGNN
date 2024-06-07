@@ -4,7 +4,6 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import os
-from torchvision.datasets.utils import download_file_from_google_drive
 from .datasets import FlexibleDataset
 
 
@@ -375,26 +374,12 @@ class CerberusDataset(FlexibleDataset):
             'RR_thigh_joint', 'RR_calf_joint'
         ]
 
-    def get_google_drive_file_id(self):
-        """
-        Method for child classes to choose which sequence to load.
-        """
-        raise self.notImplementedError
-
     def get_joint_msg_topic(self):
         """
         Method for child classes to specify the proper message topic
         depending on the robot.
         """
         raise self.notImplementedError
-
-    @property
-    def raw_file_names(self):
-        return ['data.bag']
-
-    def download(self):
-        download_file_from_google_drive(self.get_google_drive_file_id(),
-                                        Path(self.root, 'raw'), "data.bag")
 
     def process(self):
         topic = self.get_joint_msg_topic()

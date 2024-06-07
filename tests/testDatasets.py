@@ -1,8 +1,7 @@
 import unittest
 from pathlib import Path
-from grfgnn import CerberusStreetDataset, CerberusTrackDataset, Go1SimulatedDataset, FlexibleDataset, QuadSDKDataset
+from grfgnn import CerberusStreetDataset, CerberusTrackDataset, Go1SimulatedDataset, FlexibleDataset, QuadSDKDataset_A1Speed1_0
 from rosbags.highlevel import AnyReader
-import os
 from torch_geometric.data import Data, HeteroData
 import numpy as np
 import torch
@@ -338,29 +337,24 @@ class TestQuadSDKDataset(unittest.TestCase):
             Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
         path_to_normal_sequence = Path(
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
-        
-        # Skip this test if the dataset isn't available
-        # (Since we can't automatically download it from the Internet)
-        if not path_to_normal_sequence.exists():
-            self.skipTest("QuadSDK-A1Speed1.0 Dataset not available")
 
         # Set up the QuadSDK datasets
-        self.dataset_hgnn_1 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
-        self.dataset_gnn_1 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_gnn_1 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'gnn', 1)
-        self.dataset_mlp_1 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_mlp_1 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 1)
-        self.dataset_hgnn_3 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_hgnn_3 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 3)
-        self.dataset_gnn_3 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_gnn_3 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'gnn', 3)
-        self.dataset_mlp_3 = QuadSDKDataset(path_to_normal_sequence,
+        self.dataset_mlp_3 = QuadSDKDataset_A1Speed1_0(path_to_normal_sequence,
             path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 3)
 
