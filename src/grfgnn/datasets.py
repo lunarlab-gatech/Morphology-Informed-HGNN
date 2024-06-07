@@ -16,9 +16,8 @@ class FlexibleDataset(Dataset):
     # Used when initalizing the parent class instead of a proper
     # child classs
     notImplementedError = NotImplementedError(
-        "Don't call this class directly, but use one of \
-        the child classes in order to choose which dataset \
-        sequence you want to load.")
+        "Don't call this class directly, but use one of the child classes in order to choose which dataset sequence you want to load."
+    )
 
     def __init__(self,
                  root: str,
@@ -85,7 +84,14 @@ class FlexibleDataset(Dataset):
                 "\" robot.")
 
         # Get node name to index mapping
-        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict()
+        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict(
+        )
+
+    def get_data_format(self) -> str:
+        """
+        Returns the data format of the get() method.
+        """
+        return self.data_format
 
     def get_google_drive_file_id(self):
         """
@@ -629,12 +635,12 @@ class QuadSDKDataset(FlexibleDataset):
 
 class QuadSDKDataset_A1Speed0_5(QuadSDKDataset):
     def get_google_drive_file_id(self):
-        raise "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M"
+        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M"
 
 class QuadSDKDataset_A1Speed1_0(QuadSDKDataset):
     def get_google_drive_file_id(self):
-        raise "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf"
+        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf"
 
 class QuadSDKDataset_A1Speed1_5FlippedOver(QuadSDKDataset):
     def get_google_drive_file_id(self):
-        raise "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT"
+        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT"
