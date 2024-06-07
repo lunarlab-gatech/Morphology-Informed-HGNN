@@ -169,3 +169,9 @@ models/
 datasets/
 wandb/
 lightning_logs/
+
+# Ignore vscode config
+.vscode
+
+# Ignored generated animation files
+media/

@@ -20,7 +20,7 @@ class FlexibleDataset(Dataset):
     )
 
     def __init__(self,
-                 root: str,
+                 root: Path,
                  urdf_path: Path,
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
@@ -45,7 +45,7 @@ class FlexibleDataset(Dataset):
 
         # Setup the directories for raw and processed data
         self.root = root
-        super().__init__(root, transform, pre_transform, pre_filter)
+        super().__init__(str(root), transform, pre_transform, pre_filter)
 
         # Get the first index and length of dataset
         info_path = Path(root, 'processed', 'info.txt')

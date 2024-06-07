@@ -1,6 +1,6 @@
 from grfgnn.datasets import QuadSDKDataset
 from pathlib import Path
-from grfgnn.gnnLightning import evaluate_model_and_visualize
+from grfgnn.gnnLightning import evaluate_model_and_visualize, split_dataset
 import torch
 
 def main():
@@ -42,13 +42,9 @@ def main():
         'unitree_ros/robots/a1_description', model_type)
 
     # Split the data into training, validation, and testing sets
-    rand_seed = 10341885
-    rand_gen = torch.Generator().manual_seed(rand_seed)
-    train_size = int(0.7 * a1_sim_dataset.len())
-    val_size = int(0.2 * a1_sim_dataset.len())
-    test_size = a1_sim_dataset.len() - (train_size + val_size)
+    rand_gen = torch.Generator().manual_seed(10341885)
     train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        a1_sim_dataset, [train_size, val_size, test_size], generator=rand_gen)
+        a1_sim_dataset, [0.7, 0.2, 0.1], generator=rand_gen)
 
     evaluate_model_and_visualize(model_type, path_to_checkpoint, test_dataset, [0, 567], 'visualizations/results.png')
 

@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from grfgnn import CerberusStreetDataset, CerberusTrackDataset, Go1SimulatedDataset, FlexibleDataset, QuadSDKDataset_A1Speed1_0
+from grfgnn import CerberusStreetDataset, CerberusTrackDataset, Go1SimulatedDataset, FlexibleDataset, QuadSDKDataset_A1Speed1_0, QuadSDKDataset
 from rosbags.highlevel import AnyReader
 from torch_geometric.data import Data, HeteroData
 import numpy as np
@@ -192,7 +192,7 @@ class TestCerberusDatasets(unittest.TestCase):
             "Invalid URDF: \"go1\". This dataset was collected on the \"a1\" robot. Please pass in the URDF file for the \"a1\" robot, not for the \"go1\" robot.",
             str(error.exception))
         with self.assertRaises(ValueError) as error:
-            temp = CerberusTrackDataset(self.dataset_track_path, 
+            temp = CerberusTrackDataset(self.dataset_track_path,
                 self.go1_urdf, 'package://go1_description/', 'unitree_ros/robots/go1_description')
         self.assertEqual(
             "Invalid URDF: \"go1\". This dataset was collected on the \"a1\" robot. Please pass in the URDF file for the \"a1\" robot, not for the \"go1\" robot.",
@@ -209,12 +209,10 @@ class TestCerberusDatasets(unittest.TestCase):
         # Make sure we get an error when we initialize a class that isn't meant
         # to be initialized.
         with self.assertRaises(NotImplementedError) as error:
-            temp = FlexibleDataset(self.dataset_street_path, 
+            temp = FlexibleDataset(self.dataset_street_path,
                     self.go1_urdf, 'package://go1_description/', 'unitree_ros/robots/go1_description')
         self.assertEqual(
-            "Don't call this class directly, but use one of \
-        the child classes in order to choose which dataset \
-        sequence you want to load.", str(error.exception))
+            "Don't call this class directly, but use one of the child classes in order to choose which dataset sequence you want to load.", str(error.exception))
 
     def test_get_expected_urdf_name(self):
         """
@@ -238,11 +236,11 @@ class TestGo1SimulatedDataset(unittest.TestCase):
             Path('.').parent, 'urdf_files', 'Go1', 'go1.urdf').absolute()
         path_to_xiong_simulated = Path(
             Path('.').parent, 'datasets', 'xiong_simulated').absolute()
-        
+
         # Skip this test if the dataset isn't available
         # (Since we can't automatically download it from the Internet)
         if not path_to_xiong_simulated.exists():
-            self.skipTest("QuadSDK-NormalSequence Dataset not available")
+            self.skipTest("Go1 Xiong Dataset not available")
 
         # Set up the Go1 Simulated dataset
         model_type = 'heterogeneous_gnn'
@@ -325,7 +323,30 @@ class TestGo1SimulatedDataset(unittest.TestCase):
         np.testing.assert_array_equal(heteroData['joint'].x.numpy(), joint_x)
         np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x)
 
-class TestQuadSDKDataset(unittest.TestCase):
+
+class TestFlexibleDatasets(unittest.TestCase):
+    """
+    Test that we can't initialize certain classes properly.
+    """
+
+    def test_initialization(self):
+        # Get the paths to a URDF file and the datasets
+        path_to_a1_urdf = Path(
+            Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
+        path_to_flexible = Path(Path('.').parent, 'datasets',
+                                'Flexible').absolute()
+        path_to_quad_sdk = Path(Path('.').parent, 'datasets',
+                                'QuadSDK').absolute()
+
+        # Try to create them, hope for an error
+        with self.assertRaises(NotImplementedError):
+            FlexibleDataset(path_to_flexible, path_to_a1_urdf, 'package://a1_description/',
+                'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
+        with self.assertRaises(NotImplementedError):
+            QuadSDKDataset(path_to_quad_sdk, path_to_a1_urdf, 'package://a1_description/',
+                'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
+
+class TestQuadSDKDatasets(unittest.TestCase):
     """
     Test that the QuadSDK dataset successfully
     processes and reads the info for creating graph datasets.
@@ -368,8 +389,8 @@ class TestQuadSDKDataset(unittest.TestCase):
         la, av, p, v, t, gt, aa, ja = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
         des_la = [-0.06452160178213015, -0.366493877667443, 9.715652148737323]
         des_av = [-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]
-        des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, -0.1931352599922853,  
-                 0.4076711540455795,  0.9424138768126973,  0.11254642823264671, 0.5695073200020913, 
+        des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, -0.1931352599922853,
+                 0.4076711540455795,  0.9424138768126973,  0.11254642823264671, 0.5695073200020913,
                  0.9825683053175158, 0.22800622574234453, 0.4399285706508147, 1.1786520769378077]
         des_v = [-1.015061543404335, 0.459564643757568, 0.15804277355899754, 1.9489188274516005,
                   1.3299772937985548, 3.644698146547278, -1.2845189574751656, 2.2337115054710917,
@@ -399,23 +420,23 @@ class TestQuadSDKDataset(unittest.TestCase):
         la, av, p, v, t, gt, aa, ja = self.dataset_hgnn_1.load_data_sorted(10000)
         des_la = [-0.06452160178213015, -0.366493877667443, 9.715652148737323]
         des_av = [-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]
-        des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, 
+        des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004,
                  0.11254642823264671, 0.5695073200020913, 0.9825683053175158,
-                 -0.1931352599922853,  0.4076711540455795,  0.9424138768126973,  
+                 -0.1931352599922853,  0.4076711540455795,  0.9424138768126973,
                   0.22800622574234453, 0.4399285706508147, 1.1786520769378077]
-        des_v = [-1.015061543404335, 0.459564643757568, 0.15804277355899754, 
+        des_v = [-1.015061543404335, 0.459564643757568, 0.15804277355899754,
                  -1.2845189574751656, 2.2337115054710917, 3.4964483387811476,
-                  1.9489188274516005, 1.3299772937985548, 3.644698146547278,  
+                  1.9489188274516005, 1.3299772937985548, 3.644698146547278,
                   1.020374615076573, -0.34825271015763287, 0.3185087654826033]
-        des_t = [-3.658930090797254, -3.858403899440098, 12.475195605359755, 
+        des_t = [-3.658930090797254, -3.858403899440098, 12.475195605359755,
                  -0.6701594400127251,-0.48841280756095506, -0.1350813273560049,
-                 0.6111713969715354, -0.11888726638996594, -0.24871924601280232,  
-                 3.6351217639084576, 4.456326408036115, 7.829759255207876]      
+                 0.6111713969715354, -0.11888726638996594, -0.24871924601280232,
+                 3.6351217639084576, 4.456326408036115, 7.829759255207876]
         des_gt = [0, 64.74924447333427, 64.98097097053076, 0]
         des_aa = [-4.5464778570261578, 0.3070732088085122, 2.46972771844984]
         des_ja = [3.4197760000000077, -0.23180600000000107, -0.7501079999999993,
-                  12.040650000000008, -6.890848000000016, 11.833873999999955,  
-                  4.2857779999999845, 17.511218000000017, 6.572418000000013, 
+                  12.040650000000008, -6.890848000000016, 11.833873999999955,
+                  4.2857779999999845, 17.511218000000017, 6.572418000000013,
                   6.934245999999988, 2.426315999999995, 2.532692000000003]
         self.assertSequenceEqual(la, des_la)
         self.assertSequenceEqual(av, des_av)
@@ -431,24 +452,24 @@ class TestQuadSDKDataset(unittest.TestCase):
         x, y = self.dataset_mlp_1.get_helper_mlp(9999)
 
         # Define the desired data
-        des_x = np.array([-0.06452160178213015, -0.366493877667443, 9.715652148737323, 
+        des_x = np.array([-0.06452160178213015, -0.366493877667443, 9.715652148737323,
                  -0.0017398309484803294, -0.011335050676391335, 1.2815129213608234,
                  -4.5464778570261578, 0.3070732088085122, 2.46972771844984,
-                 -0.16056788963386381,  0.6448773402529877, 1.1609664103261004, 
+                 -0.16056788963386381,  0.6448773402529877, 1.1609664103261004,
                  0.11254642823264671, 0.5695073200020913, 0.9825683053175158,
-                 -0.1931352599922853,  0.4076711540455795,  0.9424138768126973,  
+                 -0.1931352599922853,  0.4076711540455795,  0.9424138768126973,
                   0.22800622574234453, 0.4399285706508147, 1.1786520769378077,
-                 -1.015061543404335, 0.459564643757568, 0.15804277355899754, 
+                 -1.015061543404335, 0.459564643757568, 0.15804277355899754,
                  -1.2845189574751656, 2.2337115054710917, 3.4964483387811476,
-                  1.9489188274516005, 1.3299772937985548, 3.644698146547278,  
+                  1.9489188274516005, 1.3299772937985548, 3.644698146547278,
                   1.020374615076573, -0.34825271015763287, 0.3185087654826033,
                   3.4197760000000077, -0.23180600000000107, -0.7501079999999993,
-                  12.040650000000008, -6.890848000000016, 11.833873999999955,  
-                  4.2857779999999845, 17.511218000000017, 6.572418000000013, 
+                  12.040650000000008, -6.890848000000016, 11.833873999999955,
+                  4.2857779999999845, 17.511218000000017, 6.572418000000013,
                   6.934245999999988, 2.426315999999995, 2.532692000000003,
-                  -3.658930090797254, -3.858403899440098, 12.475195605359755, 
+                  -3.658930090797254, -3.858403899440098, 12.475195605359755,
                  -0.6701594400127251,-0.48841280756095506, -0.1350813273560049,
-                 0.6111713969715354, -0.11888726638996594, -0.24871924601280232,  
+                 0.6111713969715354, -0.11888726638996594, -0.24871924601280232,
                  3.6351217639084576, 4.456326408036115, 7.829759255207876], dtype=np.float64)
         des_y = np.array([0, 64.74924447333427, 64.98097097053076, 0], dtype=np.float64)
 
@@ -466,11 +487,11 @@ class TestQuadSDKDataset(unittest.TestCase):
                         [0.5695073200020913,  2.2337115054710917, -6.890848000000016, -0.48841280756095506],
                         [0.9825683053175158, 3.4964483387811476, 11.833873999999955, -0.1350813273560049],
                         [1, 1, 1, 1],
-                        [-0.16056788963386381, -1.015061543404335, 3.4197760000000077, -3.658930090797254], 
-                        [ 0.6448773402529877, 0.459564643757568, -0.23180600000000107, -3.858403899440098], 
+                        [-0.16056788963386381, -1.015061543404335, 3.4197760000000077, -3.658930090797254],
+                        [ 0.6448773402529877, 0.459564643757568, -0.23180600000000107, -3.858403899440098],
                         [1.1609664103261004, 0.15804277355899754, -0.7501079999999993, 12.475195605359755],
                         [1, 1, 1, 1],
-                        [0.22800622574234453, 1.020374615076573, 6.934245999999988, 3.6351217639084576], 
+                        [0.22800622574234453, 1.020374615076573, 6.934245999999988, 3.6351217639084576],
                         [0.4399285706508147, -0.34825271015763287, 2.426315999999995, 4.456326408036115],
                         [1.1786520769378077, 0.3185087654826033,  2.532692000000003, 7.829759255207876],
                         [1, 1, 1, 1],
@@ -504,7 +525,7 @@ class TestQuadSDKDataset(unittest.TestCase):
             heteroData['foot', 'connect', 'joint'].edge_index.numpy(), fj)
         np.testing.assert_array_equal(
             heteroData['joint', 'connect', 'foot'].edge_index.numpy(), jf)
-        
+
         # Check the edge attributes
         bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.dataset_hgnn_1.robotGraph.get_edge_attr_matrices()
         np.testing.assert_array_equal(heteroData['base', 'connect', 'joint'].edge_attr.numpy(), bj_attr)
@@ -517,7 +538,7 @@ class TestQuadSDKDataset(unittest.TestCase):
         labels_des = [0, 64.74924447333427, 64.98097097053076, 0]
         np.testing.assert_array_equal(heteroData.y.numpy(),
                                       np.array(labels_des, dtype=np.float64))
-    
+
         # Check the foot node indices matching labels
         np.testing.assert_array_equal([0, 1, 2, 3], self.dataset_hgnn_1.get_foot_node_indices_matching_labels())
 
@@ -528,14 +549,14 @@ class TestQuadSDKDataset(unittest.TestCase):
         # Check the node attributes
         base_x = np.array([[-0.06452160178213015, -0.366493877667443, 9.715652148737323,
                             -0.0017398309484803294, -0.011335050676391335, 1.2815129213608234,
-                            -4.5464778570261578, 0.3070732088085122, 2.46972771844984]], dtype=np.float64)         
+                            -4.5464778570261578, 0.3070732088085122, 2.46972771844984]], dtype=np.float64)
         joint_x = np.array([[0.11254642823264671, -1.2845189574751656, 12.040650000000008, -0.6701594400127251],
                             [0.5695073200020913,  2.2337115054710917, -6.890848000000016, -0.48841280756095506],
                             [0.9825683053175158, 3.4964483387811476, 11.833873999999955, -0.1350813273560049],
-                            [-0.16056788963386381, -1.015061543404335, 3.4197760000000077, -3.658930090797254], 
-                            [ 0.6448773402529877, 0.459564643757568, -0.23180600000000107, -3.858403899440098], 
+                            [-0.16056788963386381, -1.015061543404335, 3.4197760000000077, -3.658930090797254],
+                            [ 0.6448773402529877, 0.459564643757568, -0.23180600000000107, -3.858403899440098],
                             [1.1609664103261004, 0.15804277355899754, -0.7501079999999993, 12.475195605359755],
-                            [0.22800622574234453, 1.020374615076573, 6.934245999999988, 3.6351217639084576], 
+                            [0.22800622574234453, 1.020374615076573, 6.934245999999988, 3.6351217639084576],
                             [0.4399285706508147, -0.34825271015763287, 2.426315999999995, 4.456326408036115],
                             [1.1786520769378077, 0.3185087654826033,  2.532692000000003, 7.829759255207876],
                             [-0.1931352599922853, 1.9489188274516005, 4.2857779999999845, 0.6111713969715354],
@@ -585,7 +606,7 @@ class TestQuadSDKDataset(unittest.TestCase):
         # ================================= MLP ==========================================
         # Get the output
         x_actual, y_actual = self.dataset_mlp_3.get(9997)
-        
+
         # Calculated the desired x and y values
         xb2, yb2 = self.dataset_mlp_1.get_helper_mlp(9997)
         xb1, yb1 = self.dataset_mlp_1.get_helper_mlp(9998)
@@ -605,7 +626,7 @@ class TestQuadSDKDataset(unittest.TestCase):
         # Check the labels
         labels_des = [0, 64.74924447333427, 64.98097097053076, 0]
         np.testing.assert_array_equal(data_actual.y.numpy(), np.array(labels_des, dtype=np.float64))
-    
+
         # Get desired node attributes
         datab2 = self.dataset_gnn_1.get_helper_gnn(9997)
         datab1 = self.dataset_gnn_1.get_helper_gnn(9998)
@@ -643,6 +664,7 @@ class TestQuadSDKDataset(unittest.TestCase):
         np.testing.assert_array_almost_equal(heteroData['joint'].x.numpy(), joint_x_des.numpy(), 6)
         np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x.numpy())
         np.testing.assert_array_equal(heteroData.y.numpy(), y.numpy())
+
 
 if __name__ == "__main__":
     unittest.main()

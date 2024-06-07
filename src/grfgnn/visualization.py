@@ -8,6 +8,40 @@ import torch_geometric
 from torch_geometric.data import Data, HeteroData
 import networkx
 
+def display_on_axes(axes, estimated, ground_truth, title):
+    """
+    Simple function that displays ground truth and estimated
+    information on a Matplotlib.pyplot Axes.
+    """
+    axes.plot(ground_truth, label="Ground Truth", linestyle='-.')
+    axes.plot(estimated, label="Estimated")
+    axes.legend()
+    axes.set_title(title)
+
+def visualize_model_outputs(pred, labels, path_to_file: Path = None):
+    """
+    Helper method that creates a figure between the predicted
+    GRF values and the actual GRF values, and saves it at 
+    'path_to_file'.
+    """
+
+    # Setup four graphs (one for each foot)
+    fig, axes = plt.subplots(4, figsize=[20, 10])
+    fig.suptitle('Foot Estimated Forces vs. Ground Truth')
+
+    # Display the results
+    titles = [
+        "Front Left Foot Forces", "Front Right Foot Forces",
+        "Rear Left Foot Forces", "Rear Right Foot Forces"
+    ]
+    for i in range(0, 4):
+        display_on_axes(axes[i], pred[:, i], labels[:, i], titles[i])
+
+    # Save the figure
+    print(path_to_file)
+    if path_to_file is not None:
+        plt.savefig(path_to_file)
+
 def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
     """
     This helper method visualizes the derivatives, to make sure that they aren't noisy.
@@ -91,12 +125,13 @@ def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
     plt.tight_layout()
     plt.savefig("AngularAcceleration.pdf")
 
-def visualize_graph(pytorch_graph: Data,
+def visualize_dataset_graph(pytorch_graph: Data,
                     robot_graph: NormalRobotGraph,
                     fig_save_path: Path = None,
                     draw_edges: bool = False):
     """
     This helper method visualizes a Data graph object using networkx.
+    Only works for Data objects created with the 'gnn' data_format.
     """
 
     # Write the features onto the names

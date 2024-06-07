@@ -26,7 +26,8 @@ class Go1SimulatedDataset(FlexibleDataset):
         Constructor for Go1 Simulated Dataset provided by Dr. Xiong.
         """
         super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
-                         data_format, history_length, transform, pre_transform, pre_filter)
+                         data_format, history_length, transform, pre_transform,
+                         pre_filter)
 
         # Map urdf names to array indexes
         self.urdf_to_dataset_index = {
@@ -73,6 +74,13 @@ class Go1SimulatedDataset(FlexibleDataset):
             'RL_thigh_joint', 'RL_calf_joint', 'RR_hip_joint',
             'RR_thigh_joint', 'RR_calf_joint'
         ]
+
+    @property
+    def raw_file_names(self):
+        return [] # Don't download any files automatically
+
+    def download(self):
+        pass # Don't download any files automatically
 
     def process(self):
         bag_numbers = np.linspace(0, 99, 100)
