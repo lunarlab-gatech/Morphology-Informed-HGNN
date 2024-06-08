@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from grfgnn import QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_5FlippedOver
-from grfgnn.gnnLightning import train_model, evaluate_model, get_foot_node_outputs_gnn, GCN_Lightning, get_foot_node_labels_gnn, Heterogeneous_GNN_Lightning
+from grfgnn.gnnLightning import train_model, evaluate_model, get_foot_node_outputs_gnn, GNN_Lightning, get_foot_node_labels_gnn, Heterogeneous_GNN_Lightning
 import torch
 from torch.utils.data import random_split
 import numpy as np
@@ -92,7 +92,7 @@ class TestGnnLighting(unittest.TestCase):
         trainLoader_b100: DataLoader = DataLoader(train_dataset, batch_size=100, shuffle=False, num_workers=15)
         
         # Create a model for running the tests
-        model = GCN_Lightning(train_dataset[0].x.shape[1], 10, 8, 
+        model = GNN_Lightning(train_dataset[0].x.shape[1], 10, 8, 
                               train_dataset.dataset.get_foot_node_indices_matching_labels())
         
         # Get an example batch for each batch size

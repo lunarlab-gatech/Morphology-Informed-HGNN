@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import optim, nn
 import lightning as L
-from torch_geometric.nn.models import GCN, GraphSAGE
+from torch_geometric.nn.models import GAT
 from torch_geometric.nn import to_hetero, Linear, HeteroConv, GATv2Conv, HeteroDictLinear
 from lightning.pytorch.loggers import WandbLogger
 from .datasets_deprecated import CerberusDataset
@@ -208,7 +208,7 @@ class MLP_Lightning(Base_Lightning):
         return loss, y, y_pred, batch_size
 
 
-class GCN_Lightning(Base_Lightning):
+class GNN_Lightning(Base_Lightning):
 
     def __init__(self, num_node_features, hidden_channels, num_layers,
                  y_indices):
@@ -226,16 +226,17 @@ class GCN_Lightning(Base_Lightning):
                 All other node outputs of the GCN are ignored.
         """
         super().__init__()
-        self.gcn_model = GCN(in_channels=num_node_features,
+        self.gnn_model = GAT(in_channels=num_node_features,
                              hidden_channels=hidden_channels,
                              num_layers=num_layers,
-                             out_channels=1)
+                             out_channels=1,
+                             v2=True)
         self.y_indices = y_indices
         self.save_hyperparameters()
 
     def step_helper_function(self, batch, batch_idx):
         # Get the raw output
-        out_raw = self.gcn_model(x=batch.x,edge_index=batch.edge_index)
+        out_raw = self.gnn_model(x=batch.x,edge_index=batch.edge_index)
 
         # Get the outputs from the foot nodes
         y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.y_indices, "gnn")
@@ -312,7 +313,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     if model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'gnn':
-        model = GCN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+        model = GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     else:
@@ -425,7 +426,7 @@ def train_model(train_dataset: Subset,
                                         hidden_channels, num_layers,
                                         batch_size)
     elif model_type == 'gnn':
-        lightning_model = GCN_Lightning(train_dataset[0].x.shape[1],
+        lightning_model = GNN_Lightning(train_dataset[0].x.shape[1],
                                         hidden_channels, num_layers,
                                         ground_truth_label_indices)
     elif model_type == 'heterogeneous_gnn':
