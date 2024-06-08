@@ -399,9 +399,6 @@ class QuadSDKDataset(FlexibleDataset):
     def get_expected_urdf_name(self):
         return "a1"
 
-    def get_start_and_end_seq_ids(self):
-        return 0, 17530
-
     def load_data_at_dataset_seq(self, seq_num: int):
         """
         This helper function opens the file named "ros_seq"
@@ -636,11 +633,20 @@ class QuadSDKDataset(FlexibleDataset):
 class QuadSDKDataset_A1Speed0_5(QuadSDKDataset):
     def get_google_drive_file_id(self):
         return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M"
+    
+    def get_start_and_end_seq_ids(self):
+        return 0, 14882
 
 class QuadSDKDataset_A1Speed1_0(QuadSDKDataset):
     def get_google_drive_file_id(self):
         return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf"
+    
+    def get_start_and_end_seq_ids(self):
+        return 0, 17530
 
 class QuadSDKDataset_A1Speed1_5FlippedOver(QuadSDKDataset):
     def get_google_drive_file_id(self):
         return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT"
+    
+    def get_start_and_end_seq_ids(self):
+        return 0, 15692

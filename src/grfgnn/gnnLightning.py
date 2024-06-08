@@ -15,6 +15,38 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 
 
+def get_foot_node_outputs_gnn(out_raw, batch, y_indices, model_type):
+    """
+    Helper method that reshapes the raw output of the
+    gnn-based models and extracts the foot node so that 
+    we can properly calculate the loss.
+    """
+
+    second_dim_size = None
+    if model_type == "gnn":
+        second_dim_size = int(batch.x.shape[0] / batch.batch_size)
+    elif model_type == "heterogeneous_gnn":
+        second_dim_size = int(batch["foot"].x.shape[0] / batch.batch_size)
+    else:
+        raise ValueError("Invalid model_type")
+
+    # Reshape so that we have a tensor of (batch_size, num_nodes)
+    out_nodes_by_batch = torch.reshape(out_raw.squeeze(), (batch.batch_size, second_dim_size))
+
+    # Get the outputs from the foot nodes
+    truth_tensors = []
+    for index in y_indices:
+        truth_tensors.append(out_nodes_by_batch[:, index])
+    y_pred = torch.stack(truth_tensors).swapaxes(0, 1)
+    return y_pred
+
+def get_foot_node_labels_gnn(batch, y_indices):
+    """
+    Helper method that reshapes the labels of the gnn
+    datasets so we can properly calculate the loss.
+    """
+    return torch.reshape(batch.y, (batch.batch_size, len(y_indices)))
+
 class GRF_HGNN(torch.nn.Module):
     """
     The Ground Reaction Force Heterogeneous Graph Neural Network model.
@@ -203,22 +235,13 @@ class GCN_Lightning(Base_Lightning):
 
     def step_helper_function(self, batch, batch_idx):
         # Get the raw output
-        out_raw = self.gcn_model(x=batch.x,
-                                 edge_index=batch.edge_index).squeeze()
-
-        # Reshape so that we have a tensor of (batch_size, num_nodes)
-        out_nodes_by_batch = torch.reshape(
-            out_raw,
-            (batch.batch_size, int(batch.x.shape[0] / batch.batch_size)))
+        out_raw = self.gcn_model(x=batch.x,edge_index=batch.edge_index)
 
         # Get the outputs from the foot nodes
-        truth_tensors = []
-        for index in self.y_indices:
-            truth_tensors.append(out_nodes_by_batch[:, index])
-        y_pred = torch.stack(truth_tensors).swapaxes(0, 1)
+        y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.y_indices, "gnn")
 
         # Calculate loss
-        y = torch.reshape(batch.y, (batch.batch_size, len(self.y_indices)))
+        y = get_foot_node_labels_gnn(batch, self.y_indices)
         loss = nn.functional.mse_loss(y, y_pred)
         return loss, y, y_pred, batch.batch_size
 
@@ -259,20 +282,11 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         out_raw = self.model(x_dict=batch.x_dict,
                              edge_index_dict=batch.edge_index_dict)
 
-        # Reshape so that we have a tensor of (batch_size, num_foot_nodes)
-        # TODO: Write test cases for this function
-        out_nodes_by_batch = torch.reshape(
-            out_raw, (batch.batch_size,
-                      int(batch['foot'].x.shape[0] / batch.batch_size)))
-
         # Get the outputs from the foot nodes
-        truth_tensors = []
-        for index in self.y_indices:
-            truth_tensors.append(out_nodes_by_batch[:, index])
-        y_pred = torch.stack(truth_tensors).swapaxes(0, 1)
+        y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.y_indices, "heterogeneous_gnn")
 
         # Calculate loss
-        y = torch.reshape(batch.y, (batch.batch_size, len(self.y_indices)))
+        y = get_foot_node_labels_gnn(batch, self.y_indices)
         loss = nn.functional.mse_loss(y_pred, y)
         return loss, y, y_pred, batch.batch_size
 
@@ -322,26 +336,14 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
         model.model = model.model.to(device)
         with torch.no_grad():
             for batch in valLoader:
-
                 out_raw = model.model(x_dict=batch.x_dict,
                                       edge_index_dict=batch.edge_index_dict)
 
-                # Reshape so that we have a tensor of (batch_size, num_foot_nodes)
-                # TODO: Write test cases for this function
-                out_nodes_by_batch = torch.reshape(
-                    out_raw,
-                    (batch.batch_size,
-                     int(batch['foot'].x.shape[0] / batch.batch_size)))
-
                 # Get the outputs from the foot nodes
-                truth_tensors = []
-                for index in model.y_indices:
-                    truth_tensors.append(out_nodes_by_batch[:, index])
-                pred_batch = torch.stack(truth_tensors).swapaxes(0, 1)
+                pred_batch = get_foot_node_outputs_gnn(out_raw, batch, model.y_indices, "heterogeneous_gnn")
 
                 # Get the labels
-                labels_batch = torch.reshape(
-                    batch.y, (batch.batch_size, len(model.y_indices)))
+                labels_batch = get_foot_node_labels_gnn(batch, model.y_indices)
 
                 # Append to the previously collected data
                 pred = torch.cat((pred, pred_batch), dim=0)
@@ -353,7 +355,8 @@ def train_model(train_dataset: Subset,
                 val_dataset: Subset,
                 test_dataset: Subset,
                 testing_mode: bool = False,
-                disable_logger: bool = False):
+                disable_logger: bool = False,
+                batch_size: int = 100):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -375,22 +378,23 @@ def train_model(train_dataset: Subset,
     ground_truth_label_indices = train_dataset.dataset.get_foot_node_indices_matching_labels(
     )
 
-    # Set appropriate settings for developer mode
+    # Set appropriate settings for testing mode
     max_epochs = 100
     limit_train_batches = None
     limit_val_batches = None
     limit_test_batches = None
+    deterministic = False
     if testing_mode:
-        max_epochs = 10
+        max_epochs = 2
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
+        deterministic = True
 
     # Set the dtype to be 64 by default
     torch.set_default_dtype(torch.float64)
 
     # Set model parameters
-    batch_size = 100
     hidden_channels = 10
     num_layers = 8
 
@@ -462,7 +466,7 @@ def train_model(train_dataset: Subset,
     # seed_everything(rand_seed, workers=True)
     trainer = L.Trainer(
         default_root_dir=path_to_save,
-        # deterministic=True,  # Reproducability
+        deterministic=deterministic,  # Reproducability
         benchmark=True,
         devices='auto',
         accelerator="auto",
