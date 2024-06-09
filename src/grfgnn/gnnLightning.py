@@ -99,6 +99,12 @@ class Base_Lightning(L.LightningModule):
     optimizer.
     """
 
+    def __init__(self, optimizer: str, lr: float):
+        # Setup certain optimization and learning rate parameters
+        super().__init__()
+        self.optimizer = optimizer
+        self.lr = lr
+
     def log_losses(self, batch_size, mse_loss, y, y_pred, step_name: str):
         self.log(step_name + "_MSE_loss", mse_loss, batch_size=batch_size)
         self.log(step_name + "_RMSE_loss",
@@ -145,7 +151,12 @@ class Base_Lightning(L.LightningModule):
         return y_pred, y
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=0.003)
+        if self.optimizer == "adam":
+            optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        elif self.optimizer == "sgd":
+            optimizer = optim.SGD(self.parameters(), lr=self.lr)
+        else:
+            raise ValueError("Invalid optimizer setting")
         return optimizer
 
     def step_helper_function(self, batch, batch_idx):
@@ -163,7 +174,8 @@ class Base_Lightning(L.LightningModule):
 
 class MLP_Lightning(Base_Lightning):
 
-    def __init__(self, in_channels, hidden_channels, num_layers, batch_size):
+    def __init__(self, in_channels, hidden_channels, num_layers, batch_size,
+                 optimizer: str, lr: float):
         """
         Constructor for MLP_Lightning class. Pytorch Lightning
         wrapper around the Pytorch Torchvision MLP class.
@@ -173,7 +185,7 @@ class MLP_Lightning(Base_Lightning):
             hidden_channels (int) - The hidden size.
             batch_size (int) - The size of the batches from the dataloaders.
         """
-        super().__init__()
+        super().__init__(optimizer, lr)
         self.batch_size = batch_size
 
         # Create the proper number of layers
@@ -211,7 +223,7 @@ class MLP_Lightning(Base_Lightning):
 class GNN_Lightning(Base_Lightning):
 
     def __init__(self, num_node_features, hidden_channels, num_layers,
-                 y_indices):
+                 y_indices, optimizer: str, lr: float):
         """
         Constructor for GCN_Lightning class. Pytorch Lightning
         wrapper around the Pytorch geometric GCN class.
@@ -225,7 +237,7 @@ class GNN_Lightning(Base_Lightning):
                 that should match the ground truch labels provided.
                 All other node outputs of the GCN are ignored.
         """
-        super().__init__()
+        super().__init__(optimizer, lr)
         self.gnn_model = GAT(in_channels=num_node_features,
                              hidden_channels=hidden_channels,
                              num_layers=num_layers,
@@ -250,7 +262,7 @@ class GNN_Lightning(Base_Lightning):
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
     def __init__(self, hidden_channels, edge_dim, num_layers, y_indices,
-                 data_metadata, dummy_batch):
+                 data_metadata, dummy_batch, optimizer: str, lr: float):
         """
         Constructor for Heterogeneous GNN.
 
@@ -264,7 +276,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
             data_metadata (tuple) - See https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=to_hetero#torch_geometric.nn.to_hetero_transformer.to_hetero for details.
             dummy_batch - Used to initialize the lazy modules.
         """
-        super().__init__()
+        super().__init__(optimizer, lr)
         self.model = GRF_HGNN(hidden_channels=hidden_channels,
                               edge_dim=edge_dim,
                               num_layers=num_layers,
@@ -358,7 +370,11 @@ def train_model(train_dataset: Subset,
                 testing_mode: bool = False,
                 disable_logger: bool = False,
                 batch_size: int = 100,
-                num_layers: int = 8):
+                num_layers: int = 8,
+                optimizer: str = "adam", 
+                lr: float = 0.003,
+                epochs: int = 100,
+                hidden_size: int = 10):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -381,13 +397,12 @@ def train_model(train_dataset: Subset,
     )
 
     # Set appropriate settings for testing mode
-    max_epochs = 100
     limit_train_batches = None
     limit_val_batches = None
     limit_test_batches = None
     deterministic = False
     if testing_mode:
-        max_epochs = 2
+        epochs = 2
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
@@ -395,9 +410,6 @@ def train_model(train_dataset: Subset,
 
     # Set the dtype to be 64 by default
     torch.set_default_dtype(torch.float64)
-
-    # Set model parameters
-    hidden_channels = 10
 
     # Create the dataloaders
     trainLoader: DataLoader = DataLoader(train_dataset,
@@ -423,21 +435,24 @@ def train_model(train_dataset: Subset,
     lightning_model = None
     if model_type == 'mlp':
         lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
-                                        hidden_channels, num_layers,
-                                        batch_size)
+                                        hidden_size, num_layers,
+                                        batch_size, optimizer, lr)
     elif model_type == 'gnn':
         lightning_model = GNN_Lightning(train_dataset[0].x.shape[1],
-                                        hidden_channels, num_layers,
-                                        ground_truth_label_indices)
+                                        hidden_size, num_layers,
+                                        ground_truth_label_indices, 
+                                        optimizer, lr)
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
-            hidden_channels=hidden_channels,
+            hidden_channels=hidden_size,
             edge_dim=dummy_batch['base', 'connect',
                                  'joint'].edge_attr.size()[1],
             num_layers=num_layers,
             y_indices=ground_truth_label_indices,
             data_metadata=train_dataset.dataset.get_data_metadata(),
-            dummy_batch=dummy_batch)
+            dummy_batch=dummy_batch,
+            optimizer=optimizer,
+            lr=lr)
     else:
         raise ValueError("Invalid model type.")
 
@@ -471,7 +486,7 @@ def train_model(train_dataset: Subset,
         benchmark=True,
         devices='auto',
         accelerator="auto",
-        max_epochs=max_epochs,
+        max_epochs=epochs,
         limit_train_batches=limit_train_batches,
         limit_val_batches=limit_val_batches,
         limit_test_batches=limit_test_batches,
