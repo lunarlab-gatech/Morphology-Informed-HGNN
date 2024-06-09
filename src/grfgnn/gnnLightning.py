@@ -357,7 +357,8 @@ def train_model(train_dataset: Subset,
                 test_dataset: Subset,
                 testing_mode: bool = False,
                 disable_logger: bool = False,
-                batch_size: int = 100):
+                batch_size: int = 100,
+                num_layers: int = 8):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -397,7 +398,6 @@ def train_model(train_dataset: Subset,
 
     # Set model parameters
     hidden_channels = 10
-    num_layers = 8
 
     # Create the dataloaders
     trainLoader: DataLoader = DataLoader(train_dataset,

@@ -106,8 +106,8 @@ class TestGnnLighting(unittest.TestCase):
             break
 
         # Get the raw model output
-        raw_out_batch_size_1 = model.gcn_model(x=batch_1.x,edge_index=batch_1.edge_index)
-        raw_out_batch_size_100 = model.gcn_model(x=batch_100.x,edge_index=batch_100.edge_index)
+        raw_out_batch_size_1 = model.gnn_model(x=batch_1.x,edge_index=batch_1.edge_index)
+        raw_out_batch_size_100 = model.gnn_model(x=batch_100.x,edge_index=batch_100.edge_index)
 
         # Get the reshaping output
         result_1 = get_foot_node_outputs_gnn(raw_out_batch_size_1, batch_1, model.y_indices, "gnn")
