@@ -48,7 +48,7 @@ def main():
         dataset_05, [0.7, 0.3], generator=rand_gen)
 
     pred, labels = evaluate_model(path_to_checkpoint, test_dataset)
-    visualize_model_outputs(pred[0:200], labels[0:200], "Christopher-Latsha_Test_Dataset_15Flipped")
+    visualize_model_outputs(pred[0:200], labels[0:200], "Christopher-Latsha_Test_Dataset_05")
 
 if __name__ == "__main__":
     main()

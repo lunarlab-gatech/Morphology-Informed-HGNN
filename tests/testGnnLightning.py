@@ -93,7 +93,9 @@ class TestGnnLighting(unittest.TestCase):
         
         # Create a model for running the tests
         model = GNN_Lightning(train_dataset[0].x.shape[1], 10, 8, 
-                              train_dataset.dataset.get_foot_node_indices_matching_labels())
+                              train_dataset.dataset.get_foot_node_indices_matching_labels(),
+                              optimizer="adam",
+                              lr=0.003)
         
         # Get an example batch for each batch size
         batch_1 = None
@@ -161,7 +163,9 @@ class TestGnnLighting(unittest.TestCase):
             num_layers=8,
             y_indices=train_dataset.dataset.get_foot_node_indices_matching_labels(),
             data_metadata=train_dataset.dataset.get_data_metadata(),
-            dummy_batch=dummy_batch)
+            dummy_batch=dummy_batch,
+            optimizer="adam",
+            lr=0.003)
         
         # Get an example batch for each batch size
         batch_1 = None
