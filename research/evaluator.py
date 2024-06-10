@@ -54,7 +54,7 @@ def main():
     # ===================================================================================
     pred, labels = evaluate_model(path_to_checkpoint, test_dataset)
     visualize_model_outputs(pred[0:num_entries_to_visualize], labels[0:num_entries_to_visualize],
-                            "Christopher-Latsha_Test_Dataset_05")
+                            "model_eval_results.pdf")
 
 if __name__ == "__main__":
     main()
