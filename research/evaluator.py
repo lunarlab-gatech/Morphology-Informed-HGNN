@@ -13,8 +13,10 @@ def main():
 
     # Give path to checkpoint
     # ================================= FILL THESE IN ===================================
-    model_directory_name = None  # Ex: 'gnn-Jared-Wright'
-    ckpt_file_name = None  # Ex: 'epoch=0-val_loss=6544.70.ckpt'
+    model_directory_name = "comic-sweep-34"  # Ex: 'gnn-Jared-Wright'
+    ckpt_file_name = "epoch=67-val_MSE_loss=196.41758.ckpt"  # Ex: 'epoch=0-val_loss=6544.70.ckpt'
+    model_type = 'gnn'
+    history_length = 5
     # ===================================================================================
     path_to_checkpoint = Path(
         Path('.').parent, 'models', model_directory_name, ckpt_file_name)
@@ -29,19 +31,17 @@ def main():
         Path('.').parent, 'datasets',
         'QuadSDK-A1Speed1.5FlippedOver').absolute()
 
-    model_type = 'heterogeneous_gnn'
-
     # Initalize the datasets
     dataset_05 = QuadSDKDataset_A1Speed0_5(
         path_to_quad_sdk_05, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type, 5)
+        'unitree_ros/robots/a1_description', model_type, history_length)
     dataset_1 = QuadSDKDataset_A1Speed1_0(path_to_quad_sdk_1, path_to_urdf,
                                           'package://a1_description/',
                                           'unitree_ros/robots/a1_description',
-                                          model_type, 5)
+                                          model_type, history_length)
     dataset_15Flipped = QuadSDKDataset_A1Speed1_5FlippedOver(
         path_to_quad_sdk_15Flipped, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type, 5)
+        'unitree_ros/robots/a1_description', model_type, history_length)
 
     # Split the data into training, validation, and testing sets
     rand_gen = torch.Generator().manual_seed(10341885)
@@ -50,11 +50,13 @@ def main():
         dataset_05, [0.7, 0.3], generator=rand_gen)
 
     # ================================= FILL THESE IN ===================================
-    num_entries_to_visualize = None # Ex: 2000
+    num_entries_to_visualize = 400  # Ex: 2000
     # ===================================================================================
-    pred, labels = evaluate_model(path_to_checkpoint, test_dataset)
-    visualize_model_outputs(pred[0:num_entries_to_visualize], labels[0:num_entries_to_visualize],
-                            "model_eval_results.pdf")
+    pred, labels = evaluate_model(
+        path_to_checkpoint, Subset(dataset_05, range(0, dataset_05.len())))
+    visualize_model_outputs(pred[0:num_entries_to_visualize],
+                            labels[0:num_entries_to_visualize],
+                            str(path_to_checkpoint) + ".pdf")
 
 if __name__ == "__main__":
     main()

@@ -497,15 +497,13 @@ def train_model(train_dataset: Subset,
 
     # Create Logger
     wandb_logger = False
-    run_name = model_type + "-" + names.get_first_name(
-        ) + "-" + names.get_last_name()
     if not disable_logger:
-        wandb_logger = WandbLogger(project="grfgnn-QuadSDK", name=run_name)
+        wandb_logger = WandbLogger(project="grfgnn-QuadSDK")
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
 
     # Set model parameters
-    path_to_save = str(Path("models", run_name))
+    path_to_save = str(Path("models", wandb_logger.experiment.name))
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(
