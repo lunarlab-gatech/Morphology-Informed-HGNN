@@ -175,7 +175,7 @@ class Base_Lightning(L.LightningModule):
 class MLP_Lightning(Base_Lightning):
 
     def __init__(self, in_channels, hidden_channels, num_layers, batch_size,
-                 optimizer: str, lr: float):
+                 optimizer: str = "adam", lr: float = 0.003):
         """
         Constructor for MLP_Lightning class. Pytorch Lightning
         wrapper around the Pytorch Torchvision MLP class.
@@ -223,7 +223,7 @@ class MLP_Lightning(Base_Lightning):
 class GNN_Lightning(Base_Lightning):
 
     def __init__(self, num_node_features, hidden_channels, num_layers,
-                 y_indices, optimizer: str, lr: float):
+                 y_indices, optimizer: str = "adam", lr: float = 0.003):
         """
         Constructor for GCN_Lightning class. Pytorch Lightning
         wrapper around the Pytorch geometric GCN class.
@@ -262,7 +262,7 @@ class GNN_Lightning(Base_Lightning):
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
     def __init__(self, hidden_channels, edge_dim, num_layers, y_indices,
-                 data_metadata, dummy_batch, optimizer: str, lr: float):
+                 data_metadata, dummy_batch, optimizer: str = "adam", lr: float = 0.003):
         """
         Constructor for Heterogeneous GNN.
 
@@ -458,15 +458,13 @@ def train_model(train_dataset: Subset,
 
     # Create Logger
     wandb_logger = False
-    run_name = model_type + "-" + names.get_first_name(
-        ) + "-" + names.get_last_name()
     if not disable_logger:
-        wandb_logger = WandbLogger(project="grfgnn-QuadSDK", name=run_name)
+        wandb_logger = WandbLogger(project="grfgnn-QuadSDK")
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
 
     # Set model parameters
-    path_to_save = str(Path("models", run_name))
+    path_to_save = str(Path("models", wandb_logger.experiment.name))
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(
