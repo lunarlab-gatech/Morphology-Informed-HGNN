@@ -1,8 +1,8 @@
 from urchin import URDF
 import os
 import numpy as np
+import urchin
 from pathlib import Path
-
 
 class InvalidURDFException(Exception):
     pass
@@ -17,10 +17,11 @@ class RobotGraph():
         """
 
         def __init__(self, name: str, edge_parent: str,
-                     edge_children: list[str]):
+                     edge_children: list[str], joint: urchin.Joint):
             self.name: str = name
             self.edge_parent: str = edge_parent
             self.edge_children: list[str] = edge_children
+            self.joint = joint
 
         @staticmethod
         def get_list_of_node_types():
@@ -55,16 +56,16 @@ class RobotGraph():
         the names of both connections.
         """
 
-        def __init__(self, name: str, parent: str, child: str):
+        def __init__(self, name: str, parent: str, child: str, link: urchin.Link):
             self.name = name
             self.parent = parent
             self.child = child
+            self.link = link
 
     def __init__(self,
                  urdf_path: Path,
                  ros_builtin_path: str,
-                 urdf_to_desc_path: str,
-                 swap_nodes_and_edges=False):
+                 urdf_to_desc_path: str):
         """
         Constructor for RobotGraph class.
 
@@ -78,10 +79,6 @@ class RobotGraph():
             urdf_to_desc_path (str): The relative path from the urdf file to
                 the urdf description directory. This directory typically contains
                 folders like "meshes" and "urdf".
-            swap_nodes_and_edges (bool): If False, links in the urdf file will be represented
-                as nodes, and joints will be represented as edges. If True, links will
-                be represented as edges, and joints will be represented as nodes. This
-                will drop links that aren't connected to two joints. Default=False.
         """
 
         # Define paths
@@ -91,77 +88,64 @@ class RobotGraph():
         self.urdf_to_desc_path = urdf_to_desc_path
 
         # Make the updated urdf file, or replace it.
-        # This avoids issues with updating URDF files, 
+        # This avoids issues with updating URDF files,
         # but the new file not being updated.
         self.create_updated_urdf_file()
 
         # Load the URDF with updated paths
         self.robot_urdf = URDF.load(self.new_urdf_path)
 
-        # Setup nodes and edges
-        if not swap_nodes_and_edges:
-            self.nodes = []
-            for link in self.robot_urdf.links:
-                edge_parent, edge_children = self.get_connections_to_link(link)
-                self.nodes.append(
-                    self.Node(name=link.name,
-                              edge_parent=edge_parent,
-                              edge_children=edge_children))
-            self.edges = []
-            for joint in self.robot_urdf.joints:
+        # Create edges from the links
+        self.edges = []
+        for link in self.robot_urdf.links:
+            edge_parent, edge_children = self.get_connections_to_link(link)
+
+            # If link doesn't have a parent and at least one child, drop it.
+            # We can't make an edge out of it.
+            if edge_parent is None and len(edge_children) == 0:
+                raise InvalidURDFException("Link connected to no joints.")
+            elif edge_parent is None or len(edge_children) == 0:
+                continue
+
+            # Create an edge from each link parent to each link child
+            new_edge = None
+            if (len(edge_children) == 1):
                 self.edges.append(
-                    self.Edge(name=joint.name,
-                              parent=joint.parent,
-                              child=joint.child))
-        else:
-            # Create edges from the links
-            self.edges = []
-            for link in self.robot_urdf.links:
-                edge_parent, edge_children = self.get_connections_to_link(link)
-
-                # If link doesn't have a parent and at least one child, drop it.
-                # We can't make an edge out of it.
-                if edge_parent is None and len(edge_children) == 0:
-                    raise InvalidURDFException("Link connected to no joints.")
-                elif edge_parent is None or len(edge_children) == 0:
-                    continue
-
-                # Create an edge from each link parent to each link child
-                new_edge = None
-                if (len(edge_children) == 1):
+                    self.Edge(name=link.name,
+                                parent=edge_parent,
+                                child=edge_children[0],
+                                link=link))
+            else:  # If there are multiple edges for this one link
+                # give them each a unique name.
+                for edge_child in edge_children:
                     self.edges.append(
-                        self.Edge(name=link.name,
-                                  parent=edge_parent,
-                                  child=edge_children[0]))
-                else:  # If there are multiple edges for this one link
-                    # give them each a unique name.
-                    for edge_child in edge_children:
-                        self.edges.append(
-                            self.Edge(name=link.name + "_to_" + edge_child,
-                                      parent=edge_parent,
-                                      child=edge_child))
+                        self.Edge(name=link.name + "_to_" + edge_child,
+                                    parent=edge_parent,
+                                    child=edge_child,
+                                    link=link))
 
-            # Create nodes from the Joints
-            self.nodes = []
-            for joint in self.robot_urdf.joints:
-                # Make sure the edge parent hasn't been pruned, and find
-                # the updated name
-                edge_parent = None
-                for edge in self.edges:
-                    if joint.parent in edge.name and joint.name == edge.child:
-                        edge_parent = edge.name
+        # Create nodes from the Joints
+        self.nodes = []
+        for joint in self.robot_urdf.joints:
+            # Make sure the edge parent hasn't been pruned, and find
+            # the updated name
+            edge_parent = None
+            for edge in self.edges:
+                if joint.parent in edge.name and joint.name == edge.child:
+                    edge_parent = edge.name
 
-                # Make sure the edge child hasn't been pruned, and find
-                # the updated name
-                edge_child = []
-                for edge in self.edges:
-                    if joint.child in edge.name and joint.name == edge.parent:
-                        edge_child.append(edge.name)
+            # Make sure the edge child hasn't been pruned, and find
+            # the updated name
+            edge_child = []
+            for edge in self.edges:
+                if joint.child in edge.name and joint.name == edge.parent:
+                    edge_child.append(edge.name)
 
-                new_node = self.Node(name=joint.name,
-                                     edge_parent=edge_parent,
-                                     edge_children=edge_child)
-                self.nodes.append(new_node)
+            new_node = self.Node(name=joint.name,
+                                    edge_parent=edge_parent,
+                                    edge_children=edge_child,
+                                    joint=joint)
+            self.nodes.append(new_node)
 
     def get_connections_to_link(self, link):
         """
@@ -245,6 +229,18 @@ class RobotGraph():
         """
 
         raise NotImplementedError
+    
+    def get_node_index_to_name_dict(self):
+        """
+        Return a dictionary that maps the node index to its
+        name.
+
+        Returns:
+            (dict[int, str]): A dictionary that maps node index
+                to name.
+        """
+
+        raise NotImplementedError
 
     def get_num_nodes(self):
         """
@@ -325,7 +321,7 @@ class NormalRobotGraph(RobotGraph):
         node_dict = dict(zip(range(len(self.nodes)), node_names))
         return node_dict
 
-    def get_edge_index_matrix(self, heterogenous=False):
+    def get_edge_index_matrix(self):
         """
         Return the edge connectivity matrix, which defines each edge connection
         to each node. This matrix is the 'edge_index' matrix passed to the PyTorch
@@ -408,7 +404,7 @@ class HeterogeneousRobotGraph(RobotGraph):
     Heterogeneous graph, where the nodes are different types.
     """
 
-    def _get_nodes_organized_by_type(self):
+    def _get_nodes_organized_by_type(self) -> list[list[RobotGraph.Node]]:
         """
         Organizes each node into a type with nodes of its same
         type.
@@ -424,7 +420,7 @@ class HeterogeneousRobotGraph(RobotGraph):
             nodes_of_type = []
             for node in self.nodes:
                 if node.get_node_type() == type:
-                    nodes_of_type.append(node.name)
+                    nodes_of_type.append(node)
             nodes.append(nodes_of_type)
         return nodes
 
@@ -437,10 +433,21 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         all_lists = []
         for nodes_of_type in self._get_nodes_organized_by_type():
+            nodes_names_of_type = [x.name for x in nodes_of_type]
             all_lists = all_lists + list(
-                zip(nodes_of_type, range(len(nodes_of_type))))
+                zip(nodes_names_of_type, range(len(nodes_names_of_type))))
 
         return dict(all_lists)
+
+    def get_node_index_to_name_dict(self, joint_type):
+        """
+        Must specify the joint type to use, as nodes across different
+        types can share indexes.
+        """
+        for nodes_of_type in self._get_nodes_organized_by_type():
+            if nodes_of_type[0].get_node_type() == joint_type:
+                nodes_names_of_type = [x.name for x in nodes_of_type]
+                return dict(zip(range(len(nodes_names_of_type)), nodes_names_of_type))
 
     def get_num_of_each_node_type(self):
         """
@@ -504,19 +511,100 @@ class HeterogeneousRobotGraph(RobotGraph):
             if parent_type == child_type and parent_type == 'joint':
                 edge_vector = np.array([[p_index, c_index], [c_index,
                                                              p_index]])
-                joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix, edge_vector)
+                joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix,
+                                                      edge_vector)
             elif parent_type == 'base' and child_type == 'joint':
                 edge_vector = np.array([[p_index], [c_index]])
-                base_to_joint_matrix = add_to_matrix(base_to_joint_matrix, edge_vector)
+                base_to_joint_matrix = add_to_matrix(base_to_joint_matrix,
+                                                     edge_vector)
             elif parent_type == 'joint' and child_type == 'foot':
                 edge_vector = np.array([[c_index], [p_index]])
-                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix, edge_vector)
+                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix,
+                                                     edge_vector)
             else:
                 raise Exception("Not possible")
 
         # Create the last two matrices
         joint_to_base_matrix = base_to_joint_matrix[[1, 0]]
         joint_to_foot_matrix = foot_to_joint_matrix[[1, 0]]
+
+        return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
+               foot_to_joint_matrix, joint_to_foot_matrix
+    
+    def get_edge_attr_matrices(self):
+        """
+        Return the edge attribute matrices.
+
+        Returns:
+            (list[np.array]): Multiple matrices, as outlined below, where N
+                is the number of edge attributes. Currently, N is 7, with 1
+                attribute for mass, and 7 for the inertia matrix:
+                data['base', 'connect', 'joint'].edge_attr -> [X, N]
+                data['joint', 'connect', 'base'].edge_attr -> [X, N]
+                data['joint', 'connect', 'joint'].edge_attr -> [Y, N]
+                data['foot', 'connect', 'joint'].edge_attr -> [Z, N]
+                data['joint', 'connect', 'foot'].edge_attr -> [Z, N]
+        """
+
+        def add_edge_attributes(edge, matrix: np.array, index: int) -> np.array:
+            I = edge.link.inertial.inertia
+            attri = [edge.link.inertial.mass, I[0][0], I[0][1], I[0][2], I[1][1], I[1][2], I[2][2]]
+            matrix[index] = attri
+            return matrix
+
+        # Define the number of attributes
+        N = 7
+
+        # Get the edge attribute matrices
+        bj, jb, jj, fj, jf = self.get_edge_index_matrices()
+
+        # Get the name to index dictionary
+        node_dict = self.get_node_name_to_index_dict()
+
+        # Define all of the edge matrices
+        base_to_joint_matrix = np.ones([bj.shape[1], N])
+        joint_to_joint_matrix = np.ones([jj.shape[1], N])
+        joint_to_foot_matrix = np.ones([jf.shape[1], N])
+
+        # Iterate through edges
+        for edge in self.edges:
+            # Get the nodes for the parent and the child
+            parent_node: RobotGraph.Node = self.get_node_from_name(edge.parent)
+            child_node: RobotGraph.Node = self.get_node_from_name(edge.child)
+
+            # Get their types and indices
+            parent_type = parent_node.get_node_type()
+            child_type = child_node.get_node_type()
+            p_index = node_dict[edge.parent]
+            c_index = node_dict[edge.child]
+
+            # Add their info to the corresponding matrix
+            if parent_type == child_type and parent_type == 'joint':
+                for j in range(0, len(jj[0])-1):
+
+                    # Find the index in the edge index matrix that matches this edge
+                    if jj[0][j] == p_index and jj[1][j] == c_index and \
+                       jj[0][j+1] == c_index and jj[1][j+1] == p_index:
+                        
+                        # Add the edge attributes
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j)
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j+1)
+
+            elif parent_type == 'base' and child_type == 'joint':
+                 for j in range(0, len(bj[0])):
+                     if bj[0][j] == p_index and bj[1][j] == c_index:
+                        base_to_joint_matrix = add_edge_attributes(edge, base_to_joint_matrix, j)
+
+            elif parent_type == 'joint' and child_type == 'foot':
+                for j in range(0, len(jf[0])):
+                     if jf[0][j] == p_index and jf[1][j] == c_index:
+                        joint_to_foot_matrix = add_edge_attributes(edge, joint_to_foot_matrix, j)
+            else:
+                raise Exception("Not possible")
+            
+        # Create the last two matrices
+        joint_to_base_matrix = base_to_joint_matrix
+        foot_to_joint_matrix = joint_to_foot_matrix
 
         return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
                foot_to_joint_matrix, joint_to_foot_matrix
