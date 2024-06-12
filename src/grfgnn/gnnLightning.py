@@ -118,21 +118,20 @@ class Base_Lightning(L.LightningModule):
         self.log(step_name + "_MSE_loss", 
                  mse_loss,
                  on_step=on_step,
-                 on_epoch=on_epoch,
-                 reduce_fx=None)
+                 on_epoch=on_epoch)
         self.log(step_name + "_RMSE_loss",
                  rmse_loss,
                  on_step=on_step,
-                 on_epoch=on_epoch,
-                 reduce_fx=None)
+                 on_epoch=on_epoch)
         self.log(step_name + "_L1_loss",
                  l1_loss,
                  on_step=on_step,
-                 on_epoch=on_epoch,
-                 reduce_fx=None)
+                 on_epoch=on_epoch)
     
     # ======================= Loss Calculation =======================
-    def calculate_losses_step(self, y, y_pred):
+    def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor):
+        y = y.flatten()
+        y_pred = y_pred.flatten()
         mse_loss = self.metric_mse(y, y_pred)
         rmse_loss = self.metric_rmse(y, y_pred)
         l1_loss = self.metric_l1(y, y_pred)
