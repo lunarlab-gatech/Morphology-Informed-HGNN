@@ -6,7 +6,6 @@ import lightning as L
 from torch_geometric.nn.models import GAT
 from torch_geometric.nn import to_hetero, Linear, HeteroConv, GATv2Conv, HeteroDictLinear
 from lightning.pytorch.loggers import WandbLogger
-import torchmetrics.regression
 from .datasets_deprecated import CerberusDataset
 from .datasets import FlexibleDataset
 from torch_geometric.loader import DataLoader
@@ -16,7 +15,6 @@ import names
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 import torchmetrics
-
 
 def get_foot_node_outputs_gnn(out_raw, batch, y_indices, model_type):
     """
@@ -500,13 +498,15 @@ def train_model(train_dataset: Subset,
 
     # Create Logger
     wandb_logger = False
+    run_name = model_type + "-" + names.get_first_name(
+        ) + "-" + names.get_last_name()
     if not disable_logger:
-        wandb_logger = WandbLogger(project="grfgnn-QuadSDK")
+        wandb_logger = WandbLogger(project="grfgnn-QuadSDK", name=run_name)
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
 
     # Set model parameters
-    path_to_save = str(Path("models", wandb_logger.experiment.name))
+    path_to_save = str(Path("models", run_name))
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(

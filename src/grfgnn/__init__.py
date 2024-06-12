@@ -1,2 +1,5 @@
 from .graphParser import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
-from .datasets import CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset, Go1SimulatedDataset, FlexibleDataset
+from .datasets_deprecated import CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset, Go1SimulatedDataset
+from .datasets import FlexibleDataset, QuadSDKDataset, QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
+from .visualization import visualize_derivatives, visualize_dataset_graph, visualize_model_outputs
+

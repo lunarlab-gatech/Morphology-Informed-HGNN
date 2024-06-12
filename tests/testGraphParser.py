@@ -18,25 +18,14 @@ class TestNormalRobotGraph(unittest.TestCase):
 
         self.HyQ_URDF = NormalRobotGraph(self.hyq_path,
                                          'package://hyq_description/',
-                                         'hyq-description', False)
-        self.HyQ_URDF_swapped = NormalRobotGraph(self.hyq_path,
-                                                 'package://hyq_description/',
-                                                 'hyq-description', True)
+                                         'hyq-description')
 
     def test_constructor(self):
         """
-        Check that the constructor properly assigns all of the links and joints
-        to a node/edge.
+        Check that the constructor properly assigns all of the links and joints to a node/edge.
         """
 
-        node_names = [
-            'base_link', 'trunk', 'lf_hipassembly', 'lf_upperleg',
-            'lf_lowerleg', 'lf_foot', 'rf_hipassembly', 'rf_upperleg',
-            'rf_lowerleg', 'rf_foot', 'lh_hipassembly', 'lh_upperleg',
-            'lh_lowerleg', 'lh_foot', 'rh_hipassembly', 'rh_upperleg',
-            'rh_lowerleg', 'rh_foot'
-        ]
-        edge_names = [
+        joint_names = [
             'floating_base', 'lf_haa_joint', 'lf_hfe_joint', 'lf_kfe_joint',
             'lf_foot_joint', 'rf_haa_joint', 'rf_hfe_joint', 'rf_kfe_joint',
             'rf_foot_joint', 'lh_haa_joint', 'lh_hfe_joint', 'lh_kfe_joint',
@@ -44,24 +33,8 @@ class TestNormalRobotGraph(unittest.TestCase):
             'rh_foot_joint'
         ]
 
-        # Check for the normal case: where links become nodes and
-        # joints become edges.
-        node_names_copy = copy.deepcopy(node_names)
+        edge_names_copy = copy.deepcopy(joint_names)
         for i, node in enumerate(self.HyQ_URDF.nodes):
-            self.assertTrue(node.name in node_names_copy)
-            node_names_copy.remove(node.name)
-        self.assertEqual(0, len(node_names_copy))
-
-        edge_names_copy = copy.deepcopy(edge_names)
-        for i, edge in enumerate(self.HyQ_URDF.edges):
-            self.assertTrue(edge.name in edge_names_copy)
-            edge_names_copy.remove(edge.name)
-        self.assertEqual(0, len(edge_names_copy))
-
-        # Check for the swapped case: where links become edges and
-        # joints become nodes.
-        edge_names_copy = copy.deepcopy(edge_names)
-        for i, node in enumerate(self.HyQ_URDF_swapped.nodes):
             self.assertTrue(node.name in edge_names_copy)
             edge_names_copy.remove(node.name)
         self.assertEqual(0, len(edge_names_copy))
@@ -72,27 +45,27 @@ class TestNormalRobotGraph(unittest.TestCase):
         # edge for each child.
         desired_edges = [
             RobotGraph.Edge('trunk_to_lf_haa_joint', "floating_base",
-                            "lf_haa_joint"),
+                            "lf_haa_joint", None),
             RobotGraph.Edge('trunk_to_lh_haa_joint', "floating_base",
-                            "lh_haa_joint"),
+                            "lh_haa_joint", None),
             RobotGraph.Edge('trunk_to_rf_haa_joint', "floating_base",
-                            "rf_haa_joint"),
+                            "rf_haa_joint", None),
             RobotGraph.Edge('trunk_to_rh_haa_joint', "floating_base",
-                            "rh_haa_joint"),
-            RobotGraph.Edge('lf_hipassembly', "lf_haa_joint", "lf_hfe_joint"),
-            RobotGraph.Edge('lf_upperleg', "lf_hfe_joint", "lf_kfe_joint"),
-            RobotGraph.Edge('lf_lowerleg', "lf_kfe_joint", "lf_foot_joint"),
-            RobotGraph.Edge('rf_hipassembly', "rf_haa_joint", "rf_hfe_joint"),
-            RobotGraph.Edge('rf_upperleg', "rf_hfe_joint", "rf_kfe_joint"),
-            RobotGraph.Edge('rf_lowerleg', "rf_kfe_joint", "rf_foot_joint"),
-            RobotGraph.Edge('lh_hipassembly', "lh_haa_joint", "lh_hfe_joint"),
-            RobotGraph.Edge('lh_upperleg', "lh_hfe_joint", "lh_kfe_joint"),
-            RobotGraph.Edge('lh_lowerleg', "lh_kfe_joint", "lh_foot_joint"),
-            RobotGraph.Edge('rh_hipassembly', "rh_haa_joint", "rh_hfe_joint"),
-            RobotGraph.Edge('rh_upperleg', "rh_hfe_joint", "rh_kfe_joint"),
-            RobotGraph.Edge('rh_lowerleg', "rh_kfe_joint", "rh_foot_joint")
+                            "rh_haa_joint", None),
+            RobotGraph.Edge('lf_hipassembly', "lf_haa_joint", "lf_hfe_joint", None),
+            RobotGraph.Edge('lf_upperleg', "lf_hfe_joint", "lf_kfe_joint", None),
+            RobotGraph.Edge('lf_lowerleg', "lf_kfe_joint", "lf_foot_joint", None),
+            RobotGraph.Edge('rf_hipassembly', "rf_haa_joint", "rf_hfe_joint", None),
+            RobotGraph.Edge('rf_upperleg', "rf_hfe_joint", "rf_kfe_joint", None),
+            RobotGraph.Edge('rf_lowerleg', "rf_kfe_joint", "rf_foot_joint", None),
+            RobotGraph.Edge('lh_hipassembly', "lh_haa_joint", "lh_hfe_joint", None),
+            RobotGraph.Edge('lh_upperleg', "lh_hfe_joint", "lh_kfe_joint", None),
+            RobotGraph.Edge('lh_lowerleg', "lh_kfe_joint", "lh_foot_joint", None),
+            RobotGraph.Edge('rh_hipassembly', "rh_haa_joint", "rh_hfe_joint", None),
+            RobotGraph.Edge('rh_upperleg', "rh_hfe_joint", "rh_kfe_joint", None),
+            RobotGraph.Edge('rh_lowerleg', "rh_kfe_joint", "rh_foot_joint", None)
         ]
-        for i, edge in enumerate(self.HyQ_URDF_swapped.edges):
+        for i, edge in enumerate(self.HyQ_URDF.edges):
             match_found = False
             for j, desired_edge in enumerate(desired_edges):
                 if edge.name == desired_edge.name:
@@ -109,31 +82,14 @@ class TestNormalRobotGraph(unittest.TestCase):
         # labels based on their position in the graph.
         # ==================
 
-        # For normal case
-        des_node_type = [
-            'base', 'joint', 'joint', 'joint', 'joint', 'foot', 'joint',
-            'joint', 'joint', 'foot', 'joint', 'joint', 'joint', 'foot',
-            'joint', 'joint', 'joint', 'foot'
-        ]
-        node_names_copy = copy.deepcopy(node_names)
-        num_matches = 0
-        for i, node in enumerate(self.HyQ_URDF.nodes):
-            for j, node_des in enumerate(node_names_copy):
-                if (node.name == node_des):
-                    self.assertEqual(node.get_node_type(), des_node_type[j])
-                    num_matches += 1
-                    break
-        self.assertEqual(num_matches, len(des_node_type))
-
-        # For swappeed links-and-joints
         des_node_type = [
             'base', 'joint', 'joint', 'joint', 'foot', 'joint', 'joint',
             'joint', 'foot', 'joint', 'joint', 'joint', 'foot', 'joint',
             'joint', 'joint', 'foot'
         ]
-        edge_names_copy = copy.deepcopy(edge_names)
+        edge_names_copy = copy.deepcopy(joint_names)
         num_matches = 0
-        for i, node in enumerate(self.HyQ_URDF_swapped.nodes):
+        for i, node in enumerate(self.HyQ_URDF.nodes):
             for j, node_des in enumerate(edge_names_copy):
                 if (node.name == node_des):
                     self.assertEqual(node.get_node_type(), des_node_type[j])
@@ -141,6 +97,45 @@ class TestNormalRobotGraph(unittest.TestCase):
                     break
         self.assertEqual(num_matches, len(des_node_type))
 
+        # ==================
+        # Check that the proper Link information is stored for 
+        # one of the edges, and that the proper Joint information
+        # is stored for one of the Nodes.
+        # ==================
+        node_found = False
+        for i, node in enumerate(self.HyQ_URDF.nodes):
+            if node.name == "rh_kfe_joint":
+                # Test name information
+                joint: urchin.Joint= node.joint
+                self.assertEqual("rh_kfe_joint", joint.name)
+
+                # Test joint information
+                np.testing.assert_array_equal(np.array([[1.0, 0.0, 0.0, 0.35], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]), joint.origin)
+                self.assertEqual(0.1, joint.dynamics.damping)
+                self.assertEqual(0.0, joint.dynamics.friction)
+
+                node_found = True
+                break
+
+        self.assertTrue(node_found)
+        
+        edge_found = False
+        for i, edge in enumerate(self.HyQ_URDF.edges):
+            if edge.name == "lh_hipassembly":
+                # Test name information
+                link: urchin.Link = edge.link
+                self.assertEqual("lh_hipassembly", link.name)
+
+                # Test inertial information
+                np.testing.assert_array_equal(np.array([[1.0, 0.0, 0.0, 0.04263], [0.0, 1.0, 0.0, -0.0], [0.0, 0.0, 1.0, -0.16931], [0.0, 0.0, 0.0, 1.0]]), link.inertial.origin)
+                self.assertEqual(2.93, link.inertial.mass)
+                np.testing.assert_array_equal(np.array([[0.05071, 4e-05, 0.00159], [4e-05, 0.05486, -5e-05], [0.00159, -5e-05, 0.00571]]), link.inertial.inertia)
+
+                edge_found = True
+                break
+
+        self.assertTrue(edge_found)
+        
     def test_get_connections_to_link(self):
         """
         Check that we can properly find the connections to the links in the library.
@@ -176,7 +171,7 @@ class TestNormalRobotGraph(unittest.TestCase):
 
         # Rebuild it
         RobotGraph(self.hyq_path, 'package://hyq_description/',
-                   'hyq-description', False)
+                   'hyq-description')
         self.assertTrue(os.path.exists(hyq_path_updated))
 
     def test_get_node_name_to_index_dict(self):
@@ -218,15 +213,14 @@ class TestNormalRobotGraph(unittest.TestCase):
         edge_matrix = self.HyQ_URDF.get_edge_index_matrix()
 
         self.assertEqual(edge_matrix.shape[0], 2)
-        self.assertEqual(edge_matrix.shape[1], 34)
+        self.assertEqual(edge_matrix.shape[1], 32)
 
     def test_get_num_nodes(self):
         """
         Check that the number of nodes are correct. 
         """
 
-        self.assertEqual(self.HyQ_URDF.get_num_nodes(), 18)
-        self.assertEqual(self.HyQ_URDF_swapped.get_num_nodes(), 17)
+        self.assertEqual(self.HyQ_URDF.get_num_nodes(), 17)
 
     def test_get_edge_connections_to_name_dict(self):
         """
@@ -289,7 +283,7 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
 
         self.GO1_HETERO_GRAPH = HeterogeneousRobotGraph(
             self.path_to_go1_urdf, 'package://go1_description/',
-            'unitree_ros/robots/go1_description', True)
+            'unitree_ros/robots/go1_description')
 
     def test_get_node_name_to_index_dict(self):
         """
@@ -318,6 +312,44 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
         }
         self.assertDictEqual(dict_actual, dict_desired)
 
+    def test_get_node_index_to_name_dict(self):
+        """
+        Test that the dictionary properly tracks indexes to node
+        names for the given type.
+        """
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('base')
+        dict_desired = {
+            0: 'floating_base' 
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('foot')
+        dict_desired = {
+            0: 'FR_foot_fixed',
+            1: 'FL_foot_fixed',
+            2: 'RR_foot_fixed',
+            3: 'RL_foot_fixed'
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
+        dict_actual = self.GO1_HETERO_GRAPH.get_node_index_to_name_dict('joint')
+        dict_desired = {
+            0: 'FR_hip_joint',
+            1: 'FR_thigh_joint',
+            2: 'FR_calf_joint',
+            3: 'FL_hip_joint',
+            4: 'FL_thigh_joint',
+            5: 'FL_calf_joint',
+            6: 'RR_hip_joint',
+            7: 'RR_thigh_joint',
+            8: 'RR_calf_joint',
+            9: 'RL_hip_joint',
+            10: 'RL_thigh_joint',
+            11: 'RL_calf_joint'
+        }
+        self.assertDictEqual(dict_actual, dict_desired)
+
     def test_get_num_of_each_node_type(self):
         """
         Test that we can properly count the number of each 
@@ -338,8 +370,7 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
         bj_des = np.array([[0, 0, 0, 0], [0, 3, 6, 9]])
         jb_des = np.array([[0, 3, 6, 9], [0, 0, 0, 0]])
         jj_des = np.array([[0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 10, 10, 11],
-                           [1, 0, 2, 1, 4, 3, 5, 4, 7, 6, 8, 7, 10, 9, 11,
-                            10]])
+                           [1, 0, 2, 1, 4, 3, 5, 4, 7, 6, 8, 7, 10, 9, 11, 10]])
         fj_des = np.array([[0, 1, 2, 3], [2, 5, 8, 11]])
         jf_des = np.array([[2, 5, 8, 11], [0, 1, 2, 3]])
         numpy.testing.assert_array_equal(bj, bj_des)
@@ -348,6 +379,39 @@ class TestHeterogeneousRobotGraph(unittest.TestCase):
         numpy.testing.assert_array_equal(fj, fj_des)
         numpy.testing.assert_array_equal(jf, jf_des)
 
+    def test_get_edge_attr_matrices(self):
+        """
+        Test that we add the correct attributes to the edges.
+
+        TODO: Eventually add more extensive test case for jj.
+        """
+
+        bj, jb, jj, fj, jf = self.GO1_HETERO_GRAPH.get_edge_attr_matrices()
+        bj_des = np.array([[5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275]])
+        jb_des = np.array([[5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275],
+                           [5.204, 0.0168128557, -0.0002296769, -0.0002945293, 0.063009565, -4.18731e-05, 0.0716547275]])
+        jj_des_0_3 = np.array([[0.591, 0.000334008405, 1.0826066e-05, 1.290732e-06, 0.000619101213, -1.643194e-06, 0.00040057614],
+                           [0.591, 0.000334008405, 1.0826066e-05, 1.290732e-06, 0.000619101213, -1.643194e-06, 0.00040057614],
+                           [0.92, 0.004431760472, -5.7496807e-05, -0.000218457134, 0.004485671726, -0.000572001265, 0.000740309489],
+                           [0.92, 0.004431760472, -5.7496807e-05, -0.000218457134, 0.004485671726, -0.000572001265, 0.000740309489]])
+        fj_des = np.array([[0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05]])
+        jf_des = np.array([[0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05],
+                           [0.135862, 0.001088793059, -2.55679e-07, 7.117814e-06, 0.001100428748, 2.077264e-06, 2.4787446e-05]])
+        numpy.testing.assert_array_equal(bj, bj_des, verbose=True)
+        numpy.testing.assert_array_equal(jb, jb_des, verbose=True)
+        numpy.testing.assert_array_equal(jj[0:4], jj_des_0_3, verbose=True)
+        numpy.testing.assert_array_equal(fj, fj_des, verbose=True)
+        numpy.testing.assert_array_equal(jf, jf_des, verbose=True)
 
 if __name__ == '__main__':
     unittest.main()
