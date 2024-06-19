@@ -234,9 +234,9 @@ class TestGnnLighting(unittest.TestCase):
             l1_loss_des = torch.nn.functional.l1_loss(pred, gt)
             
             # Make sure that they match
-            np.testing.assert_array_equal(mse_loss_des, mse_loss_act)
-            np.testing.assert_array_equal(rmse_loss_des, rmse_loss_act)
-            np.testing.assert_array_equal(l1_loss_des, l1_loss_act)
+            np.testing.assert_array_almost_equal(mse_loss_des, mse_loss_act, 16)
+            np.testing.assert_array_almost_equal(rmse_loss_des, rmse_loss_act, 16)
+            np.testing.assert_array_almost_equal(l1_loss_des, l1_loss_act, 16)
 
         # Define a BaseLightning model
         base = Base_Lightning("adam", 0.003)

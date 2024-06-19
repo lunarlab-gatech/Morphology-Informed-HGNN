@@ -485,7 +485,7 @@ def train_model(train_dataset: Subset,
     lightning_model = None
     if model_type == 'mlp':
         lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
-                                        hidden_size, 1, num_layers,
+                                        hidden_size, 4, num_layers,
                                         batch_size, optimizer, lr)
     elif model_type == 'gnn':
         lightning_model = GNN_Lightning(train_dataset[0].x.shape[1],
