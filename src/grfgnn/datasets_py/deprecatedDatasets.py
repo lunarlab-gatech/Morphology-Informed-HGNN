@@ -4,7 +4,7 @@ import numpy as np
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 import os
-from .datasets import FlexibleDataset
+from .flexibleDataset import FlexibleDataset
 
 
 class Go1SimulatedDataset(FlexibleDataset):

@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from grfgnn import QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_5FlippedOver
-from grfgnn.gnnLightning import train_model, evaluate_model, get_foot_node_outputs_gnn, GNN_Lightning, get_foot_node_labels_gnn, Heterogeneous_GNN_Lightning
+from grfgnn.gnnLightning import train_model, evaluate_model, get_foot_node_outputs_gnn, GNN_Lightning, get_foot_node_labels_gnn, Heterogeneous_GNN_Lightning, Base_Lightning
 import torch
 from torch.utils.data import random_split
 import numpy as np
@@ -201,6 +201,53 @@ class TestGnnLighting(unittest.TestCase):
         y_1 = get_foot_node_labels_gnn(batch_1, model.y_indices)
         y_100 = get_foot_node_labels_gnn(batch_100, model.y_indices)
         np.testing.assert_array_equal(y_1.squeeze().numpy(), y_100[0].numpy())
+
+    def test_loss_calculation_for_epoch(self):
+        """
+        This helper method ensures that the loss calculation after an epoch
+        correctly combines the results of multiple batches, and that this
+        will work even for two seperate epochs that use the same metric modules.
+        """
+
+        def test_loss_helper(base, a_size, b_size):
+            """
+            This helper method makes sure that the losses are calculated
+            correctly for an epoch.
+            """
+
+            # Generate two random "predicted" tensors and two random "GT" tensors
+            a_pred = torch.rand(a_size)
+            a_gt = torch.rand(a_size)
+            b_pred = torch.rand(b_size)
+            b_gt = torch.rand(b_size)
+
+            # Use the Base lightning methods to calculate the losses for the epoch
+            base.calculate_losses_step(a_gt, a_pred)
+            base.calculate_losses_step(b_gt, b_pred)
+            mse_loss_act, rmse_loss_act, l1_loss_act = base.calculate_losses_epoch()
+
+            # Calculate the desired losses
+            pred = torch.concat((a_pred, b_pred), 0)
+            gt = torch.concat((a_gt, b_gt), 0)
+            mse_loss_des = torch.nn.functional.mse_loss(pred, gt)
+            rmse_loss_des = torch.sqrt(mse_loss_des)
+            l1_loss_des = torch.nn.functional.l1_loss(pred, gt)
+            
+            # Make sure that they match
+            np.testing.assert_array_equal(mse_loss_des, mse_loss_act)
+            np.testing.assert_array_equal(rmse_loss_des, rmse_loss_act)
+            np.testing.assert_array_equal(l1_loss_des, l1_loss_act)
+
+        # Define a BaseLightning model
+        base = Base_Lightning("adam", 0.003)
+        
+        # Make sure the loss calculation works properly after we reset the torchmetric module
+        test_loss_helper(base, 100, 148)
+        base.reset_all_metrics()
+        test_loss_helper(base, 1, 250)
+        base.reset_all_metrics()
+        test_loss_helper(base, 777, 777)
+        base.reset_all_metrics()
 
 if __name__ == "__main__":
     unittest.main()

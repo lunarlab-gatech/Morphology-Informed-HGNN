@@ -1,18 +1,13 @@
-from sympy import Q
 import torch
-import torch.nn.functional as F
 from torch import optim, nn
 import lightning as L
 from torch_geometric.nn.models import GAT
-from torch_geometric.nn import to_hetero, Linear, HeteroConv, GATv2Conv, HeteroDictLinear
+from torch_geometric.nn import Linear, HeteroConv, GATv2Conv, HeteroDictLinear
 from lightning.pytorch.loggers import WandbLogger
-from .datasets_deprecated import CerberusDataset
-from .datasets import FlexibleDataset
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
 import names
-import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 import torchmetrics
 
@@ -53,8 +48,8 @@ class GRF_HGNN(torch.nn.Module):
     The Ground Reaction Force Heterogeneous Graph Neural Network model.
     """
 
-    def __init__(self, hidden_channels, edge_dim, num_layers, out_channels,
-                 data_metadata):
+    def __init__(self, hidden_channels: int, edge_dim: int, num_layers: int, 
+                 out_channels: int, data_metadata, activation_fn = nn.ReLU()):
         super().__init__()
 
         # Create the first layer encoder to convert features into embeddings
@@ -79,17 +74,20 @@ class GRF_HGNN(torch.nn.Module):
             conv = HeteroConv(conv_dict, aggr='sum')
             self.convs.append(conv)
 
+        # Save the activation function
+        self.activation = activation_fn
+
         # Create the final linear layer (Decoder) -> Just for nodes of type "foot"
         # Meant to calculate the final GRF values
         self.decoder = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict):
         x_dict = self.encoder(x_dict)
-        x_dict = {key: x.relu() for key, x in x_dict.items()}
+        x_dict = {key: self.activation(x) for key, x in x_dict.items()}
         for conv in self.convs:
-            # TODO: Does the RELU actually work?
+            # TODO: Does the Activation function actually work?
             x_dict = conv(x_dict, edge_index_dict)
-            x_dict = {key: x.relu() for key, x in x_dict.items()}
+            x_dict = {key: self.activation(x) for key, x in x_dict.items()}
         return self.decoder(x_dict['foot'])
 
 
@@ -216,8 +214,10 @@ class Base_Lightning(L.LightningModule):
 
 class MLP_Lightning(Base_Lightning):
 
-    def __init__(self, in_channels, hidden_channels, num_layers, batch_size,
-                 optimizer: str = "adam", lr: float = 0.003):
+    def __init__(self, in_channels: int, hidden_channels: int, 
+                 out_channels: int, num_layers: int, 
+                 batch_size: int, optimizer: str = "adam", lr: float = 0.003, 
+                 activation_fn = nn.ReLU()):
         """
         Constructor for MLP_Lightning class. Pytorch Lightning
         wrapper around the Pytorch Torchvision MLP class.
@@ -225,8 +225,11 @@ class MLP_Lightning(Base_Lightning):
         Parameters:
             in_channels (int) - Number of input parameters to the model.
             hidden_channels (int) - The hidden size.
+            out_channels (int) - The number of outputs from the MLP.
+            num_layers (int) - The number of layers in the model.
             batch_size (int) - The size of the batches from the dataloaders.
         """
+
         super().__init__(optimizer, lr)
         self.batch_size = batch_size
 
@@ -235,21 +238,21 @@ class MLP_Lightning(Base_Lightning):
         if num_layers < 1:
             raise ValueError("num_layers must be 1 or greater")
         elif num_layers is 1:
-            modules.append(nn.Linear(in_channels, 4))
-            modules.append(nn.ReLU())
+            modules.append(nn.Linear(in_channels, out_channels))
+            modules.append(activation_fn)
         elif num_layers is 2:
             modules.append(nn.Linear(in_channels, hidden_channels))
-            modules.append(nn.ReLU())
-            modules.append(nn.Linear(hidden_channels, 4))
-            modules.append(nn.ReLU())
+            modules.append(activation_fn)
+            modules.append(nn.Linear(hidden_channels, out_channels))
+            modules.append(activation_fn)
         else:
             modules.append(nn.Linear(in_channels, hidden_channels))
-            modules.append(nn.ReLU())
+            modules.append(activation_fn)
             for i in range(0, num_layers - 2):
                 modules.append(nn.Linear(hidden_channels, hidden_channels))
-                modules.append(nn.ReLU())
-            modules.append(nn.Linear(hidden_channels, 4))
-            modules.append(nn.ReLU())
+                modules.append(activation_fn)
+            modules.append(nn.Linear(hidden_channels, out_channels))
+            modules.append(activation_fn)
 
         self.mlp_model = nn.Sequential(*modules)
         self.save_hyperparameters()
@@ -263,8 +266,10 @@ class MLP_Lightning(Base_Lightning):
 
 class GNN_Lightning(Base_Lightning):
 
-    def __init__(self, num_node_features, hidden_channels, num_layers,
-                 y_indices, optimizer: str = "adam", lr: float = 0.003):
+    def __init__(self, num_node_features: int, hidden_channels: int, 
+                 num_layers: int, y_indices: list[int], 
+                 optimizer: str = "adam", lr: float = 0.003,
+                 activation_fn = nn.ReLU()):
         """
         Constructor for GCN_Lightning class. Pytorch Lightning
         wrapper around the Pytorch geometric GCN class.
@@ -283,7 +288,8 @@ class GNN_Lightning(Base_Lightning):
                              hidden_channels=hidden_channels,
                              num_layers=num_layers,
                              out_channels=1,
-                             v2=True)
+                             v2=True,
+                             act=activation_fn)
         self.y_indices = y_indices
         self.save_hyperparameters()
 
@@ -301,8 +307,11 @@ class GNN_Lightning(Base_Lightning):
 
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
-    def __init__(self, hidden_channels, edge_dim, num_layers, y_indices,
-                 data_metadata, dummy_batch, optimizer: str = "adam", lr: float = 0.003):
+    def __init__(self, hidden_channels: int, edge_dim: int, 
+                 num_layers: int, y_indices: list[int],
+                 data_metadata, dummy_batch, 
+                 optimizer: str = "adam", lr: float = 0.003,
+                 activation_fn = nn.ReLU()):
         """
         Constructor for Heterogeneous GNN.
 
@@ -321,7 +330,8 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                               edge_dim=edge_dim,
                               num_layers=num_layers,
                               out_channels=1,
-                              data_metadata=data_metadata)
+                              data_metadata=data_metadata,
+                              activation_fn=activation_fn)
         self.y_indices = y_indices
 
         # Initialize lazy modules
@@ -408,6 +418,7 @@ def train_model(train_dataset: Subset,
                 test_dataset: Subset,
                 testing_mode: bool = False,
                 disable_logger: bool = False,
+                logger_project_name: str = None,
                 batch_size: int = 100,
                 num_layers: int = 8,
                 optimizer: str = "adam", 
@@ -474,7 +485,7 @@ def train_model(train_dataset: Subset,
     lightning_model = None
     if model_type == 'mlp':
         lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
-                                        hidden_size, num_layers,
+                                        hidden_size, 1, num_layers,
                                         batch_size, optimizer, lr)
     elif model_type == 'gnn':
         lightning_model = GNN_Lightning(train_dataset[0].x.shape[1],
@@ -497,13 +508,16 @@ def train_model(train_dataset: Subset,
 
     # Create Logger
     wandb_logger = False
+    path_to_save = None
     if not disable_logger:
-        wandb_logger = WandbLogger(project="grfgnn-QuadSDK")
+        if logger_project_name is None:
+            raise ValueError("Need to define \"logger_project_name\" if logger is enabled.")
+        wandb_logger = WandbLogger(project=logger_project_name)
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
-
-    # Set model parameters
-    path_to_save = str(Path("models", wandb_logger.experiment.name))
+        path_to_save = str(Path("models", wandb_logger.experiment.name))
+    else:
+        path_to_save = str(Path("models", model_type + names.get_full_name()))
 
     # Set up precise checkpointing
     checkpoint_callback = ModelCheckpoint(
