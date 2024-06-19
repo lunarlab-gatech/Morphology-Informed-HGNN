@@ -8,3 +8,6 @@
 [submodule "urdf_files/Go1/unitree_ros"]
 	path = urdf_files/Go1/unitree_ros
 	url = https://github.com/unitreerobotics/unitree_ros.git
+[submodule "urdf_files/MiniCheetah/mini-cheetah-gazebo-urdf"]
+	path = urdf_files/MiniCheetah/mini-cheetah-gazebo-urdf
+	url = https://github.com/chvmp/mini-cheetah-gazebo-urdf.git

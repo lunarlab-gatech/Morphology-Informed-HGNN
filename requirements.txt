@@ -11,4 +11,5 @@ pathlib
 gdown
 lightning
 wandb
+scipy
 names

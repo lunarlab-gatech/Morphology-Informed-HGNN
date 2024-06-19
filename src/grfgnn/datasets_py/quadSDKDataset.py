@@ -13,21 +13,8 @@ class QuadSDKDataset(FlexibleDataset):
     Quad-SDK and the Gazebo simulator.
     """
 
-    def __init__(self,
-                 root: str,
-                 urdf_path: Path,
-                 ros_builtin_path: str,
-                 urdf_to_desc_path: str,
-                 data_format: str = 'gnn',
-                 history_length: int = 1,
-                 transform=None,
-                 pre_transform=None,
-                 pre_filter=None):
-        super().__init__(root, urdf_path, ros_builtin_path, urdf_to_desc_path,
-                         data_format, history_length, transform, pre_transform, pre_filter)
-
-        # Map urdf names to array indexes
-        self.urdf_name_to_dataset_array_index = {
+    def get_urdf_name_to_dataset_array_index(self):
+        return {
             'FR_hip_joint': 6,
             'FR_thigh_joint': 7,
             'FR_calf_joint': 8,
@@ -43,37 +30,19 @@ class QuadSDKDataset(FlexibleDataset):
             'FR_foot_fixed': 2,
             'FL_foot_fixed': 0,
             'RR_foot_fixed': 3,
-            'RL_foot_fixed': 1,
-        }
+            'RL_foot_fixed': 1 }
 
-        # Define the node names for the robot feet
-        self.foot_urdf_names = [
-            'FR_foot_fixed',
-            'FL_foot_fixed',
-            'RR_foot_fixed',
-            'RL_foot_fixed',
-        ]
+    def get_joint_node_sorted_order(self) -> list[str]:
+        return [ 'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint',
+                 'FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint',
+                 'RL_hip_joint', 'RL_thigh_joint', 'RL_calf_joint',
+                 'RR_hip_joint', 'RR_thigh_joint', 'RR_calf_joint']
 
-        # Get the indices of the feet nodes in the robotGraph
-        self.foot_node_indices = []
-        for urdf_name in self.foot_urdf_names:
-            self.foot_node_indices.append(
-                self.urdf_name_to_graph_index[urdf_name])
-
-        # Get the GT grf array indices that correspond to the feet nodes order
-        self.gt_grf_array_indices = []
-        for urdf_name in self.foot_urdf_names:
-            self.gt_grf_array_indices.append(
-                self.urdf_name_to_dataset_array_index[urdf_name])
-
-        # Define the nodes that should recieve features
-        self.joint_nodes_for_attributes = [
-            'FL_hip_joint', 'FL_thigh_joint', 'FL_calf_joint',
-            'FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint',
-            'RL_hip_joint', 'RL_thigh_joint', 'RL_calf_joint',
-            'RR_hip_joint', 'RR_thigh_joint', 'RR_calf_joint'
-        ]
-        self.base_nodes_for_attributes = ['floating_base']
+    def get_foot_node_sorted_order(self) -> list[str]:
+        return ['FR_foot_fixed',
+                'FL_foot_fixed',
+                'RR_foot_fixed',
+                'RL_foot_fixed']
 
     def process(self):
         # Set up a reader to read the rosbag
@@ -151,72 +120,18 @@ class QuadSDKDataset(FlexibleDataset):
             # Track how many entries we have
             dataset_entries += 1
 
-        # Calculate accelerations using discrete methods
-        av_2back, av_1back, av_curr = None, None, None
-        jv_2back, jv_1back, jv_curr = None, None, None
-        ts_2back, ts_1back, ts_curr = None, None, None
-        for i in range(0, dataset_entries):
-            with open(str(Path(self.processed_dir, str(i) + ".txt")), "r") as f:
-                # Get the angular velocity, joint velocities, and timestamp info
-                timestamp_info = f.readline().split(" ")[:-1]
-                ts_curr = float(timestamp_info[2])
-
-                line = f.readline()
-                line = f.readline()
-                av_curr = f.readline().split(" ")[:-1]
-
-                line = f.readline()
-                jv_curr = f.readline().split(" ")[:-1]
-
-                # Calculate the angular acceleration and
-                # joint accelerations (if possible) through
-                # centered finite differences
-                if i >= 2:
-                    two_delta_ts = ts_curr - ts_2back
-                    aa = []
-                    ja = []
-                    for j in range(0, len(av_curr)):
-                        aa.append((float(av_curr[j]) - float(av_2back[j])) / two_delta_ts)
-                    for j in range(0, len(jv_curr)):
-                        ja.append((float(jv_curr[j]) - float(jv_2back[j])) / two_delta_ts)
-
-
-                    with open(str(Path(self.processed_dir, str(i-1) + ".txt")), "a") as prev_f:
-                        for val in aa:
-                            prev_f.write(str(val) + " ")
-                        prev_f.write('\n')
-                        for val in ja:
-                            prev_f.write(str(val) + " ")
-
-                # Shift all of the measurements by 1
-                av_2back = av_1back
-                av_1back = av_curr
-                av_curr = None
-                jv_2back = jv_1back
-                jv_1back = jv_curr
-                jv_curr = None
-                ts_2back = ts_1back
-                ts_1back = ts_curr
-                ts_curr = None
-
         # Write a txt file to save the dataset length & and first sequence index
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            # First and last don't have accelerations, so ignore them
-            f.write(str(dataset_entries - 2) + " " + str(1))
+            f.write(str(dataset_entries) + " " + str(0))
 
     def get_expected_urdf_name(self):
         return "a1"
+    
+    def get_downloaded_dataset_file_name(self):
+        return "data.bag"
 
     def load_data_at_dataset_seq(self, seq_num: int):
-        """
-        This helper function opens the file named "ros_seq"
-        and loads the position, velocity, and effort information.
-
-        Parameters:
-            ros_seq (int): The sequence number of the ros message
-                whose data should be loaded.
-        """
-        grfs, lin_acc, ang_vel, positions, velocities, torques, ang_acc, joint_accelerations = [], [], [], [], [], [], [], []
+        grfs, lin_acc, ang_vel, positions, velocities, torques = [], [], [], [], [], []
         with open(os.path.join(self.processed_dir,
                                str(seq_num) + ".txt"), 'r') as f:
 
@@ -242,12 +157,6 @@ class QuadSDKDataset(FlexibleDataset):
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 torques.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                ang_acc.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                joint_accelerations.append(float(line[i]))
 
         # Extract the ground truth Z GRF
         z_grfs = []
@@ -255,89 +164,7 @@ class QuadSDKDataset(FlexibleDataset):
             start_index = val * 3
             z_grfs.append(grfs[start_index + 2])
 
-        return lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_accelerations
-
-    def load_data_sorted(self, seq_num: int):
-        """
-        Loads data from the dataset at the provided sequence number.
-        However, the positions, velocities, joint acceleratinos, and torques 
-        are sorted so that they match the order found in self.joint_nodes_for_attributes.
-        Additionally, the Z_GRF_labels are sorted so it matches the order
-        found in self.foot_urdf_names.
-        """
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_at_dataset_seq(seq_num)
-
-        # Sort the joint information
-        positions_sorted, velocities_sorted, torques_sorted, joint_acc_sorted  = [], [], [], []
-        for urdf_node_name in self.joint_nodes_for_attributes:
-            array_index = self.urdf_name_to_dataset_array_index[urdf_node_name]
-            positions_sorted.append(positions[array_index])
-            velocities_sorted.append(velocities[array_index])
-            torques_sorted.append(torques[array_index])
-            joint_acc_sorted.append(joint_acc[array_index])
-
-        # Sort the Z_GRF_labels
-        z_grfs_sorted = []
-        for index in self.gt_grf_array_indices:
-            z_grfs_sorted.append(z_grfs[index])
-
-        return lin_acc, ang_vel, positions_sorted, velocities_sorted, torques_sorted, z_grfs_sorted, ang_acc, joint_acc_sorted
-
-    def get_helper_mlp(self, idx):
-        # Make the network inputs
-        x = None
-
-        # Load the rosbag information
-        for i in range(0, self.history_length):
-            lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + i)
-            tensor = torch.tensor((lin_acc + ang_vel + ang_acc + positions + velocities + joint_acc + torques), dtype=torch.float64).unsqueeze(0)
-            if x is None:
-                x = tensor
-            else:
-                x = torch.cat((x, tensor), 0)
-        if len(x.size()) > 1:
-            x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
-
-        # Create the ground truth lables
-        lin_acc, ang_vel, positions, velocities, torques, ground_truth_labels, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
-        y = torch.tensor(ground_truth_labels, dtype=torch.float64)
-        return x, y
-
-    def get_helper_gnn(self, idx):
-        # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), 4 * self.history_length), dtype=torch.float64)
-
-        # For each dataset entry we include in the history
-        for j in range(0, self.history_length):
-            # Load the data for this entry
-            lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + j)
-
-            # For each joint specified
-            for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
-
-                # Find the index of this particular node
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
-                # Add the features to x matrix
-                x[node_index, 0*self.history_length+j] = positions[i]
-                x[node_index, 1*self.history_length+j] = velocities[i]
-                x[node_index, 2*self.history_length+j] = joint_acc[i]
-                x[node_index, 3*self.history_length+j] = torques[i]
-
-        # Create the edge matrix
-        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
-
-        # Create the labels
-        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
-            self.first_index + idx + self.history_length - 1)
-        y = torch.tensor(z_grfs, dtype=torch.float64)
-
-        # Create the graph
-        graph = Data(x=x, edge_index=self.edge_matrix_tensor,
-                     y=y, num_nodes=self.robotGraph.get_num_nodes())
-        return graph
+        return lin_acc, ang_vel, positions, velocities, torques, None, None, z_grfs
 
     def get_helper_heterogeneous_gnn(self, idx):
         # Create the Heterogeneous Data object

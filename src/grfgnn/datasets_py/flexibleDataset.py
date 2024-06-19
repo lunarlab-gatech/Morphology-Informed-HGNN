@@ -5,6 +5,7 @@ from rosbags.highlevel import AnyReader
 from pathlib import Path
 from torchvision.datasets.utils import download_file_from_google_drive
 import os
+import numpy as np
 
 class FlexibleDataset(Dataset):
     """
@@ -30,10 +31,10 @@ class FlexibleDataset(Dataset):
                  pre_filter=None):
         """
         Parameters:
-                history_length (int): The length of the history of inputs to use
-                    for our graph entries.
                 data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
                     Determines how the get() method returns data.
+                history_length (int): The length of the history of inputs to use
+                    for our graph entries.
         """
         # Check for valid data format
         self.data_format = data_format
@@ -42,7 +43,8 @@ class FlexibleDataset(Dataset):
                 "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'."
             )
 
-        # Setup the directories for raw and processed data
+        # Setup the directories for raw and processed data, download it, 
+        # and process
         self.root = root
         super().__init__(str(root), transform, pre_transform, pre_filter)
 
@@ -83,8 +85,53 @@ class FlexibleDataset(Dataset):
                 "\" robot.")
 
         # Get node name to index mapping
-        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict(
-        )
+        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict()
+
+        # Define the order that the sorted joint and foot data should be in
+        self.foot_node_sorted_order = self.get_foot_node_sorted_order()
+
+        # Precompute the array indexes matching the defined orders for joints and feet
+        self.joint_node_indices_sorted = []
+        for urdf_node_name in self.get_joint_node_sorted_order():
+            self.joint_node_indices_sorted.append(self.urdf_name_to_dataset_array_index[urdf_node_name])
+        self.foot_node_indices_sorted = []
+        for urdf_node_name in self.get_foot_node_sorted_order():
+            self.foot_node_indices_sorted.append(self.urdf_name_to_dataset_array_index[urdf_node_name])
+
+        # Precompute the return value for get_foot_node_indices_matching_labels()
+        self.foot_node_indices_of_graph_matching_labels = []
+        for urdf_name in self.get_foot_node_sorted_order():
+            self.foot_node_indices_of_graph_matching_labels.append(self.urdf_name_to_graph_index[urdf_name])
+
+    def get_urdf_name_to_dataset_array_index(self) -> dict:
+        """
+        Returns a dictionary that maps strings of
+        URDF joint names to the corresponding index
+        in the dataset array. This allows us to know
+        which dataset entries correspond to the which 
+        joints in the URDF.
+        """
+        raise self.notImplementedError
+
+    def get_joint_node_sorted_order(self) -> list[str]:
+        """
+        Returns an array with the names of the URDF joints
+        corresponding to actual joints on the robot.
+
+        They are arranged in the order we want the data sorted
+        for the load_data_sorted() method.
+        """
+        raise self.notImplementedError
+
+    def get_foot_node_sorted_order(self) -> list[str]:
+        """
+        Returns an array with the names of the URDF
+        joints corresponding to the robot feet.
+        
+        They are arranged in the order we want the data sorted
+        for the load_data_sorted() method.
+        """
+        raise self.notImplementedError
 
     def get_data_format(self) -> str:
         """
@@ -95,17 +142,25 @@ class FlexibleDataset(Dataset):
     def get_google_drive_file_id(self):
         """
         Method for child classes to choose which sequence to load;
-        used if the dataset is
+        used if the dataset is downloaded.
+        """
+        raise self.notImplementedError
+    
+    def get_downloaded_dataset_file_name(self):
+        """
+        Method for defining the new name of the downloaded
+        dataset file.
         """
         raise self.notImplementedError
 
     @property
     def raw_file_names(self):
-        return ['data.bag']
+        return [self.get_downloaded_dataset_file_name()]
 
     def download(self):
         download_file_from_google_drive(self.get_google_drive_file_id(),
-                                        Path(self.root, 'raw'), "data.bag")
+                                        Path(self.root, 'raw'),
+                                        self.get_downloaded_dataset_file_name())
 
     @property
     def processed_file_names(self):
@@ -142,10 +197,8 @@ class FlexibleDataset(Dataset):
             the graph nodes that should output the ground truth labels 
             at the same corresponding index.
         """
-        if self.foot_node_indices is None:
-            raise self.notImplementedError
-        else:
-            return self.foot_node_indices
+        return self.foot_node_indices_of_graph_matching_labels
+
 
     def get_start_and_end_seq_ids(self):
         """
@@ -165,18 +218,147 @@ class FlexibleDataset(Dataset):
 
     def len(self):
         return self.length
+    
+    def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        This helper function opens the txt file at "ros_seq"
+        and loads dataset information for that sequence.
 
-    def get_helper_mlp(self, idx):
+        Parameters:
+            seq_num (int): The sequence number of the txt file
+                whose data should be loaded.
+
+        Returns:
+            lin_acc - IMU linear acceleration
+            ang_vel - IMU angular velocity
+            j_p - Joint positions 
+            j_v - Joint velocities
+            j_T - Joint Torques
+            f_p - Foot position
+            f_v - Foot velocity
+            labels - The Dataset labels (either Z direction GRFs, or contact states) 
+
+            NOTE: If the dataset doesn't have a certain value, or we aren't currently
+            using it, the parameter will be filled with a value of None.
+        """
+        # TODO: Make sure child classes return these as NUMPY arrays
+        
+        raise self.notImplementedError
+    
+    def load_data_sorted(self, seq_num: int):
+        """
+        Loads data from the dataset at the provided sequence number.
+        However, the joint and feet information are sorted so that 
+        they match the order returned by get_joint_node_sorted_order().
+
+        Additionally, the labels are sorted so it matches the order
+        returned by get_foot_node_sorted_order().
+
+        Parameters:
+            seq_num (int): The sequence number of the txt file
+                whose data should be loaded.
+
+        Returns:
+            Same values as load_data_at_dataset_seq(), but order of
+            values inside arrays have been sorted.
+        """
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(seq_num)
+
+        # Sort the joint information
+        unsorted_list = [j_p, j_v, j_T, f_p, f_v]
+        sorted_list = []
+        for unsorted_array in unsorted_list:
+            if unsorted_array is not None:
+                sorted_list.append(unsorted_array[self.joint_node_indices_sorted])
+            else:
+                sorted_list.append(None)
+
+        # Sort the ground truth labels
+        labels_sorted = labels[self.foot_node_indices_sorted]
+
+        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_list[3], sorted_list[4], labels_sorted
+
+    def get_helper_mlp(self, idx: int):
         """
         Gets a Dataset entry if we are using an MLP model.
         """
-        raise self.notImplementedError
 
-    def get_helper_gnn(self, idx):
+        # Make the network inputs
+        x = None
+
+        # Find out which variables we have to use
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + i)
+        variables_to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
+        variables_to_use = []
+        for i, variable in enumerate(variables_to_check):
+            if variable is not None:
+                variables_to_use.append(i)
+        variables_to_use = np.array(variables_to_use)
+
+        # Load the dataset information information
+        for i in range(0, self.history_length):
+
+            # Only add variables that aren't None
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + i)
+            dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
+            final_input = []
+            for y in variables_to_use:
+                final_input = final_input + dataset_inputs[y] 
+
+            # Construct the input tensor
+            tensor = torch.tensor((final_input), 
+                                  dtype=torch.float64).unsqueeze(0)
+            if x is None: x = tensor
+            else: x = torch.cat((x, tensor), 0)
+
+        # Flatten the tensor if necessary
+        if len(x.size()) > 1:
+            x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
+
+        # Create the ground truth labels
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
+        y = torch.tensor(labels, dtype=torch.float64)
+        return x, y
+
+    def get_helper_gnn(self, idx: int):
         """
         Get a dataset entry if we are using a GNN model.
         """
-        raise self.notImplementedError
+
+        # Create a note feature matrix
+        x = torch.ones((self.robotGraph.get_num_nodes(), 4 * self.history_length), dtype=torch.float64)
+
+        # For each dataset entry we include in the history
+        for j in range(0, self.history_length):
+            # Load the data for this entry
+            lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(self.first_index + idx + j)
+
+            # For each joint specified
+            for i, urdf_node_name in enumerate(self.joint_nodes_for_attributes):
+
+                # Find the index of this particular node
+                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+
+                # Add the features to x matrix
+                x[node_index, 0*self.history_length+j] = positions[i]
+                x[node_index, 1*self.history_length+j] = velocities[i]
+                x[node_index, 2*self.history_length+j] = joint_acc[i]
+                x[node_index, 3*self.history_length+j] = torques[i]
+
+        # Create the edge matrix
+        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
+        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
+                                               dtype=torch.long)
+
+        # Create the labels
+        lin_acc, ang_vel, positions, velocities, torques, z_grfs, ang_acc, joint_acc = self.load_data_sorted(
+            self.first_index + idx + self.history_length - 1)
+        y = torch.tensor(z_grfs, dtype=torch.float64)
+
+        # Create the graph
+        graph = Data(x=x, edge_index=self.edge_matrix_tensor,
+                     y=y, num_nodes=self.robotGraph.get_num_nodes())
+        return graph
 
     def get_helper_heterogeneous_gnn(self, idx):
         """
