@@ -95,9 +95,10 @@ class QuadSDKDataset(FlexibleDataset):
             # Track how many entries we have
             dataset_entries += 1
 
-        # Write a txt file to save the dataset length & and first sequence index
+        # Write a txt file to save the dataset length, first sequence index,
+        # and the download id (for ensuring we have the right dataset later)
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(dataset_entries) + " " + str(0))
+            f.write(str(dataset_entries) + " " + str(0) + " " + self.get_google_drive_file_id())
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================    
     

@@ -77,6 +77,13 @@ class FlexibleDataset(Dataset):
                 )
             self.first_index = int(data[1])
 
+            # Check to make sure that this dataset id matches what we expect.
+            # Protects against users passing a folder path to a different
+            # dataset sequence, causing a different dataset to be used than
+            # expected.
+            if self.get_google_drive_file_id() != data[2]:
+                raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
+
         # Parse the robot graph from the URDF file
         if self.data_format == 'heterogeneous_gnn':
             self.robotGraph = HeterogeneousRobotGraph(urdf_path,
@@ -134,6 +141,10 @@ class FlexibleDataset(Dataset):
         """
         Method for child classes to choose which sequence to load;
         used if the dataset is downloaded.
+
+        Additionally, used to check already downloaded datasets to
+        make sure the user didn't accidentally pass a path to
+        a different sequence.
         """
         raise self.notImplementedError
     

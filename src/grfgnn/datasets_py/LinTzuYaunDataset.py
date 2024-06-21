@@ -58,7 +58,7 @@ class LinTzuYaunDataset(FlexibleDataset):
 
         # Write a txt file to save the dataset length & and first sequence index
         with open(str(Path(self.processed_dir, "info.txt")), "w") as f:
-            f.write(str(dataset_entries) + " " + str(0))
+            f.write(str(dataset_entries) + " " + str(0) + self.get_google_drive_file_id())
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     def get_base_node_sorted_order(self) -> list[str]:
