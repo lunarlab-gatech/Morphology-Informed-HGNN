@@ -4,10 +4,15 @@ from pathlib import Path
 
 class LinTzuYaunDataset(FlexibleDataset):
     """
-    Dataset class for the MIT Mini Cheetah Contact
-    Dataset found at https://github.com/UMich-CURLY/deep-contact-estimator .
+    Dataset class for the MIT Mini Cheetah Contact Dataset
+    found at https://github.com/UMich-CURLY/deep-contact-estimator .
     """
 
+    # ========================= DOWNLOADING ==========================
+    def get_downloaded_dataset_file_name(self):
+        return "data.mat"
+
+    # ========================= PROCESSING ===========================
     def process(self):
         # Load the .mat file
         path_to_mat = Path(self.root, 'raw', 'data.mat')
@@ -55,8 +60,25 @@ class LinTzuYaunDataset(FlexibleDataset):
         with open(str(Path(self.processed_dir, "info.txt")), "w") as f:
             f.write(str(dataset_entries) + " " + str(0))
 
-    def load_data_at_dataset_seq(self, seq_num: int):
+    # ============= DATA SORTING ORDER AND MAPPINGS ==================
+    def get_base_node_sorted_order(self) -> list[str]:
+        raise self.notImplementedError
 
+    def get_joint_node_sorted_order(self) -> list[str]:
+        raise self.notImplementedError
+
+    def get_foot_node_sorted_order(self) -> list[str]:
+        raise self.notImplementedError
+    
+    def get_urdf_name_to_dataset_array_index(self) -> dict:
+        raise self.notImplementedError
+
+    # ===================== DATASET PROPERTIES =======================
+    def get_expected_urdf_name(self):
+        return "miniCheetah"
+
+    # ======================== DATA LOADING ==========================
+    def load_data_at_dataset_seq(self, seq_num: int):
         contact_labels, lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v = [], [], [], [], [], []
         with open(str(Path(self.processed_dir, str(seq_num) + ".txt")), 'r') as f:
 
@@ -91,15 +113,10 @@ class LinTzuYaunDataset(FlexibleDataset):
 
         return lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, contact_labels
     
-    def get_expected_urdf_name(self):
-        return "miniCheetah"
-    
-    def get_downloaded_dataset_file_name(self):
-        return "data.mat"
+# ================================================================
+# ===================== DATASET SEQUENCES ========================
+# ================================================================
 
 class LinTzuYaunDataset_air_jumping_gait(LinTzuYaunDataset):
     def get_google_drive_file_id(self):
         return "17h4kMUKMymG_GzTZTMHPgj-ImDKZMg3R"
-    
-    def get_start_and_end_seq_ids(self):
-        return 0, 48971
