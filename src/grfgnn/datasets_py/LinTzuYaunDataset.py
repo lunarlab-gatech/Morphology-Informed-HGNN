@@ -1,6 +1,7 @@
 from .flexibleDataset import FlexibleDataset
 import scipy.io as sio
 from pathlib import Path
+import numpy as np
 
 class LinTzuYaunDataset(FlexibleDataset):
     """
@@ -20,7 +21,6 @@ class LinTzuYaunDataset(FlexibleDataset):
 
         # Get the number of dataset entries in the file
         dataset_entries = mat_data['contacts'].shape[0]
-        print(dataset_entries)
 
         # Save each entry into its own text file
         for i in range(0, dataset_entries):
@@ -58,20 +58,48 @@ class LinTzuYaunDataset(FlexibleDataset):
 
         # Write a txt file to save the dataset length & and first sequence index
         with open(str(Path(self.processed_dir, "info.txt")), "w") as f:
-            f.write(str(dataset_entries) + " " + str(0) + self.get_google_drive_file_id())
+            f.write(str(dataset_entries) + " " + str(0) + " " + self.get_google_drive_file_id())
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     def get_base_node_sorted_order(self) -> list[str]:
-        raise self.notImplementedError
+        return ['floating_base']
 
     def get_joint_node_sorted_order(self) -> list[str]:
-        raise self.notImplementedError
+        return ['FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint',
+                'FL_hip_joint', 'FL_thigh_joint',  'FL_calf_joint',
+                'RR_hip_joint', 'RR_thigh_joint', 'RR_calf_joint',
+                'RL_hip_joint', 'RL_thigh_joint', 'RL_calf_joint']
 
     def get_foot_node_sorted_order(self) -> list[str]:
-        raise self.notImplementedError
+        return ['FR_foot_fixed',
+               'FL_foot_fixed',
+               'RR_foot_fixed',
+               'RL_foot_fixed']
     
     def get_urdf_name_to_dataset_array_index(self) -> dict:
-        raise self.notImplementedError
+
+        # Order of joint data can be found here: https://github.com/mit-biomimetics/Cheetah-Software/blob/master/documentation/getting_started.md
+        # Note: Because they refer to the first joint as the abduction/adduction joint, and the second joint as the hip joint, this means that
+        # our "hip_joint" corresponds to their abduction/adduction joint, and our "thigh_joint" corresponds to what they call the hip joint.
+        # Dataset order of label data can be found here: https://github.com/UMich-CURLY/deep-contact-estimator/blob/master/utils/mat2numpy.py
+        return {
+            'FR_hip_joint': 0,
+            'FR_thigh_joint': 1,
+            'FR_calf_joint': 2,
+            'FL_hip_joint': 3,
+            'FL_thigh_joint': 4,
+            'FL_calf_joint': 5,
+            'RR_hip_joint': 6,
+            'RR_thigh_joint': 7,
+            'RR_calf_joint': 8,
+            'RL_hip_joint': 9,
+            'RL_thigh_joint': 10,
+            'RL_calf_joint': 11,
+
+            'FR_foot_fixed': 0,
+            'FL_foot_fixed': 1,
+            'RR_foot_fixed': 2,
+            'RL_foot_fixed': 3}
 
     # ===================== DATASET PROPERTIES =======================
     def get_expected_urdf_name(self):
@@ -79,7 +107,7 @@ class LinTzuYaunDataset(FlexibleDataset):
 
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
-        contact_labels, lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v = [], [], [], [], [], []
+        contact_labels, lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v = [], [], [], [], [], [], [], []
         with open(str(Path(self.processed_dir, str(seq_num) + ".txt")), 'r') as f:
 
             line = f.readline().split(" ")[:-1]
@@ -111,6 +139,16 @@ class LinTzuYaunDataset(FlexibleDataset):
             for i in range(0, len(line)):
                 f_v.append(float(line[i]))
 
+        # Convert them all to numpy arrays
+        lin_acc = np.array(lin_acc)
+        ang_vel = np.array(ang_vel)
+        j_p = np.array(j_p)
+        j_v = np.array(j_v)
+        j_T = np.array(j_T)
+        f_p = np.array(f_p)
+        f_v = np.array(f_v)
+        contact_labels = np.array(contact_labels)
+
         return lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, contact_labels
     
 # ================================================================
@@ -120,3 +158,19 @@ class LinTzuYaunDataset(FlexibleDataset):
 class LinTzuYaunDataset_air_jumping_gait(LinTzuYaunDataset):
     def get_google_drive_file_id(self):
         return "17h4kMUKMymG_GzTZTMHPgj-ImDKZMg3R"
+    
+class LinTzuYaunDataset_air_walking_gait(LinTzuYaunDataset):
+    def get_google_drive_file_id(self):
+        return "17c_E-S_yTeeV_DCmcgVT7_J90cRIwg0z"
+    
+class LinTzuYaunDataset_asphalt_road(LinTzuYaunDataset):
+    def get_google_drive_file_id(self):
+        return "1jty0yqd7gywNJEkS_V2hivZ-79BGuCgA"
+    
+class LinTzuYaunDataset_old_asphalt_road(LinTzuYaunDataset):
+    def get_google_drive_file_id(self):
+        return "1Y4SHVLqQKQ14leBdpfEQv1Tq5uQUIEK8"
+    
+class LinTzuYaunDataset_concrete_right_circle(LinTzuYaunDataset):
+    def get_google_drive_file_id(self):
+        return "1NnEnd0PFFT6XozErUNi3ORGVSuFkyjeJ"
