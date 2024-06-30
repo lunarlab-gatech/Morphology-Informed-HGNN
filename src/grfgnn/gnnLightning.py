@@ -545,15 +545,36 @@ def train_model(train_dataset: Subset,
     """
 
     # Make sure the underlying datasets have the same data_format
-    train_data_format = train_dataset.dataset.get_data_format()
-    val_data_format = val_dataset.dataset.get_data_format()
-    test_data_format = test_dataset.dataset.get_data_format()
+    # Assume that they are all Subsets, and that the underlying dataset
+    # is all the same type.
+    train_data_format, val_data_format, test_data_format = None, None, None
+    if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
+        train_data_format = train_dataset.dataset.datasets[0].dataset.get_data_format()
+        val_data_format = val_dataset.dataset.datasets[0].dataset.get_data_format()
+        test_data_format = test_dataset.dataset.datasets[0].get_data_format()
+    elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
+        train_data_format = train_dataset.dataset.get_data_format()
+        val_data_format = val_dataset.dataset.get_data_format()
+        test_data_format = test_dataset.dataset.get_data_format()
+    else:
+        raise ValueError("Unexpected Data format")
     if train_data_format != val_data_format or val_data_format != test_data_format:
         raise ValueError("Data formats of datasets don't match")
 
     # Extract important information from the Subsets
     model_type = train_data_format
-    ground_truth_label_indices = train_dataset.dataset.get_foot_node_indices_matching_labels()
+    ground_truth_label_indices = None
+    if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
+        ground_truth_label_indices = train_dataset.dataset.datasets[0].dataset.get_foot_node_indices_matching_labels()
+    elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
+        ground_truth_label_indices = train_dataset.dataset.get_foot_node_indices_matching_labels()
+
+    data_metadata = None
+    if model_type == 'heterogeneous_gnn':
+        if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
+            data_metadata = train_dataset.dataset.datasets[0].dataset.get_data_metadata()
+        elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
+            data_metadata = train_dataset.dataset.get_data_metadata(),
 
     # Set appropriate settings for testing mode
     limit_train_batches = None
@@ -609,7 +630,7 @@ def train_model(train_dataset: Subset,
                                  'joint'].edge_attr.size()[1],
             num_layers=num_layers,
             y_indices=ground_truth_label_indices,
-            data_metadata=train_dataset.dataset.get_data_metadata(),
+            data_metadata=data_metadata,
             dummy_batch=dummy_batch,
             optimizer=optimizer,
             lr=lr, 
@@ -628,7 +649,7 @@ def train_model(train_dataset: Subset,
         wandb_logger.experiment.config["batch_size"] = batch_size
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
-        path_to_save = str(Path("models", model_type + names.get_full_name()))
+        path_to_save = str(Path("models", model_type + "_" + names.get_full_name()))
 
     # Set up precise checkpointing
     monitor = None

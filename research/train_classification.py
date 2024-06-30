@@ -1,4 +1,5 @@
 from asyncio import SafeChildWatcher
+from venv import logger
 import grfgnn.datasets_py.LinTzuYaunDataset as linData
 from pathlib import Path
 import numpy as np
@@ -64,9 +65,14 @@ def main():
     small_pebble = linData.LinTzuYaunDataset_small_pebble(
         Path(Path('.').parent, 'datasets', 'LinTzuYaun-SP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length)
     test_dataset = torch.utils.data.ConcatDataset([air_jumping_gait, concrete_pronking, concrete_right_circle, forest, small_pebble])
+    
+    # Convert them to subsets
+    train_dataset = torch.utils.data.Subset(train_dataset, np.arange(0, train_dataset.__len__()))
+    val_dataset = torch.utils.data.Subset(val_dataset, np.arange(0, val_dataset.__len__()))
+    test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32)
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, logger_project_name="grfgnn-classification",  regression=False)
 
 if __name__ == "__main__":
     main()
