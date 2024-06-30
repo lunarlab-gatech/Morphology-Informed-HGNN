@@ -3,5 +3,5 @@ from .datasets_py.annGRFDataset import annGRFDataset
 from .datasets_py.deprecatedDatasets import CerberusStreetDataset, CerberusTrackDataset, CerberusCampusDataset, Go1SimulatedDataset
 from .datasets_py.flexibleDataset import FlexibleDataset
 from .datasets_py.quadSDKDataset import QuadSDKDataset, QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
-from .visualization import visualize_derivatives, visualize_dataset_graph, visualize_model_outputs
+from .visualization import visualize_derivatives, visualize_dataset_graph, visualize_model_outputs_regression
 

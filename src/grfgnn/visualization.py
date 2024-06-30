@@ -7,6 +7,7 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data, HeteroData
 import networkx
+from torchmetrics import ConfusionMatrix
 
 def display_on_axes(axes, estimated, ground_truth, title):
     """
@@ -18,7 +19,7 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.legend()
     axes.set_title(title)
 
-def visualize_model_outputs(pred, labels, path_to_file: Path = None):
+def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
     """
     Helper method that creates a figure between the predicted
     GRF values and the actual GRF values, and saves it at 
@@ -31,8 +32,8 @@ def visualize_model_outputs(pred, labels, path_to_file: Path = None):
 
     # Display the results
     titles = [
-        "Front Left Foot Forces", "Front Right Foot Forces",
-        "Rear Left Foot Forces", "Rear Right Foot Forces"
+        "Foot 0 Forces", "Foot 1 Forces",
+        "Foot 2 Forces", "Foot 3 Forces"
     ]
     for i in range(0, 4):
         display_on_axes(axes[i], pred[:, i], labels[:, i], titles[i])
@@ -41,6 +42,18 @@ def visualize_model_outputs(pred, labels, path_to_file: Path = None):
     print(path_to_file)
     if path_to_file is not None:
         plt.savefig(path_to_file)
+
+
+def visualize_model_outputs_classification(pred, labels, path_to_file: Path = None):
+    """
+    Helper method that plots the difference between the predicted class
+    and the actual.
+    TODO: Plot the difference between 16 state contact and predicted.
+    TODO: Plot the contact state per leg.
+    TODO: Generate a confusion matrix.
+    """
+
+    raise NotImplementedError
 
 def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
     """

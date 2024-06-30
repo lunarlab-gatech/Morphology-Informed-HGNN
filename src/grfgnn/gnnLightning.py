@@ -1,3 +1,4 @@
+import re
 import torch
 from torch import optim, nn
 import lightning as L
@@ -10,6 +11,8 @@ from pathlib import Path
 import names
 from torch.utils.data import Subset
 import torchmetrics
+import numpy as np
+from .customMetrics import CrossEntropyLossMetric
 
 def get_foot_node_outputs_gnn(out_raw, batch, y_indices, model_type):
     """
@@ -19,10 +22,11 @@ def get_foot_node_outputs_gnn(out_raw, batch, y_indices, model_type):
     """
 
     second_dim_size = None
+    shape = out_raw.shape
     if model_type == "gnn":
         second_dim_size = int(batch.x.shape[0] / batch.batch_size)
     elif model_type == "heterogeneous_gnn":
-        second_dim_size = int(batch["foot"].x.shape[0] / batch.batch_size)
+        second_dim_size = int(shape[0] * shape[1] / batch.batch_size)
     else:
         raise ValueError("Invalid model_type")
 
@@ -32,8 +36,10 @@ def get_foot_node_outputs_gnn(out_raw, batch, y_indices, model_type):
     # Get the outputs from the foot nodes
     truth_tensors = []
     for index in y_indices:
-        truth_tensors.append(out_nodes_by_batch[:, index])
-    y_pred = torch.stack(truth_tensors).swapaxes(0, 1)
+        start_ind = int(shape[1] * index)
+        end_ind = int(start_ind + shape[1])
+        truth_tensors.append(out_nodes_by_batch[:, start_ind:end_ind])
+    y_pred = torch.cat(truth_tensors, dim=1)
     return y_pred
 
 def get_foot_node_labels_gnn(batch, y_indices):
@@ -43,14 +49,55 @@ def get_foot_node_labels_gnn(batch, y_indices):
     """
     return torch.reshape(batch.y, (batch.batch_size, len(y_indices)))
 
+
+def gnn_classification_output(y: torch.Tensor, y_pred: torch.Tensor):
+    """
+    Convert the y labels from Bx[4] individual foot contact classes
+    into a single Bx1 class out of 16 options.
+
+    Also, convert the y_pred from Bx[4x2] individual foot contact probabilities
+    into a single Bx16 class probability which comprises the four states.
+    """
+    
+    # Convert y labels from four sets of 2 classes to one set of 16 classes
+    y_np = y.cpu().numpy()
+    y_new = np.zeros((y.shape[0], 1))
+    for i in range(0, y.shape[0]):
+        y_new[i] = y_np[i,0] * 8 + y_np[i,1] * 4 + y_np[i,2] * 2  + y_np[i,3]
+    y_new = torch.tensor(y_new, dtype=int)
+
+    # Convert y_pred from two class predictions per foot to a single 16 class prediction
+    y_pred_new = torch.zeros((y_pred.shape[0], 16))
+    for i in range(0, y_pred.shape[0]):
+        for j in range(0, 16):
+            foot_0_prob = y_pred[i,int(np.floor(j / 8.0) % 2)]
+            foot_1_prob = y_pred[i,int((np.floor(j / 4.0) % 2) + 2)]
+            foot_2_prob = y_pred[i,int((np.floor(j / 2.0) % 2) + 4)]
+            foot_3_prob = y_pred[i,int((j % 2) + 6)]
+            y_pred_new[i,j] = torch.mul(torch.mul(foot_0_prob, foot_1_prob), torch.mul(foot_2_prob, foot_3_prob))
+
+    return y_new, y_pred_new
+
 class GRF_HGNN(torch.nn.Module):
     """
     The Ground Reaction Force Heterogeneous Graph Neural Network model.
     """
 
     def __init__(self, hidden_channels: int, edge_dim: int, num_layers: int, 
-                 out_channels: int, data_metadata, activation_fn = nn.ReLU()):
+                 out_channels: int, data_metadata, regression: bool = True, 
+                 activation_fn = nn.ReLU()):
+        """
+        Parameters:
+            out_channels (int): Only used for regression problems. The number
+                of predicted output values.
+            out_classes (int): Only used for classification problems. The number
+                of predicted output classes PER FOOT. Ex: if out_classes is 2, 
+                then the total # of output classes for all four legs is 2^4, or 16.
+        """
+
+
         super().__init__()
+        self.regression = regression
 
         # Create the first layer encoder to convert features into embeddings
         # Hopefully for all node and edge features
@@ -79,7 +126,13 @@ class GRF_HGNN(torch.nn.Module):
 
         # Create the final linear layer (Decoder) -> Just for nodes of type "foot"
         # Meant to calculate the final GRF values
-        self.decoder = Linear(hidden_channels, out_channels)
+        if self.regression:
+            self.decoder = Linear(hidden_channels, out_channels)
+        else: # Add a Softmax for classification problems
+            modules = []
+            modules.append(nn.Linear(hidden_channels, 2))
+            modules.append(nn.LogSoftmax(dim=1))
+            self.decoder = nn.Sequential(*modules)
 
     def forward(self, x_dict, edge_index_dict):
         x_dict = self.encoder(x_dict)
@@ -98,61 +151,93 @@ class Base_Lightning(L.LightningModule):
     optimizer.
     """
 
-    def __init__(self, optimizer: str, lr: float):
-        # Setup certain optimization and learning rate parameters
+    def __init__(self, optimizer: str, lr: float, regression: bool):
+        """
+        Parameters:
+            optimizer (str) - A string representing the optimizer to use. 
+                Currently supports "adam" and "sgd".
+            lr (float) - The learning rate of the optimizer.
+            regression (bool) - If true, use regression losses. If false,
+                use classification losses.
+        """
+
+        # Setup input parameters
         super().__init__()
         self.optimizer = optimizer
         self.lr = lr
-        self.metric_mse = torchmetrics.regression.MeanSquaredError(squared=True)
-        self.metric_rmse = torchmetrics.regression.MeanSquaredError(squared=False)
-        self.metric_l1 = torchmetrics.regression.MeanAbsoluteError()
+        self.regression = regression
+
+        # Setup the metrics
+        self.metric_mse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=True)
+        self.metric_rmse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=False)
+        self.metric_l1: torchmetrics.MeanAbsoluteError = torchmetrics.regression.MeanAbsoluteError()
+        self.metric_ce = CrossEntropyLossMetric()
+
+        # Setup variables to hold the losses
+        self.mse_loss = None
+        self.rmse_loss = None
+        self.l1_loss = None
+        self.ce_loss = None
 
     # ======================= Logging =======================
-    def log_losses(self, mse_loss, rmse_loss, l1_loss, step_name: str, on_step: bool):
+    def log_losses(self, step_name: str, on_step: bool):
         # Ensure one is enabled and one is disabled
         on_epoch = not on_step
 
         # Log the losses
-        self.log(step_name + "_MSE_loss", 
-                 mse_loss,
-                 on_step=on_step,
-                 on_epoch=on_epoch)
-        self.log(step_name + "_RMSE_loss",
-                 rmse_loss,
-                 on_step=on_step,
-                 on_epoch=on_epoch)
-        self.log(step_name + "_L1_loss",
-                 l1_loss,
-                 on_step=on_step,
-                 on_epoch=on_epoch)
+        if self.regression:
+            self.log(step_name + "_MSE_loss", 
+                    self.mse_loss,
+                    on_step=on_step,
+                    on_epoch=on_epoch)
+            self.log(step_name + "_RMSE_loss",
+                    self.rmse_loss,
+                    on_step=on_step,
+                    on_epoch=on_epoch)
+            self.log(step_name + "_L1_loss",
+                    self.l1_loss,
+                    on_step=on_step,
+                    on_epoch=on_epoch)
+        else:
+            self.log(step_name + "_CE_loss", 
+                    self.ce_loss,
+                    on_step=on_step,
+                    on_epoch=on_epoch)
     
     # ======================= Loss Calculation =======================
-    def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor):
-        y = y.flatten()
-        y_pred = y_pred.flatten()
-        mse_loss = self.metric_mse(y, y_pred)
-        rmse_loss = self.metric_rmse(y, y_pred)
-        l1_loss = self.metric_l1(y, y_pred)
-        return mse_loss, rmse_loss, l1_loss
+    def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor) -> None:
+        if self.regression:
+            y = y.flatten()
+            y_pred = y_pred.flatten()
+            self.mse_loss = self.metric_mse(y, y_pred)
+            self.rmse_loss = self.metric_rmse(y, y_pred)
+            self.l1_loss = self.metric_l1(y, y_pred)
+        else:
+            self.ce_loss = self.metric_ce(y.squeeze(), y_pred)
     
-    def calculate_losses_epoch(self):
-        mse_loss = self.metric_mse.compute()
-        rmse_loss = self.metric_rmse.compute()
-        l1_loss = self.metric_l1.compute()
-        return mse_loss, rmse_loss, l1_loss
+    def calculate_losses_epoch(self) -> None:
+        if self.regression:
+            self.mse_loss = self.metric_mse.compute()
+            self.rmse_loss = self.metric_rmse.compute()
+            self.l1_loss = self.metric_l1.compute()
+        else:
+            self.ce_loss = self.metric_ce.compute()
     
-    def reset_all_metrics(self):
+    def reset_all_metrics(self) -> None:
         self.metric_mse.reset()
         self.metric_rmse.reset()
         self.metric_l1.reset()
+        self.metric_ce.reset()
 
     # ======================= Training =======================
     def training_step(self, batch, batch_idx):
-        y, y_pred, batch_size = self.step_helper_function(
-            batch, batch_idx)
-        mse_loss, rmse_loss, l1_loss = self.calculate_losses_step(y, y_pred)
-        self.log_losses(mse_loss, rmse_loss, l1_loss, "train", on_step=True)
-        return mse_loss
+        y, y_pred, batch_size = self.step_helper_function(batch, batch_idx)
+        self.calculate_losses_step(y, y_pred)
+        self.log_losses("train", on_step=True)
+        if self.regression:
+            return self.mse_loss
+        else:
+            return self.ce_loss
     
     # ======================= Validation =======================
     def on_validation_epoch_start(self):
@@ -161,12 +246,15 @@ class Base_Lightning(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         y, y_pred, batch_size = self.step_helper_function(
             batch, batch_idx)
-        mse_loss, rmse_loss, l1_loss = self.calculate_losses_step(y, y_pred)
-        return mse_loss
+        self.calculate_losses_step(y, y_pred)
+        if self.regression:
+            return self.mse_loss
+        else:
+            return self.ce_loss
     
     def on_validation_epoch_end(self):
-        mse_loss, rmse_loss, l1_loss = self.calculate_losses_epoch()
-        self.log_losses(mse_loss, rmse_loss, l1_loss, "val", on_step=False)
+        self.calculate_losses_epoch()
+        self.log_losses("val", on_step=False)
 
     # ======================= Testing =======================
     def on_test_epoch_start(self):
@@ -175,18 +263,23 @@ class Base_Lightning(L.LightningModule):
     def test_step(self, batch, batch_idx):
         y, y_pred, batch_size = self.step_helper_function(
             batch, batch_idx)
-        mse_loss, rmse_loss, l1_loss = self.calculate_losses_step(y, y_pred)
-        return mse_loss
+        self.calculate_losses_step(y, y_pred)
+        if self.regression:
+            return self.mse_loss
+        else:
+            return self.ce_loss
     
     def on_test_epoch_end(self):
-        mse_loss, rmse_loss, l1_loss = self.calculate_losses_epoch()
-        self.log_losses(mse_loss, rmse_loss, l1_loss, "test", on_step=False)
+        self.calculate_losses_epoch()
+        self.log_losses("test", on_step=False)
 
     # ======================= Prediction =======================
     def predict_step(self, batch, batch_idx):
         y, y_pred, batch_size = self.step_helper_function(
             batch, batch_idx)
-        return y_pred, y
+        if not self.regression:
+            y, y_pred = gnn_classification_output(y, y_pred)
+        return y, y_pred
 
     # ======================= Optimizer =======================
     def configure_optimizers(self):
@@ -216,8 +309,8 @@ class MLP_Lightning(Base_Lightning):
 
     def __init__(self, in_channels: int, hidden_channels: int, 
                  out_channels: int, num_layers: int, 
-                 batch_size: int, optimizer: str = "adam", lr: float = 0.003, 
-                 activation_fn = nn.ReLU()):
+                 batch_size: int, optimizer: str = "adam", lr: float = 0.003,
+                 regression: bool = True, activation_fn = nn.ReLU()):
         """
         Constructor for MLP_Lightning class. Pytorch Lightning
         wrapper around the Pytorch Torchvision MLP class.
@@ -230,21 +323,20 @@ class MLP_Lightning(Base_Lightning):
             batch_size (int) - The size of the batches from the dataloaders.
         """
 
-        super().__init__(optimizer, lr)
+        super().__init__(optimizer, lr, regression)
         self.batch_size = batch_size
+        self.regression = regression
+        if regression is False:
+            raise ValueError("MLP_Lightning currently only supports regressions problems.")
 
         # Create the proper number of layers
         modules = []
-        if num_layers < 1:
-            raise ValueError("num_layers must be 1 or greater")
-        elif num_layers is 1:
-            modules.append(nn.Linear(in_channels, out_channels))
-            modules.append(activation_fn)
+        if num_layers < 2:
+            raise ValueError("num_layers must be 2 or greater")
         elif num_layers is 2:
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
-            modules.append(activation_fn)
         else:
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
@@ -252,7 +344,6 @@ class MLP_Lightning(Base_Lightning):
                 modules.append(nn.Linear(hidden_channels, hidden_channels))
                 modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
-            modules.append(activation_fn)
 
         self.mlp_model = nn.Sequential(*modules)
         self.save_hyperparameters()
@@ -263,13 +354,12 @@ class MLP_Lightning(Base_Lightning):
         batch_size = x.shape[0]
         return y, y_pred, batch_size
 
-
 class GNN_Lightning(Base_Lightning):
 
     def __init__(self, num_node_features: int, hidden_channels: int, 
                  num_layers: int, y_indices: list[int], 
                  optimizer: str = "adam", lr: float = 0.003,
-                 activation_fn = nn.ReLU()):
+                 regression: bool = True, activation_fn = nn.ReLU()):
         """
         Constructor for GCN_Lightning class. Pytorch Lightning
         wrapper around the Pytorch geometric GCN class.
@@ -283,7 +373,7 @@ class GNN_Lightning(Base_Lightning):
                 that should match the ground truch labels provided.
                 All other node outputs of the GCN are ignored.
         """
-        super().__init__(optimizer, lr)
+        super().__init__(optimizer, lr, regression)
         self.gnn_model = GAT(in_channels=num_node_features,
                              hidden_channels=hidden_channels,
                              num_layers=num_layers,
@@ -291,6 +381,8 @@ class GNN_Lightning(Base_Lightning):
                              v2=True,
                              act=activation_fn)
         self.y_indices = y_indices
+        if regression is False:
+            raise ValueError("GNN_Lightning currently only supports regressions problems.")
         self.save_hyperparameters()
 
     def step_helper_function(self, batch, batch_idx):
@@ -300,8 +392,9 @@ class GNN_Lightning(Base_Lightning):
         # Get the outputs from the foot nodes
         y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.y_indices, "gnn")
 
-        # Calculate loss
+        # Get the labels
         y = get_foot_node_labels_gnn(batch, self.y_indices)
+
         return y, y_pred, batch.batch_size
 
 
@@ -311,7 +404,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                  num_layers: int, y_indices: list[int],
                  data_metadata, dummy_batch, 
                  optimizer: str = "adam", lr: float = 0.003,
-                 activation_fn = nn.ReLU()):
+                 regression: bool = True, activation_fn = nn.ReLU()):
         """
         Constructor for Heterogeneous GNN.
 
@@ -325,14 +418,16 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
             data_metadata (tuple) - See https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=to_hetero#torch_geometric.nn.to_hetero_transformer.to_hetero for details.
             dummy_batch - Used to initialize the lazy modules.
         """
-        super().__init__(optimizer, lr)
+        super().__init__(optimizer, lr, regression)
         self.model = GRF_HGNN(hidden_channels=hidden_channels,
                               edge_dim=edge_dim,
                               num_layers=num_layers,
                               out_channels=1,
                               data_metadata=data_metadata,
+                              regression=regression,
                               activation_fn=activation_fn)
         self.y_indices = y_indices
+        self.regression = regression
 
         # Initialize lazy modules
         with torch.no_grad():
@@ -350,6 +445,10 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
 
         # Get the labels
         y = get_foot_node_labels_gnn(batch, self.y_indices)
+
+        # If a classification problem, convert from Bx[4x2] to Bx4x2, and then to a Bx16 class probabilities
+        if not self.regression:
+            y, y_pred = gnn_classification_output(y, y_pred)
         return y, y_pred, batch.batch_size
 
 
@@ -384,14 +483,20 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, shuffle=False, num_workers=15)
 
     # Predict with the model
-    pred = torch.zeros((0, 4))
-    labels = torch.zeros((0, 4))
+    pred = None
+    labels = None
+    if model.regression:
+        pred = torch.zeros((0, 4))
+        labels = torch.zeros((0, 4))
+    else:
+        pred = torch.zeros((0))
+        labels = torch.zeros((0))
     if model_type != 'heterogeneous_gnn':
         trainer = L.Trainer()
         predictions_result = trainer.predict(model, valLoader)
         for batch_result in predictions_result:
-            pred = torch.cat((pred, batch_result[0]), dim=0)
-            labels = torch.cat((labels, batch_result[1]), dim=0)
+            labels = torch.cat((labels, batch_result[0]), dim=0)
+            pred = torch.cat((pred, batch_result[1]), dim=0)
 
     else:  # for 'heterogeneous_gnn'
         device = 'cpu'  # 'cuda' if torch.cuda.is_available() else
@@ -406,6 +511,10 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
 
                 # Get the labels
                 labels_batch = get_foot_node_labels_gnn(batch, model.y_indices)
+
+                if not model.regression:
+                    labels_batch, pred_batch = gnn_classification_output(labels_batch, pred_batch)
+                    pred_batch = torch.argmax(pred_batch, dim=1)
 
                 # Append to the previously collected data
                 pred = torch.cat((pred, pred_batch), dim=0)
@@ -424,7 +533,8 @@ def train_model(train_dataset: Subset,
                 optimizer: str = "adam", 
                 lr: float = 0.003,
                 epochs: int = 100,
-                hidden_size: int = 10):
+                hidden_size: int = 10,
+                regression: bool = True):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -443,8 +553,7 @@ def train_model(train_dataset: Subset,
 
     # Extract important information from the Subsets
     model_type = train_data_format
-    ground_truth_label_indices = train_dataset.dataset.get_foot_node_indices_matching_labels(
-    )
+    ground_truth_label_indices = train_dataset.dataset.get_foot_node_indices_matching_labels()
 
     # Set appropriate settings for testing mode
     limit_train_batches = None
@@ -486,12 +595,13 @@ def train_model(train_dataset: Subset,
     if model_type == 'mlp':
         lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
                                         hidden_size, 4, num_layers,
-                                        batch_size, optimizer, lr)
+                                        batch_size, optimizer, lr, 
+                                        regression)
     elif model_type == 'gnn':
         lightning_model = GNN_Lightning(train_dataset[0].x.shape[1],
                                         hidden_size, num_layers,
                                         ground_truth_label_indices, 
-                                        optimizer, lr)
+                                        optimizer, lr, regression)
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
             hidden_channels=hidden_size,
@@ -502,7 +612,8 @@ def train_model(train_dataset: Subset,
             data_metadata=train_dataset.dataset.get_data_metadata(),
             dummy_batch=dummy_batch,
             optimizer=optimizer,
-            lr=lr)
+            lr=lr, 
+            regression=regression)
     else:
         raise ValueError("Invalid model type.")
 
@@ -520,11 +631,16 @@ def train_model(train_dataset: Subset,
         path_to_save = str(Path("models", model_type + names.get_full_name()))
 
     # Set up precise checkpointing
+    monitor = None
+    if regression:
+        monitor = "val_MSE_loss"
+    else:
+        monitor = "val_CE_loss"
     checkpoint_callback = ModelCheckpoint(
         dirpath=path_to_save,
         filename='{epoch}-{val_MSE_loss:.5f}',
         save_top_k=5,
-        monitor="val_MSE_loss")
+        monitor=monitor)
 
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
