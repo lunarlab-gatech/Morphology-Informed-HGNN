@@ -574,7 +574,7 @@ def train_model(train_dataset: Subset,
         if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
             data_metadata = train_dataset.dataset.datasets[0].dataset.get_data_metadata()
         elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
-            data_metadata = train_dataset.dataset.get_data_metadata(),
+            data_metadata = train_dataset.dataset.get_data_metadata()
 
     # Set appropriate settings for testing mode
     limit_train_batches = None
