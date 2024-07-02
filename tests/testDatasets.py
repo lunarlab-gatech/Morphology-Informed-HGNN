@@ -161,10 +161,7 @@ class TestFlexibleDatasets(unittest.TestCase):
                  0.142860412597656,	8.93650817871094,	-9.21489906311035,	
                  -1.60317611694336,	9.79365158081055,	-9.19449234008789,	
                  0.301589965820313,	-1.47618865966797,	-0.418396085500717]
-        des_t = [3.83072900772095,	-1.07490396499634,	-5.73451375961304,	
-                 -0.0102586150169373,	-0.458358317613602,	-2.62650680541992,	
-                 0.136282473802567,	-0.568077325820923,	-2.89026784896851,	
-                 -4.13393735885620,	-1.81517148017883,	-5.67187976837158]
+        des_t = None
         des_fp = [-0.00335261225700378,	-0.0453704893589020,	-0.356130868196487,	
                   0.0214422345161438,	0.0660574287176132,	-0.301095396280289,	
                   0.0198653340339661,	-0.0634637400507927,	-0.295771747827530,	
@@ -178,7 +175,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
         np.testing.assert_array_almost_equal(v, des_v, 14)
-        np.testing.assert_array_almost_equal(t, des_t, 14)
+        np.testing.assert_equal(t, des_t)
         np.testing.assert_array_almost_equal(fp, des_fp, 14)
         np.testing.assert_array_almost_equal(fv, des_fv, 14)
         np.testing.assert_array_almost_equal(gt, des_gt, 14)
@@ -219,10 +216,6 @@ class TestFlexibleDatasets(unittest.TestCase):
                  0.142860412597656,	8.93650817871094,	-9.21489906311035,	
                  -1.60317611694336,	9.79365158081055,	-9.19449234008789,	
                  0.301589965820313,	-1.47618865966797,	-0.418396085500717,
-                 3.83072900772095,	-1.07490396499634,	-5.73451375961304,	
-                 -0.0102586150169373,	-0.458358317613602,	-2.62650680541992,	
-                 0.136282473802567,	-0.568077325820923,	-2.89026784896851,	
-                 -4.13393735885620,	-1.81517148017883,	-5.67187976837158,
                  -0.00335261225700378,	-0.0453704893589020,	-0.356130868196487,	
                   0.0214422345161438,	0.0660574287176132,	-0.301095396280289,	
                   0.0198653340339661,	-0.0634637400507927,	-0.295771747827530,	
@@ -272,23 +265,23 @@ class TestFlexibleDatasets(unittest.TestCase):
         data: Data = self.lin_dataset_gnn_1.get_helper_gnn(30000)
 
         # Define the desired data
-        des_x = np.array([[1, 1, 1],
-                        [0.0394830703735352, 0.301589965820313,-4.13393735885620],
-                        [-0.420838713645935,-1.47618865966797,-1.81517148017883],
-                        [0.846460103988648,-0.418396085500717,-5.67187976837158],
-                        [1, 1, 1],
-                        [0.000190734863281250,0.142860412597656,-0.0102586150169373],
-                        [-0.625548958778381,8.93650817871094,-0.458358317613602],
-                        [1.45497155189514,-9.21489906311035,-2.62650680541992],
-                        [1, 1, 1],
-                        [0.00858306884765625,-1.60317611694336,0.136282473802567],
-                        [-0.650104880332947,9.79365158081055,-0.568077325820923],
-                        [1.49907255172730,-9.19449234008789,-2.89026784896851],
-                        [1, 1, 1],
-                        [0.0581750869750977,0.0793685913085938,3.83072900772095],
-                        [-0.498899102210999,-1.38095092773438,-1.07490396499634],
-                        [1.01744437217712,0.0102071752771735,-5.73451375961304],
-                        [1, 1, 1]], dtype=np.float64)
+        des_x = np.array([[1, 1],
+                        [0.0394830703735352, 0.301589965820313],
+                        [-0.420838713645935,-1.47618865966797],
+                        [0.846460103988648,-0.418396085500717],
+                        [1, 1],
+                        [0.000190734863281250,0.142860412597656],
+                        [-0.625548958778381,8.93650817871094],
+                        [1.45497155189514,-9.21489906311035],
+                        [1, 1],
+                        [0.00858306884765625,-1.60317611694336],
+                        [-0.650104880332947,9.79365158081055],
+                        [1.49907255172730,-9.19449234008789],
+                        [1, 1],
+                        [0.0581750869750977,0.0793685913085938],
+                        [-0.498899102210999,-1.38095092773438],
+                        [1.01744437217712,0.0102071752771735],
+                        [1, 1]], dtype=np.float64)
         des_y = np.array([1, 0,	0, 1], dtype=np.float64)
         des_nodes = self.quad_dataset_gnn_1.robotGraph.get_num_nodes()
         des_edge = self.quad_dataset_gnn_1.robotGraph.get_edge_index_matrix()
@@ -394,18 +387,18 @@ class TestFlexibleDatasets(unittest.TestCase):
          # Check the node attributes
         base_x = np.array([[0.146148949861527,	0.0223360173404217,	9.58438873291016,
                             0.00771053740754724,	0.0315540358424187,	0.161459520459175]], dtype=np.float64)
-        joint_x = np.array([[0.0394830703735352, 0.301589965820313,-4.13393735885620],
-                            [-0.420838713645935,-1.47618865966797,-1.81517148017883],
-                            [0.846460103988648,-0.418396085500717,-5.67187976837158],
-                            [0.000190734863281250,0.142860412597656,-0.0102586150169373],
-                            [-0.625548958778381,8.93650817871094,-0.458358317613602],
-                            [1.45497155189514,-9.21489906311035,-2.62650680541992],
-                            [0.00858306884765625,-1.60317611694336,0.136282473802567],
-                            [-0.650104880332947,9.79365158081055,-0.568077325820923],
-                            [1.49907255172730,-9.19449234008789,-2.89026784896851],
-                            [0.0581750869750977,0.0793685913085938,3.83072900772095],
-                            [-0.498899102210999,-1.38095092773438,-1.07490396499634],
-                            [1.01744437217712,0.0102071752771735,-5.73451375961304],], dtype=np.float64)
+        joint_x = np.array([[0.0394830703735352, 0.301589965820313],
+                            [-0.420838713645935,-1.47618865966797],
+                            [0.846460103988648,-0.418396085500717],
+                            [0.000190734863281250,0.142860412597656],
+                            [-0.625548958778381,8.93650817871094],
+                            [1.45497155189514,-9.21489906311035],
+                            [0.00858306884765625,-1.60317611694336],
+                            [-0.650104880332947,9.79365158081055],
+                            [1.49907255172730,-9.19449234008789],
+                            [0.0581750869750977,0.0793685913085938],
+                            [-0.498899102210999,-1.38095092773438],
+                            [1.01744437217712,0.0102071752771735],], dtype=np.float64)
         foot_x = np.array([[-0.00486903637647629, 0.0804890319705010, -0.365474313497543, -0.618086814880371,	0.111269362270832, -0.00220335274934769], 
                            [0.0214422345161438,	0.0660574287176132,	-0.301095396280289, 1.47740077972412,	0.0432308465242386,	-1.12423670291901], 
                            [0.0198653340339661,	-0.0634637400507927,	-0.295771747827530, 1.70655310153961,	-0.464293301105499,	-1.04942762851715], 
@@ -477,9 +470,16 @@ class TestFlexibleDatasets(unittest.TestCase):
             datab2 = gnn_1_datasets[i].get_helper_gnn(9998)
             datab1 = gnn_1_datasets[i].get_helper_gnn(9999)
             data = gnn_1_datasets[i].get_helper_gnn(10000)
-            x_des = torch.cat((datab2.x[:,0].unsqueeze(1), datab1.x[:,0].unsqueeze(1), data.x[:,0].unsqueeze(1),
+            x_des = None
+            if i == 0:
+                x_des = torch.cat((datab2.x[:,0].unsqueeze(1), datab1.x[:,0].unsqueeze(1), data.x[:,0].unsqueeze(1),
                                 datab2.x[:,1].unsqueeze(1), datab1.x[:,1].unsqueeze(1), data.x[:,1].unsqueeze(1),
                                 datab2.x[:,2].unsqueeze(1), datab1.x[:,2].unsqueeze(1), data.x[:,2].unsqueeze(1)), 1)
+            elif i == 1:
+                x_des = torch.cat((datab2.x[:,0].unsqueeze(1), datab1.x[:,0].unsqueeze(1), data.x[:,0].unsqueeze(1),
+                                datab2.x[:,1].unsqueeze(1), datab1.x[:,1].unsqueeze(1), data.x[:,1].unsqueeze(1)), 1)
+            else:
+                raise NotImplementedError
             y_des = data.y
 
             # Check the values
@@ -499,9 +499,16 @@ class TestFlexibleDatasets(unittest.TestCase):
             hData = hgnn_1_datasets[i].get_helper_heterogeneous_gnn(10000)
             base_x_cat = torch.cat((hDatab2['base'].x, hDatab1['base'].x, hData['base'].x), 0)
             base_x_des = torch.flatten(torch.transpose(base_x_cat, 0, 1), 0).unsqueeze(0)
-            joint_x_des = torch.cat((hDatab2['joint'].x[:,0].unsqueeze(1), hDatab1['joint'].x[:,0].unsqueeze(1), hData['joint'].x[:,0].unsqueeze(1),
-                                    hDatab2['joint'].x[:,1].unsqueeze(1), hDatab1['joint'].x[:,1].unsqueeze(1), hData['joint'].x[:,1].unsqueeze(1),
-                                    hDatab2['joint'].x[:,2].unsqueeze(1), hDatab1['joint'].x[:,2].unsqueeze(1), hData['joint'].x[:,2].unsqueeze(1)), 1)
+            joint_x_des = None
+            if i == 0:
+                joint_x_des = torch.cat((hDatab2['joint'].x[:,0].unsqueeze(1), hDatab1['joint'].x[:,0].unsqueeze(1), hData['joint'].x[:,0].unsqueeze(1),
+                                        hDatab2['joint'].x[:,1].unsqueeze(1), hDatab1['joint'].x[:,1].unsqueeze(1), hData['joint'].x[:,1].unsqueeze(1),
+                                        hDatab2['joint'].x[:,2].unsqueeze(1), hDatab1['joint'].x[:,2].unsqueeze(1), hData['joint'].x[:,2].unsqueeze(1)), 1)
+            elif i == 1:
+                joint_x_des = torch.cat((hDatab2['joint'].x[:,0].unsqueeze(1), hDatab1['joint'].x[:,0].unsqueeze(1), hData['joint'].x[:,0].unsqueeze(1),
+                                        hDatab2['joint'].x[:,1].unsqueeze(1), hDatab1['joint'].x[:,1].unsqueeze(1), hData['joint'].x[:,1].unsqueeze(1)), 1)
+            else:
+                raise NotImplementedError
             
             la, av, p, v, t, fp, fv, gt = hgnn_1_datasets[i].load_data_sorted(10000)
             foot_x_des = None
@@ -565,8 +572,8 @@ class TestQuadSDKDatasets(unittest.TestCase):
         np.testing.assert_array_equal(p, des_p)
         np.testing.assert_array_equal(v, des_v)
         np.testing.assert_array_equal(t, des_t)
-        np.testing.assert_array_equal(fp, des_fp)
-        np.testing.assert_array_equal(fv, des_fv)
+        np.testing.assert_equal(fp, des_fp)
+        np.testing.assert_equal(fv, des_fv)
         np.testing.assert_array_equal(gt, des_gt)
 
 class TestLinTzuYaunDatasets(unittest.TestCase):
@@ -602,10 +609,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
                  0.142860412597656,	8.93650817871094,	-9.21489906311035,	
                  -1.60317611694336,	9.79365158081055,	-9.19449234008789,	
                  0.301589965820313,	-1.47618865966797,	-0.418396085500717]
-        des_t = [3.83072900772095,	-1.07490396499634,	-5.73451375961304,	
-                 -0.0102586150169373,	-0.458358317613602,	-2.62650680541992,	
-                 0.136282473802567,	-0.568077325820923,	-2.89026784896851,	
-                 -4.13393735885620,	-1.81517148017883,	-5.67187976837158]
+        des_t = None
         des_fp = [-0.00335261225700378,	-0.0453704893589020,	-0.356130868196487,	
                   0.0214422345161438,	0.0660574287176132,	-0.301095396280289,	
                   0.0198653340339661,	-0.0634637400507927,	-0.295771747827530,	
@@ -619,7 +623,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
         np.testing.assert_array_almost_equal(v, des_v, 14)
-        np.testing.assert_array_almost_equal(t, des_t, 14)
+        np.testing.assert_equal(t, des_t)
         np.testing.assert_array_almost_equal(fp, des_fp, 14)
         np.testing.assert_array_almost_equal(fv, des_fv, 14)
         np.testing.assert_array_almost_equal(gt, des_gt, 14)

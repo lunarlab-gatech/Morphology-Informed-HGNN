@@ -19,7 +19,7 @@ def main():
 
     # Set model parameters (so they all match)
     model_type = 'heterogeneous_gnn'
-    history_length = 5
+    history_length = 150
 
     # Initialize the Training/Validation datasets
     air_walking_gait = linData.LinTzuYaunDataset_air_walking_gait(
