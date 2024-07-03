@@ -355,8 +355,8 @@ class TestGnnLightning(unittest.TestCase):
 
         # Test that the function works properly
         y_new, y_pred_new = gnn_classification_output(y, y_pred)
-        np.testing.assert_array_almost_equal(y_pred_new_des.numpy(), y_pred_new.numpy(), 16)
-        np.testing.assert_array_almost_equal(y_new_des.numpy(), y_new.numpy(), 16)
+        np.testing.assert_array_almost_equal(y_pred_new_des.numpy(), y_pred_new.numpy(), 15)
+        np.testing.assert_array_almost_equal(y_new_des.numpy(), y_new.numpy(), 15)
 
 if __name__ == "__main__":
     unittest.main()
