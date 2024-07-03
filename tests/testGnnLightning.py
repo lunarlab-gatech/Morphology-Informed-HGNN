@@ -62,25 +62,25 @@ class TestGnnLightning(unittest.TestCase):
         """
 
         # For each model
-        # for model in self.models:
-        #     # Train on the model
-        #     train_dataset, val_dataset, test_dataset = random_split(
-        #         model, [0.7, 0.2, 0.1], generator=self.rand_gen)
-        #     path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
-        #                                       testing_mode=True, disable_logger=True)
+        for model in self.models:
+            # Train on the model
+            train_dataset, val_dataset, test_dataset = random_split(
+                model, [0.7, 0.2, 0.1], generator=self.rand_gen)
+            path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                              testing_mode=True, disable_logger=True)
 
-        #     # Make sure two models were saved
-        #     models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
-        #     self.assertEqual(len(models), 2)
+            # Make sure two models were saved
+            models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
+            self.assertEqual(len(models), 2)
 
-        #     # Predict with the model
-        #     pred, labels = evaluate_model(models[0], test_dataset)
+            # Predict with the model
+            pred, labels = evaluate_model(models[0], test_dataset)
 
-        #     # Assert the sizes of the results match
-        #     self.assertEqual(pred.shape[0], len(test_dataset.indices))
-        #     self.assertEqual(pred.shape[1], 4)
-        #     self.assertEqual(labels.shape[0], len(test_dataset.indices))
-        #     self.assertEqual(labels.shape[1], 4)
+            # Assert the sizes of the results match
+            self.assertEqual(pred.shape[0], len(test_dataset.indices))
+            self.assertEqual(pred.shape[1], 4)
+            self.assertEqual(labels.shape[0], len(test_dataset.indices))
+            self.assertEqual(labels.shape[1], 4)
 
         # Test for classification
         train_dataset, val_dataset, test_dataset = random_split(
@@ -323,10 +323,12 @@ class TestGnnLightning(unittest.TestCase):
         # after we reset the torchmetric module for classification
         test_classification_loss_helper(base, 2, 2, 16)
         base.reset_all_metrics()
-        test_classification_loss_helper(base, 3, 250, 2)
+        test_classification_loss_helper(base, 3, 250, 16)
         base.reset_all_metrics()
-        test_classification_loss_helper(base, 777, 777, 30)
+        test_classification_loss_helper(base, 777, 777, 16)
         base.reset_all_metrics()
+
+        # TODO: Add Accuracy to this test case
 
     def test_gnn_classification_output(self):
         """
@@ -340,14 +342,14 @@ class TestGnnLightning(unittest.TestCase):
         y = torch.tensor([[1, 0, 1, 1],
                           [0, 1, 1, 0]], dtype=torch.int)
 
-        y_pred_new_des = torch.tensor([[0.0063, 0.0077, 0.0252, 0.0308, 
-                                        0.0027, 0.0033, 0.0108, 0.0132,
-                                        0.0567, 0.0693, 0.2268, 0.2772,
-                                        0.0243, 0.0297, 0.0972, 0.1188],
-                                       [0.0625, 0.0625, 0.0625, 0.0625,
-                                        0.0625, 0.0625, 0.0625, 0.0625,
-                                        0.0625, 0.0625, 0.0625, 0.0625,
-                                        0.0625, 0.0625, 0.0625, 0.0625]], dtype=torch.float64)
+        y_pred_new_des = torch.tensor([[1.45, 1.55, 2.05, 2.15, 
+                                        1.05, 1.15, 1.65, 1.75,
+                                        2.25, 2.35, 2.85, 2.95,
+                                        1.85, 1.95, 2.45, 2.55],
+                                       [2.0, 2.0, 2.0, 2.0,
+                                        2.0, 2.0, 2.0, 2.0,
+                                        2.0, 2.0, 2.0, 2.0,
+                                        2.0, 2.0, 2.0, 2.0]], dtype=torch.float64)
         y_new_des = torch.tensor([[11],
                                   [6]], dtype=torch.int)
 

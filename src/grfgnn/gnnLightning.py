@@ -55,7 +55,7 @@ def gnn_classification_output(y: torch.Tensor, y_pred: torch.Tensor):
     Convert the y labels from Bx[4] individual foot contact classes
     into a single Bx1 class out of 16 options.
 
-    Also, convert the y_pred from Bx[4x2] individual foot contact probabilities
+    Also, convert the y_pred from Bx[4x2] individual foot contact log probabilities
     into a single Bx16 class probability which comprises the four states.
     """
     
@@ -74,7 +74,9 @@ def gnn_classification_output(y: torch.Tensor, y_pred: torch.Tensor):
             foot_1_prob = y_pred[i,int((np.floor(j / 4.0) % 2) + 2)]
             foot_2_prob = y_pred[i,int((np.floor(j / 2.0) % 2) + 4)]
             foot_3_prob = y_pred[i,int((j % 2) + 6)]
-            y_pred_new[i,j] = torch.mul(torch.mul(foot_0_prob, foot_1_prob), torch.mul(foot_2_prob, foot_3_prob))
+            
+            # Note, log probabilities of independent events add instead of multiply
+            y_pred_new[i,j] = torch.add(torch.add(foot_0_prob, foot_1_prob), torch.add(foot_2_prob, foot_3_prob))
 
     return y_new, y_pred_new
 
@@ -172,12 +174,14 @@ class Base_Lightning(L.LightningModule):
         self.metric_rmse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=False)
         self.metric_l1: torchmetrics.MeanAbsoluteError = torchmetrics.regression.MeanAbsoluteError()
         self.metric_ce = CrossEntropyLossMetric()
+        self.metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
 
         # Setup variables to hold the losses
         self.mse_loss = None
         self.rmse_loss = None
         self.l1_loss = None
         self.ce_loss = None
+        self.acc = None
 
     # ======================= Logging =======================
     def log_losses(self, step_name: str, on_step: bool):
@@ -203,6 +207,10 @@ class Base_Lightning(L.LightningModule):
                     self.ce_loss,
                     on_step=on_step,
                     on_epoch=on_epoch)
+            self.log(step_name + "_Accuracy", 
+                    self.acc,
+                    on_step=on_step,
+                    on_epoch=on_epoch)
     
     # ======================= Loss Calculation =======================
     def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor) -> None:
@@ -214,6 +222,7 @@ class Base_Lightning(L.LightningModule):
             self.l1_loss = self.metric_l1(y, y_pred)
         else:
             self.ce_loss = self.metric_ce(y.squeeze(), y_pred)
+            self.acc = self.metric_acc(y.squeeze(), torch.argmax(y_pred, dim=1))
     
     def calculate_losses_epoch(self) -> None:
         if self.regression:
@@ -222,12 +231,14 @@ class Base_Lightning(L.LightningModule):
             self.l1_loss = self.metric_l1.compute()
         else:
             self.ce_loss = self.metric_ce.compute()
+            self.acc = self.metric_acc.compute()
     
     def reset_all_metrics(self) -> None:
         self.metric_mse.reset()
         self.metric_rmse.reset()
         self.metric_l1.reset()
         self.metric_ce.reset()
+        self.metric_acc.reset()
 
     # ======================= Training =======================
     def training_step(self, batch, batch_idx):

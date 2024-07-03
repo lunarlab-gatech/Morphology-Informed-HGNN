@@ -15,7 +15,6 @@ def main():
 
 
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
-    path_to_LinTzuYaun = Path(Path('.').parent, 'datasets', 'LinTzuYaun-AJG').absolute()
 
     # Set model parameters (so they all match)
     model_type = 'heterogeneous_gnn'
@@ -72,7 +71,7 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, logger_project_name="grfgnn-classification",  regression=False)
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=12, hidden_size=128,  logger_project_name="grfgnn-classification",  regression=False, lr=0.0003)
 
 if __name__ == "__main__":
     main()
