@@ -670,7 +670,7 @@ def train_model(train_dataset: Subset,
         monitor = "val_CE_loss"
     checkpoint_callback = ModelCheckpoint(
         dirpath=path_to_save,
-        filename='{epoch}-{val_MSE_loss:.5f}',
+        filename='{epoch}-{' + monitor + ':.5f}',
         save_top_k=5,
         monitor=monitor)
 
