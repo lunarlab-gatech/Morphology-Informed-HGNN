@@ -87,6 +87,15 @@ class QuadSDKDataset(FlexibleDataset):
                 arrays.append(joint_data.joints.velocity)
                 arrays.append(joint_data.joints.effort)
 
+                # Add on the robot pose information
+                arrays.append([joint_data.body.pose.position.x,
+                               joint_data.body.pose.position.y,
+                               joint_data.body.pose.position.z])
+                arrays.append([joint_data.body.pose.orientation.x,
+                               joint_data.body.pose.orientation.y,
+                               joint_data.body.pose.orientation.z,
+                               joint_data.body.pose.orientation.w])
+
                 for array in arrays:
                     for val in array:
                         f.write(str(val) + " ")
@@ -142,7 +151,7 @@ class QuadSDKDataset(FlexibleDataset):
     
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
-        grfs, lin_acc, ang_vel, positions, velocities, torques = [], [], [], [], [], []
+        grfs, lin_acc, ang_vel, positions, velocities, torques, r_p, r_quat = [], [], [], [], [], [], [], []
         with open(os.path.join(self.processed_dir,
                                str(seq_num) + ".txt"), 'r') as f:
 
@@ -168,6 +177,12 @@ class QuadSDKDataset(FlexibleDataset):
             line = f.readline().split(" ")[:-1]
             for i in range(0, len(line)):
                 torques.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                r_p.append(float(line[i]))
+            line = f.readline().split(" ")[:-1]
+            for i in range(0, len(line)):
+                r_quat.append(float(line[i]))
 
         # Extract the ground truth Z GRF
         z_grfs = []
@@ -182,8 +197,10 @@ class QuadSDKDataset(FlexibleDataset):
         velocities = np.array(velocities)
         torques = np.array(torques)
         z_grfs = np.array(z_grfs)
+        r_p = np.array(r_p)
+        r_quat = np.array(r_quat)
 
-        return lin_acc, ang_vel, positions, velocities, torques, None, None, z_grfs
+        return lin_acc, ang_vel, positions, velocities, torques, None, None, z_grfs, r_p, r_quat
 
 # ================================================================
 # ===================== DATASET SEQUENCES ========================

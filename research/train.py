@@ -34,7 +34,7 @@ def main():
         dataset_1, [0.8, 0.1, 0.1], generator=rand_gen)
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, logger_project_name="grfgnn-QuadSDK")
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, disable_logger=True)
 
 if __name__ == '__main__':
      main()

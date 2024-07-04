@@ -149,7 +149,7 @@ class LinTzuYaunDataset(FlexibleDataset):
         f_v = np.array(f_v)
         contact_labels = np.array(contact_labels)
 
-        return lin_acc, ang_vel, j_p, j_v, None, f_p, f_v, contact_labels
+        return lin_acc, ang_vel, j_p, j_v, None, f_p, f_v, contact_labels, None, None
     
 # ================================================================
 # ===================== DATASET SEQUENCES ========================

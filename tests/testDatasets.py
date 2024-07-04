@@ -122,7 +122,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         Test that the sorting function matches the order provided by the child class.
         """
         # ====================== Test QuadSDK dataset ======================
-        la, av, p, v, t, fp, fv, gt = self.quad_dataset_hgnn_1.load_data_sorted(10000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.quad_dataset_hgnn_1.load_data_sorted(10000)
         des_la = [-0.06452160178213015, -0.366493877667443, 9.715652148737323]
         des_av = [-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]
         des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004,
@@ -140,6 +140,8 @@ class TestFlexibleDatasets(unittest.TestCase):
         des_fp = None
         des_fv = None
         des_gt = [0, 64.74924447333427, 64.98097097053076, 0]
+        des_rp = [-0.9077062285177977, 0.400808137988427, 0.25139755534263925]
+        des_ro = [0.00807844275531408, 0.006594002480070749, -0.6310441334749343, -0.7756768396057802]
         np.testing.assert_array_equal(la, des_la)
         np.testing.assert_array_equal(av, des_av)
         np.testing.assert_array_equal(p, des_p)
@@ -148,9 +150,11 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_equal(fp, des_fp)
         np.testing.assert_array_equal(fv, des_fv)
         np.testing.assert_array_equal(gt, des_gt)
+        np.testing.assert_array_almost_equal(r_p, des_rp, 16)
+        np.testing.assert_array_almost_equal(r_o, des_ro, 16)
 
         # ===================== Test LinTzuYaun dataset ====================
-        la, av, p, v, t, fp, fv, gt = self.lin_dataset_mlp_1.load_data_sorted(30000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.lin_dataset_mlp_1.load_data_sorted(30000)
         des_la = [0.146148949861527,	0.0223360173404217,	9.58438873291016] 
         des_av = [0.00771053740754724,	0.0315540358424187,	0.161459520459175]
         des_p = [0.0581750869750977,	-0.498899102210999,	1.01744437217712,	
@@ -171,6 +175,8 @@ class TestFlexibleDatasets(unittest.TestCase):
                   1.70655310153961,	-0.464293301105499,	-1.04942762851715,	
                   -0.618086814880371,	0.111269362270832, -0.00220335274934769]
         des_gt = [1, 0,	0, 1]
+        des_rp = None
+        des_ro = None
         np.testing.assert_array_almost_equal(la, des_la, 14)
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
@@ -179,6 +185,8 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(fp, des_fp, 14)
         np.testing.assert_array_almost_equal(fv, des_fv, 14)
         np.testing.assert_array_almost_equal(gt, des_gt, 14)
+        np.testing.assert_equal(r_p, des_rp)
+        np.testing.assert_equal(r_o, des_ro)
 
     def test_get_helper_mlp(self):
         # ====================== Test QuadSDK dataset ======================
@@ -510,7 +518,7 @@ class TestFlexibleDatasets(unittest.TestCase):
             else:
                 raise NotImplementedError
             
-            la, av, p, v, t, fp, fv, gt = hgnn_1_datasets[i].load_data_sorted(10000)
+            la, av, p, v, t, fp, fv, gt, r_p, r_o = hgnn_1_datasets[i].load_data_sorted(10000)
             foot_x_des = None
             if fp is None and fv is None:
                 foot_x_des = hData['foot'].x
@@ -552,7 +560,7 @@ class TestQuadSDKDatasets(unittest.TestCase):
         Make sure the data is processed and loaded properly from the file.
         """
 
-        la, av, p, v, t, fp, fv, gt = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
         des_la = [-0.06452160178213015, -0.366493877667443, 9.715652148737323]
         des_av = [-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]
         des_p = [-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, -0.1931352599922853,
@@ -567,6 +575,8 @@ class TestQuadSDKDatasets(unittest.TestCase):
         des_fp = None
         des_fv = None
         des_gt = [64.74924447333427, 0, 0, 64.98097097053076]
+        des_rp = [-0.9077062285177977, 0.400808137988427, 0.25139755534263925]
+        des_ro = [0.00807844275531408, 0.006594002480070749, -0.6310441334749343, -0.7756768396057802]
         np.testing.assert_array_equal(la, des_la)
         np.testing.assert_array_equal(av, des_av)
         np.testing.assert_array_equal(p, des_p)
@@ -575,6 +585,8 @@ class TestQuadSDKDatasets(unittest.TestCase):
         np.testing.assert_equal(fp, des_fp)
         np.testing.assert_equal(fv, des_fv)
         np.testing.assert_array_equal(gt, des_gt)
+        np.testing.assert_array_almost_equal(r_p, des_rp, 16)
+        np.testing.assert_array_almost_equal(r_o, des_ro, 16)
 
 class TestLinTzuYaunDatasets(unittest.TestCase):
     """
@@ -598,7 +610,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         Make sure the data is properly processed and loaded from the dataset.
         """
 
-        la, av, p, v, t, fp, fv, gt = self.dataset_mlp_1.load_data_at_dataset_seq(30000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.dataset_mlp_1.load_data_at_dataset_seq(30000)
         des_la = [0.146148949861527,	0.0223360173404217,	9.58438873291016] 
         des_av = [0.00771053740754724,	0.0315540358424187,	0.161459520459175]
         des_p = [0.0581750869750977,	-0.498899102210999,	1.01744437217712,	
@@ -619,6 +631,8 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
                   1.70655310153961,	-0.464293301105499,	-1.04942762851715,	
                   -0.618086814880371,	0.111269362270832, -0.00220335274934769]
         des_gt = [1, 0,	0, 1]
+        des_rp = None
+        des_ro = None
         np.testing.assert_array_almost_equal(la, des_la, 14)
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
@@ -627,6 +641,8 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(fp, des_fp, 14)
         np.testing.assert_array_almost_equal(fv, des_fv, 14)
         np.testing.assert_array_almost_equal(gt, des_gt, 14)
+        np.testing.assert_equal(r_p, des_rp)
+        np.testing.assert_equal(r_o, des_ro)
 
 if __name__ == "__main__":
     unittest.main()

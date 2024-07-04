@@ -360,16 +360,29 @@ class FlexibleDataset(Dataset):
             Same values as load_data_at_dataset_seq(), but order of
             values inside arrays have been sorted.
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
-        unsorted_list = [j_p, j_v, j_T, f_p, f_v]
+        unsorted_list = [j_p, j_v, j_T]
         sorted_list = []
         for unsorted_array in unsorted_list:
             if unsorted_array is not None:
                 sorted_list.append(unsorted_array[self.joint_node_indices_sorted])
             else:
                 sorted_list.append(None)
+
+        # Sort the foot information
+        unsorted_foot_list = [f_p, f_v]
+        sorted_foot_list = []
+        for unsorted_array in unsorted_foot_list:
+            if unsorted_array is not None:
+                sorted_array = []
+                for index in self.foot_node_indices_sorted:
+                    for i in range(0, 3):
+                        sorted_array.append(unsorted_array[int(index*3+i)])
+                sorted_foot_list.append(sorted_array)
+            else:
+                sorted_foot_list.append(None)
 
         # Sort the ground truth labels
         labels_sorted = None
@@ -378,7 +391,7 @@ class FlexibleDataset(Dataset):
         else:
             labels_sorted = labels[self.foot_node_indices_sorted]
 
-        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_list[3], sorted_list[4], labels_sorted
+        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
 
     def load_single_value(self, seq_num: int, line_num: int, line_index: int):
         """
@@ -410,6 +423,8 @@ class FlexibleDataset(Dataset):
             f_p (np.array) - Foot position
             f_v (np.array) - Foot velocity
             labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states) 
+            r_p (np.array) - Robot position (GT), in the order (x, y, z).
+            r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w).
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
@@ -443,7 +458,7 @@ class FlexibleDataset(Dataset):
         x = None
 
         # Find out which variables we have to use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         variables_to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
         variables_to_use = self.find_variables_to_use(variables_to_check)
 
@@ -451,7 +466,7 @@ class FlexibleDataset(Dataset):
         for i in range(0, self.history_length):
 
             # Only add variables that aren't None
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + i)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + i)
             dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
             final_input = np.array([])
             for y in variables_to_use:
@@ -468,7 +483,7 @@ class FlexibleDataset(Dataset):
             x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
 
         # Create the ground truth labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
         y = torch.tensor(labels, dtype=torch.float64)
         return x, y
 
@@ -478,7 +493,7 @@ class FlexibleDataset(Dataset):
         """
 
         # Find out which necessary variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         variables_to_check = [j_p, j_v, j_T]
         variables_to_use = self.find_variables_to_use(variables_to_check)
         if len(variables_to_use) == 0:
@@ -490,7 +505,7 @@ class FlexibleDataset(Dataset):
         # For each dataset entry we include in the history
         for j in range(0, self.history_length):
             # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + j)
             dataset_inputs = [j_p, j_v, j_T]
 
             # For each joint specified
@@ -511,7 +526,7 @@ class FlexibleDataset(Dataset):
                                                dtype=torch.long)
 
         # Create the labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
             self.first_index + idx + self.history_length - 1)
         y = torch.tensor(labels, dtype=torch.float64)
 
@@ -555,13 +570,13 @@ class FlexibleDataset(Dataset):
              'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
 
         # Save the labels and number of nodes
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
             self.first_index + idx + self.history_length - 1)
         data.y = torch.tensor(labels, dtype=torch.float64)
         data.num_nodes = self.robotGraph.get_num_nodes()
 
         # Find out which variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         base_variables_to_use = self.find_variables_to_use([lin_acc, ang_vel])
         joint_variables_to_use = self.find_variables_to_use([j_p, j_v, j_T])
         foot_variables_to_use = self.find_variables_to_use([f_p, f_v])
@@ -585,7 +600,7 @@ class FlexibleDataset(Dataset):
         # For each dataset entry we include in the history
         for j in range(0, self.history_length):
             # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + j)
 
             # For each joint specified
             joint_data = [j_p, j_v, j_T]
