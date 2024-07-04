@@ -115,14 +115,20 @@ class FlexibleDataset(Dataset):
         self.joint_node_indices_sorted = []
         for urdf_node_name in self.get_joint_node_sorted_order():
             self.joint_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
+        self.joint_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
         self.foot_node_indices_sorted = []
         for urdf_node_name in self.get_foot_node_sorted_order():
             self.foot_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
+        self.foot_node_indices_sorted = np.array(self.foot_node_indices_sorted, dtype=np.uint)
 
         # Precompute the return value for get_foot_node_indices_matching_labels()
         self.foot_node_indices_of_graph_matching_labels = []
         for urdf_name in self.get_foot_node_sorted_order():
             self.foot_node_indices_of_graph_matching_labels.append(self.urdf_name_to_graph_index[urdf_name])
+        self.foot_node_indices_of_graph_matching_labels = np.array(self.foot_node_indices_of_graph_matching_labels, dtype=np.uint)
+
+        # Calculate means and stds for input and label standardization later
+        # self.calculate_mean_and_std()
 
     # ================================================================
     # ========================= DOWNLOADING ==========================
@@ -172,6 +178,9 @@ class FlexibleDataset(Dataset):
         Called when we don't have all of the processed
         files we are expecting, so we process the data
         to generate those files.
+
+        Data must be saved into text files, in the order
+        returned by load_data_at_dataset_seq().
         """
         raise self.notImplementedError
     
@@ -179,7 +188,7 @@ class FlexibleDataset(Dataset):
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     # ================================================================
 
-    def get_foot_node_indices_matching_labels(self):
+    def get_foot_node_indices_matching_labels(self) -> np.array:
         """
         This helper method returns the foot node indices that correspond 
         to the ground truth GRF labels contained in the "y" of each 
@@ -193,7 +202,7 @@ class FlexibleDataset(Dataset):
         should match the output of the node at index 3, and so on.
 
         Returns:
-            foot_node_indices (list[int]) - List of the indices of
+            foot_node_indices (np.array) - List of the indices of
             the graph nodes that should output the ground truth labels 
             at the same corresponding index.
         """
@@ -279,6 +288,53 @@ class FlexibleDataset(Dataset):
         raise self.notImplementedError
     
     # ================================================================
+    # ====================== STANDARDIZATION =========================
+    # ================================================================
+    def calculate_mean_and_std(self):
+        """
+        This helper method calculates the mean and std of
+        the dataset data per feature, for use in standardization
+        later.
+        """
+
+        # Calculate the number of features we need to get mean and std for.
+        num_features = 0
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(0)
+        to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels]        
+        for array in to_check:
+            if array is not None:
+                num_features += len(array)
+
+        # Calculate the line_num and line_index for each feature
+        file_data_array = np.zeros((2, num_features), dtype=np.int64)
+        line_i = 0
+        curr_feature_i = 0
+        for array in to_check:
+            if array is not None:
+                line_index_i = 0
+                for val in array:
+                    file_data_array[0,curr_feature_i] = line_i
+                    file_data_array[1,curr_feature_i] = line_index_i
+                    line_index_i += 1
+                    curr_feature_i += 1
+                line_i += 1
+
+        print(file_data_array)
+
+        # For each feature
+        self.means = np.zeros((num_features))
+        self.stds = np.zeros((num_features))
+        vfunc = np.vectorize(self.load_single_value)
+        for i in range(0, num_features):
+            # Get every occurance of that feature
+            vals: np.array = vfunc(range(0, self.len()), file_data_array[0,i], file_data_array[1,i])
+            print(vals)
+
+            # Calculate mean and std
+            self.means[i] = np.mean(vals)
+            self.stds[i] = np.std(vals)
+
+    # ================================================================
     # ======================== DATA LOADING ==========================
     # ================================================================
     
@@ -291,7 +347,10 @@ class FlexibleDataset(Dataset):
         Additionally, the labels are sorted so it matches the order
         returned by get_foot_node_sorted_order().
 
-        Finally, labels are checked to make sure they aren't None.
+        Next, labels are checked to make sure they aren't None.
+
+        Finally, the data is also standardized to a mean of 0 and
+        a standard deviation of 1 for each feature.
 
         Parameters:
             seq_num (int): The sequence number of the txt file
@@ -301,16 +360,29 @@ class FlexibleDataset(Dataset):
             Same values as load_data_at_dataset_seq(), but order of
             values inside arrays have been sorted.
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
-        unsorted_list = [j_p, j_v, j_T, f_p, f_v]
+        unsorted_list = [j_p, j_v, j_T]
         sorted_list = []
         for unsorted_array in unsorted_list:
             if unsorted_array is not None:
                 sorted_list.append(unsorted_array[self.joint_node_indices_sorted])
             else:
                 sorted_list.append(None)
+
+        # Sort the foot information
+        unsorted_foot_list = [f_p, f_v]
+        sorted_foot_list = []
+        for unsorted_array in unsorted_foot_list:
+            if unsorted_array is not None:
+                sorted_array = []
+                for index in self.foot_node_indices_sorted:
+                    for i in range(0, 3):
+                        sorted_array.append(unsorted_array[int(index*3+i)])
+                sorted_foot_list.append(sorted_array)
+            else:
+                sorted_foot_list.append(None)
 
         # Sort the ground truth labels
         labels_sorted = None
@@ -319,11 +391,23 @@ class FlexibleDataset(Dataset):
         else:
             labels_sorted = labels[self.foot_node_indices_sorted]
 
-        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_list[3], sorted_list[4], labels_sorted
+        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
+
+    def load_single_value(self, seq_num: int, line_num: int, line_index: int):
+        """
+        This helper method loads a single value from the txt file
+        at "seq_num", using the given line_num and line_index.
+        """
+
+        with open(str(Path(self.processed_dir, str(seq_num) + ".txt")), 'r') as f:
+            line = None
+            for i in range(0, line_num+1):
+                line = f.readline().split(" ")[:-1]
+            return float(line[line_index])
 
     def load_data_at_dataset_seq(self, seq_num: int):
         """
-        This helper function opens the txt file at "ros_seq"
+        This helper function opens the txt file at "seq_num"
         and loads dataset information for that sequence.
 
         Parameters:
@@ -339,6 +423,8 @@ class FlexibleDataset(Dataset):
             f_p (np.array) - Foot position
             f_v (np.array) - Foot velocity
             labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states) 
+            r_p (np.array) - Robot position (GT), in the order (x, y, z).
+            r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w).
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
@@ -372,7 +458,7 @@ class FlexibleDataset(Dataset):
         x = None
 
         # Find out which variables we have to use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         variables_to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
         variables_to_use = self.find_variables_to_use(variables_to_check)
 
@@ -380,7 +466,7 @@ class FlexibleDataset(Dataset):
         for i in range(0, self.history_length):
 
             # Only add variables that aren't None
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + i)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + i)
             dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
             final_input = np.array([])
             for y in variables_to_use:
@@ -397,7 +483,7 @@ class FlexibleDataset(Dataset):
             x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
 
         # Create the ground truth labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
         y = torch.tensor(labels, dtype=torch.float64)
         return x, y
 
@@ -407,7 +493,7 @@ class FlexibleDataset(Dataset):
         """
 
         # Find out which necessary variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         variables_to_check = [j_p, j_v, j_T]
         variables_to_use = self.find_variables_to_use(variables_to_check)
         if len(variables_to_use) == 0:
@@ -419,7 +505,7 @@ class FlexibleDataset(Dataset):
         # For each dataset entry we include in the history
         for j in range(0, self.history_length):
             # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + j)
             dataset_inputs = [j_p, j_v, j_T]
 
             # For each joint specified
@@ -440,7 +526,7 @@ class FlexibleDataset(Dataset):
                                                dtype=torch.long)
 
         # Create the labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
             self.first_index + idx + self.history_length - 1)
         y = torch.tensor(labels, dtype=torch.float64)
 
@@ -484,13 +570,13 @@ class FlexibleDataset(Dataset):
              'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
 
         # Save the labels and number of nodes
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
             self.first_index + idx + self.history_length - 1)
         data.y = torch.tensor(labels, dtype=torch.float64)
         data.num_nodes = self.robotGraph.get_num_nodes()
 
         # Find out which variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
         base_variables_to_use = self.find_variables_to_use([lin_acc, ang_vel])
         joint_variables_to_use = self.find_variables_to_use([j_p, j_v, j_T])
         foot_variables_to_use = self.find_variables_to_use([f_p, f_v])
@@ -501,7 +587,7 @@ class FlexibleDataset(Dataset):
         number_nodes = self.robotGraph.get_num_of_each_node_type()
         base_width = len(base_variables_to_use) * 3 * self.history_length
         joint_width = len(joint_variables_to_use) * self.history_length
-        foot_width = len(foot_variables_to_use) * self.history_length
+        foot_width = len(foot_variables_to_use) * 3 * self.history_length
         if base_width <= 0: base_width = 1
         if joint_width <= 0: joint_width = 1
         if foot_width <= 0: foot_width = 1
@@ -514,7 +600,7 @@ class FlexibleDataset(Dataset):
         # For each dataset entry we include in the history
         for j in range(0, self.history_length):
             # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
+            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + j)
 
             # For each joint specified
             joint_data = [j_p, j_v, j_T]
@@ -543,7 +629,9 @@ class FlexibleDataset(Dataset):
 
                 # For each variable to use
                 for k in foot_variables_to_use:
-                    foot_x[node_index, k*self.history_length+j] = foot_data[k][i]
+                    foot_x[node_index, ((k*3)+0)*self.history_length+j] = foot_data[k][i*3]
+                    foot_x[node_index, ((k*3)+1)*self.history_length+j] = foot_data[k][i*3+1]
+                    foot_x[node_index, ((k*3)+2)*self.history_length+j] = foot_data[k][i*3+2]
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x

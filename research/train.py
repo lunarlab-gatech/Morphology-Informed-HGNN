@@ -13,8 +13,8 @@ def main():
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
     path_to_quad_sdk_15Flipped = Path(
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.5FlippedOver').absolute()
-    path_to_ann = Path(Path('.').parent, 'datasets', 'ANN').absolute()
 
+    # Define model type
     model_type = 'gnn'
 
     # Initalize the datasets
@@ -27,8 +27,6 @@ def main():
     dataset_15Flipped = QuadSDKDataset_A1Speed1_5FlippedOver(
         path_to_quad_sdk_15Flipped, path_to_urdf, 'package://a1_description/',
         'unitree_ros/robots/a1_description', model_type, 5)
-    # dataset_ann = annGRFDataset(path_to_ann, path_to_urdf, 'package://a1_description/',
-    #     'unitree_ros/robots/a1_description', model_type, 3)
 
     # Split the data into training, validation, and testing sets
     rand_gen = torch.Generator().manual_seed(10341885)
@@ -36,7 +34,7 @@ def main():
         dataset_1, [0.8, 0.1, 0.1], generator=rand_gen)
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32)
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, disable_logger=True)
 
 if __name__ == '__main__':
      main()

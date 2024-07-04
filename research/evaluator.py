@@ -17,6 +17,7 @@ def main():
     ckpt_file_name = "epoch=67-val_MSE_loss=196.41758.ckpt"  # Ex: 'epoch=0-val_loss=6544.70.ckpt'
     model_type = 'gnn'
     history_length = 5
+    
     # ===================================================================================
     path_to_checkpoint = Path(
         Path('.').parent, 'models', model_directory_name, ckpt_file_name)
