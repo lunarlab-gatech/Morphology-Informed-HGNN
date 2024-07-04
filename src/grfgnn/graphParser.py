@@ -538,7 +538,7 @@ class HeterogeneousRobotGraph(RobotGraph):
         Returns:
             (list[np.array]): Multiple matrices, as outlined below, where N
                 is the number of edge attributes. Currently, N is 7, with 1
-                attribute for mass, and 7 for the inertia matrix:
+                attribute for mass, and 6 for the inertia matrix:
                 data['base', 'connect', 'joint'].edge_attr -> [X, N]
                 data['joint', 'connect', 'base'].edge_attr -> [X, N]
                 data['joint', 'connect', 'joint'].edge_attr -> [Y, N]

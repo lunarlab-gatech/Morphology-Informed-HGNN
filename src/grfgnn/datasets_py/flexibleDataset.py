@@ -349,9 +349,6 @@ class FlexibleDataset(Dataset):
 
         Next, labels are checked to make sure they aren't None.
 
-        Finally, the data is also standardized to a mean of 0 and
-        a standard deviation of 1 for each feature.
-
         Parameters:
             seq_num (int): The sequence number of the txt file
                 whose data should be loaded.
