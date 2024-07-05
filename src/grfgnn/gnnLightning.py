@@ -1,9 +1,10 @@
 import re
+from matplotlib.style import use
 import torch
 from torch import optim, nn
 import lightning as L
 from torch_geometric.nn.models import GAT
-from torch_geometric.nn import Linear, HeteroConv, GATv2Conv, HeteroDictLinear
+from torch_geometric.nn import Linear, HeteroConv, GATv2Conv, HeteroDictLinear, CGConv
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -87,7 +88,7 @@ class GRF_HGNN(torch.nn.Module):
 
     def __init__(self, hidden_channels: int, edge_dim: int, num_layers: int, 
                  out_channels: int, data_metadata, regression: bool = True, 
-                 activation_fn = nn.ReLU()):
+                 activation_fn = nn.ReLU(), use_edge_attr: bool = False):
         """
         Parameters:
             out_channels (int): Only used for regression problems. The number
@@ -100,23 +101,32 @@ class GRF_HGNN(torch.nn.Module):
 
         super().__init__()
         self.regression = regression
+        self.use_edge_attr = use_edge_attr
+        self.data_metadata = data_metadata
 
         # Create the first layer encoder to convert features into embeddings
         # Hopefully for all node and edge features
-        # TODO: Test that it encodes both node and edge features
-        self.encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0])
+        self.node_encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0])
+        self.edge_encoder_0 = Linear(edge_dim, hidden_channels)
+        self.edge_encoder_1 = Linear(edge_dim, hidden_channels)
+        self.edge_encoder_2 = Linear(edge_dim, hidden_channels)
+        self.edge_encoder_3 = Linear(edge_dim, hidden_channels)
+        self.edge_encoder_4 = Linear(edge_dim, hidden_channels)
 
         # Create dictionary that maps edge connections type to convolutional operator
         conv_dict = {}
         for edge_connection in data_metadata[1]:
-            # TODO: Maybe wap this out with an operation that better matches what we want to happen with the edges,
-            # instead of just using it for the attention calculation.
-            conv_dict[edge_connection] = GATv2Conv(hidden_channels,
+            # TODO: Maybe wrap this out with an operation that better matches what we want to happen with the edges.
+            if use_edge_attr:
+                conv_dict[edge_connection] = CGConv(hidden_channels,
+                                                    dim=hidden_channels,
+                                                    aggr='add')
+            else:
+                conv_dict[edge_connection] = GATv2Conv(hidden_channels,
                                                    hidden_channels,
                                                    add_self_loops=False,
-                                                   edge_dim=edge_dim,
+                                                   edge_dim=hidden_channels,
                                                    aggr='sum')
-
         # Create a convolution for each layer
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
@@ -136,13 +146,32 @@ class GRF_HGNN(torch.nn.Module):
             modules.append(nn.LogSoftmax(dim=1))
             self.decoder = nn.Sequential(*modules)
 
-    def forward(self, x_dict, edge_index_dict):
-        x_dict = self.encoder(x_dict)
+    def forward(self, x_dict: dict, edge_index_dict: dict, edge_attr_dict: dict):
+        """
+        edge_attr_dict only used if self.use_edge_attr is True.
+        """
+        if self.use_edge_attr and (edge_attr_dict is None):
+            raise ValueError("User set use_edge_attr to true; please pass in edge features.")
+
+        # Encoders
+        x_dict = self.node_encoder(x_dict)
+        if self.use_edge_attr:
+            edge_attr_dict[self.data_metadata[1][0]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][0]])
+            edge_attr_dict[self.data_metadata[1][1]] = self.edge_encoder_1(edge_attr_dict[self.data_metadata[1][1]])
+            edge_attr_dict[self.data_metadata[1][2]] = self.edge_encoder_2(edge_attr_dict[self.data_metadata[1][2]])
+            edge_attr_dict[self.data_metadata[1][3]] = self.edge_encoder_3(edge_attr_dict[self.data_metadata[1][3]])
+            edge_attr_dict[self.data_metadata[1][4]] = self.edge_encoder_4(edge_attr_dict[self.data_metadata[1][4]])
         x_dict = {key: self.activation(x) for key, x in x_dict.items()}
+
+        # Layers 
         for conv in self.convs:
-            # TODO: Does the Activation function actually work?
-            x_dict = conv(x_dict, edge_index_dict)
+            if self.use_edge_attr:
+                x_dict = conv(x_dict, edge_index_dict, edge_attr_dict)
+            else:
+                x_dict = conv(x_dict, edge_index_dict)
             x_dict = {key: self.activation(x) for key, x in x_dict.items()}
+
+        # Decoder on foot nodes
         return self.decoder(x_dict['foot'])
 
 
@@ -415,7 +444,8 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                  num_layers: int, y_indices: list[int],
                  data_metadata, dummy_batch, 
                  optimizer: str = "adam", lr: float = 0.003,
-                 regression: bool = True, activation_fn = nn.ReLU()):
+                 regression: bool = True, activation_fn = nn.ReLU(),
+                 use_edge_attr: bool = False):
         """
         Constructor for Heterogeneous GNN.
 
@@ -436,20 +466,23 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                               out_channels=1,
                               data_metadata=data_metadata,
                               regression=regression,
-                              activation_fn=activation_fn)
+                              activation_fn=activation_fn,
+                              use_edge_attr=use_edge_attr)
         self.y_indices = y_indices
         self.regression = regression
 
         # Initialize lazy modules
         with torch.no_grad():
             self.model(x_dict=dummy_batch.x_dict,
-                       edge_index_dict=dummy_batch.edge_index_dict)
+                       edge_index_dict=dummy_batch.edge_index_dict,
+                       edge_attr_dict=dummy_batch.edge_attr_dict)
         self.save_hyperparameters()
 
     def step_helper_function(self, batch, batch_idx):
         # Get the raw foot output
-        out_raw = self.model(x_dict=batch.x_dict,
-                             edge_index_dict=batch.edge_index_dict)
+        out_raw = self.model(batch.x_dict,
+                             batch.edge_index_dict,
+                             batch.edge_attr_dict)
 
         # Get the outputs from the foot nodes
         y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.y_indices, "heterogeneous_gnn")
@@ -515,7 +548,8 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
         with torch.no_grad():
             for batch in valLoader:
                 out_raw = model.model(x_dict=batch.x_dict,
-                                      edge_index_dict=batch.edge_index_dict)
+                                      edge_index_dict=batch.edge_index_dict,
+                                      edge_attr_dict=batch.edge_attr_dict)
 
                 # Get the outputs from the foot nodes
                 pred_batch = get_foot_node_outputs_gnn(out_raw, batch, model.y_indices, "heterogeneous_gnn")
@@ -545,7 +579,8 @@ def train_model(train_dataset: Subset,
                 lr: float = 0.003,
                 epochs: int = 100,
                 hidden_size: int = 10,
-                regression: bool = True):
+                regression: bool = True,
+                use_edge_attr: bool = False):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -645,7 +680,8 @@ def train_model(train_dataset: Subset,
             dummy_batch=dummy_batch,
             optimizer=optimizer,
             lr=lr, 
-            regression=regression)
+            regression=regression,
+            use_edge_attr=use_edge_attr)
     else:
         raise ValueError("Invalid model type.")
 

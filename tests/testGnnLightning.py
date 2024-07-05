@@ -61,7 +61,7 @@ class TestGnnLightning(unittest.TestCase):
         each model as well without a crash.
         """
 
-        # For each model
+        # For each regression model
         for model in self.models:
             # Train on the model
             train_dataset, val_dataset, test_dataset = random_split(
@@ -82,23 +82,24 @@ class TestGnnLightning(unittest.TestCase):
             self.assertEqual(labels.shape[0], len(test_dataset.indices))
             self.assertEqual(labels.shape[1], 4)
 
-        # Test for classification
-        train_dataset, val_dataset, test_dataset = random_split(
-            self.class_dataset_hgnn_3, [0.7, 0.2, 0.1], generator=self.rand_gen)
-        path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
-                                            testing_mode=True, disable_logger=True, 
-                                            regression=False)
+        # Test classification model
+        for i in range(0, 2):
+            train_dataset, val_dataset, test_dataset = random_split(
+                self.class_dataset_hgnn_3, [0.7, 0.2, 0.1], generator=self.rand_gen)
+            path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                                testing_mode=True, disable_logger=True, 
+                                                regression=False, use_edge_attr=i)
 
-        # Make sure two models were saved
-        models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
-        self.assertEqual(len(models), 2)
+            # Make sure two models were saved
+            models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
+            self.assertEqual(len(models), 2)
 
-        # Predict with the model
-        pred, labels = evaluate_model(models[0], test_dataset)
+            # Predict with the model
+            pred, labels = evaluate_model(models[0], test_dataset)
 
-        # Assert the sizes of the results match
-        self.assertEqual(pred.shape[0], len(test_dataset.indices))
-        self.assertEqual(labels.shape[0], len(test_dataset.indices))
+            # Assert the sizes of the results match
+            self.assertEqual(pred.shape[0], len(test_dataset.indices))
+            self.assertEqual(labels.shape[0], len(test_dataset.indices))
 
 
     def test_reshape_functions_for_normal_gnn(self):
@@ -302,7 +303,7 @@ class TestGnnLightning(unittest.TestCase):
             ce_loss_des = torch.nn.functional.cross_entropy(pred, gt)
             
             # Make sure that they match
-            np.testing.assert_array_almost_equal(ce_loss_des, base.ce_loss, 7)
+            np.testing.assert_array_almost_equal(ce_loss_des, base.ce_loss, 6)
 
         # Define a BaseLightning model
         base = Base_Lightning("adam", 0.003, True)

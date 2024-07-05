@@ -4,12 +4,13 @@ import numpy as np
 import urchin
 from pathlib import Path
 
+from scipy.spatial.transform import Rotation
+
+
 class InvalidURDFException(Exception):
     pass
 
-
 class RobotGraph():
-
     class Node():
         """
         Simple class that holds a node's name, and the edges that
@@ -537,8 +538,9 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         Returns:
             (list[np.array]): Multiple matrices, as outlined below, where N
-                is the number of edge attributes. Currently, N is 7, with 1
-                attribute for mass, and 6 for the inertia matrix:
+                is the number of edge attributes. Currently, N is 13, with 1
+                attribute for mass, 3 for inertial transform, 6 for the inertia 
+                matrix, and 3 for joint transform:
                 data['base', 'connect', 'joint'].edge_attr -> [X, N]
                 data['joint', 'connect', 'base'].edge_attr -> [X, N]
                 data['joint', 'connect', 'joint'].edge_attr -> [Y, N]
@@ -546,14 +548,37 @@ class HeterogeneousRobotGraph(RobotGraph):
                 data['joint', 'connect', 'foot'].edge_attr -> [Z, N]
         """
 
-        def add_edge_attributes(edge, matrix: np.array, index: int) -> np.array:
+        def add_edge_attributes(edge, matrix: np.array, index: int, child_node: RobotGraph.Node, inv_trans: bool) -> np.array:
             I = edge.link.inertial.inertia
-            attri = [edge.link.inertial.mass, I[0][0], I[0][1], I[0][2], I[1][1], I[1][2], I[2][2]]
+            I_T = edge.link.inertial.origin
+            J_T = child_node.joint.origin
+
+            # Make sure all rotation angles are zero
+            # (as logic to put those in graph isn't implemented yet)
+            J_r = Rotation.from_matrix(J_T[0:3,0:3])
+            J_angles = J_r.as_euler("xyz",degrees=False)
+            I_r = Rotation.from_matrix(I_T[0:3,0:3])
+            I_angles = I_r.as_euler("xyz",degrees=False)
+            all_angles = np.concatenate((J_angles, I_angles))
+            for val in all_angles:
+                if val != 0.0:
+                    raise ValueError("Graph Parser currently doesn't support URDF files where joint origins include rotational components.")
+                
+            # Extract transformations
+            I_t = np.array(I_T[0:3, 3]).squeeze()
+            J_t = np.array(J_T[0:3, 3]).squeeze()
+            if inv_trans:
+                I_t = I_t - J_t
+                J_t = -J_t    
+                # TODO: Do we need to transform the inertial matrix?
+
+            attri = [edge.link.inertial.mass, I_t[0], I_t[1], I_t[2], I[0][0], I[0][1], I[0][2], I[1][1], I[1][2], I[2][2], 
+                     J_t[0], J_t[1], J_t[2]]
             matrix[index] = attri
             return matrix
 
         # Define the number of attributes
-        N = 7
+        N = 13
 
         # Get the edge attribute matrices
         bj, jb, jj, fj, jf = self.get_edge_index_matrices()
@@ -563,7 +588,9 @@ class HeterogeneousRobotGraph(RobotGraph):
 
         # Define all of the edge matrices
         base_to_joint_matrix = np.ones([bj.shape[1], N])
+        joint_to_base_matrix = np.ones([jb.shape[1], N])
         joint_to_joint_matrix = np.ones([jj.shape[1], N])
+        foot_to_joint_matrix = np.ones([fj.shape[1], N])
         joint_to_foot_matrix = np.ones([jf.shape[1], N])
 
         # Iterate through edges
@@ -587,24 +614,24 @@ class HeterogeneousRobotGraph(RobotGraph):
                        jj[0][j+1] == c_index and jj[1][j+1] == p_index:
                         
                         # Add the edge attributes
-                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j)
-                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j+1)
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j, child_node, False)
+                        joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j+1, child_node, True)
 
             elif parent_type == 'base' and child_type == 'joint':
-                 for j in range(0, len(bj[0])):
-                     if bj[0][j] == p_index and bj[1][j] == c_index:
-                        base_to_joint_matrix = add_edge_attributes(edge, base_to_joint_matrix, j)
+                for j in range(0, len(bj[0])):
+                    if bj[0][j] == p_index and bj[1][j] == c_index:
+                        base_to_joint_matrix = add_edge_attributes(edge, base_to_joint_matrix, j, child_node, False)
+                    if jb[0][j] == c_index and jb[1][j] == p_index:
+                        joint_to_base_matrix = add_edge_attributes(edge, joint_to_base_matrix, j, child_node, True)
 
             elif parent_type == 'joint' and child_type == 'foot':
                 for j in range(0, len(jf[0])):
-                     if jf[0][j] == p_index and jf[1][j] == c_index:
-                        joint_to_foot_matrix = add_edge_attributes(edge, joint_to_foot_matrix, j)
+                    if jf[0][j] == p_index and jf[1][j] == c_index:
+                        joint_to_foot_matrix = add_edge_attributes(edge, joint_to_foot_matrix, j, child_node, False)
+                    if fj[0][j] == c_index and fj[1][j] == p_index:
+                        foot_to_joint_matrix = add_edge_attributes(edge, foot_to_joint_matrix, j, child_node, True)
             else:
                 raise Exception("Not possible")
             
-        # Create the last two matrices
-        joint_to_base_matrix = base_to_joint_matrix
-        foot_to_joint_matrix = joint_to_foot_matrix
-
         return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
                foot_to_joint_matrix, joint_to_foot_matrix
