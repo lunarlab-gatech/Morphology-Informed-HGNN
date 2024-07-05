@@ -208,8 +208,8 @@ class TestGnnLightning(unittest.TestCase):
                 break
 
             # Get the raw model output
-            raw_out_batch_size_1 = model.model(x_dict=batch_1.x_dict, edge_index_dict=batch_1.edge_index_dict)
-            raw_out_batch_size_100 = model.model(x_dict=batch_100.x_dict, edge_index_dict=batch_100.edge_index_dict)
+            raw_out_batch_size_1 = model.model(x_dict=batch_1.x_dict, edge_index_dict=batch_1.edge_index_dict, edge_attr_dict=None)
+            raw_out_batch_size_100 = model.model(x_dict=batch_100.x_dict, edge_index_dict=batch_100.edge_index_dict, edge_attr_dict=None)
 
             # Get the reshaping output
             result_1 = get_foot_node_outputs_gnn(raw_out_batch_size_1, batch_1, model.y_indices, "heterogeneous_gnn")
