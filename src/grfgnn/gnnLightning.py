@@ -161,6 +161,7 @@ class GRF_HGNN(torch.nn.Module):
             edge_attr_dict[self.data_metadata[1][2]] = self.edge_encoder_2(edge_attr_dict[self.data_metadata[1][2]])
             edge_attr_dict[self.data_metadata[1][3]] = self.edge_encoder_3(edge_attr_dict[self.data_metadata[1][3]])
             edge_attr_dict[self.data_metadata[1][4]] = self.edge_encoder_4(edge_attr_dict[self.data_metadata[1][4]])
+            edge_attr_dict = {key: self.activation(x) for key, x in edge_attr_dict.items()}
         x_dict = {key: self.activation(x) for key, x in x_dict.items()}
 
         # Layers 
