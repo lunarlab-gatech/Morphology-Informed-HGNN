@@ -343,7 +343,7 @@ class NormalRobotGraph(RobotGraph):
         for edge in self.edges:
             a_index = node_dict[edge.parent]
             b_index = node_dict[edge.child]
-            edge_vector = np.array([[a_index, b_index], [b_index, a_index]])
+            edge_vector = np.array([[a_index], [b_index]])
             if edge_matrix is None:
                 edge_matrix = edge_vector
             else:
@@ -493,7 +493,7 @@ class HeterogeneousRobotGraph(RobotGraph):
         # Define all of the edge matrices
         base_to_joint_matrix = None
         joint_to_joint_matrix = None
-        foot_to_joint_matrix = None
+        joint_to_foot_matrix = None
 
         # Iterate through edges
         for edge in self.edges:
@@ -510,8 +510,7 @@ class HeterogeneousRobotGraph(RobotGraph):
 
             # Add their info to the corresponding matrix
             if parent_type == child_type and parent_type == 'joint':
-                edge_vector = np.array([[p_index, c_index], [c_index,
-                                                             p_index]])
+                edge_vector = np.array([[p_index], [c_index]])
                 joint_to_joint_matrix = add_to_matrix(joint_to_joint_matrix,
                                                       edge_vector)
             elif parent_type == 'base' and child_type == 'joint':
@@ -519,16 +518,15 @@ class HeterogeneousRobotGraph(RobotGraph):
                 base_to_joint_matrix = add_to_matrix(base_to_joint_matrix,
                                                      edge_vector)
             elif parent_type == 'joint' and child_type == 'foot':
-                edge_vector = np.array([[c_index], [p_index]])
-                foot_to_joint_matrix = add_to_matrix(foot_to_joint_matrix,
+                edge_vector = np.array([[p_index], [c_index]])
+                joint_to_foot_matrix = add_to_matrix(joint_to_foot_matrix,
                                                      edge_vector)
             else:
                 raise Exception("Not possible")
 
-        # Create the last two matrices
-        joint_to_base_matrix = base_to_joint_matrix[[1, 0]]
-        joint_to_foot_matrix = foot_to_joint_matrix[[1, 0]]
-
+        # Create the last two matrices [For Unidirectional, only enable one way]
+        joint_to_base_matrix = np.array([[], []])
+        foot_to_joint_matrix = np.array([[], []])
         return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
                foot_to_joint_matrix, joint_to_foot_matrix
     
@@ -610,8 +608,7 @@ class HeterogeneousRobotGraph(RobotGraph):
                 for j in range(0, len(jj[0])-1):
 
                     # Find the index in the edge index matrix that matches this edge
-                    if jj[0][j] == p_index and jj[1][j] == c_index and \
-                       jj[0][j+1] == c_index and jj[1][j+1] == p_index:
+                    if jj[0][j] == p_index and jj[1][j] == c_index:
                         
                         # Add the edge attributes
                         joint_to_joint_matrix = add_edge_attributes(edge, joint_to_joint_matrix, j, child_node, False)
@@ -621,17 +618,16 @@ class HeterogeneousRobotGraph(RobotGraph):
                 for j in range(0, len(bj[0])):
                     if bj[0][j] == p_index and bj[1][j] == c_index:
                         base_to_joint_matrix = add_edge_attributes(edge, base_to_joint_matrix, j, child_node, False)
-                    if jb[0][j] == c_index and jb[1][j] == p_index:
-                        joint_to_base_matrix = add_edge_attributes(edge, joint_to_base_matrix, j, child_node, True)
+                    # if jb[0][j] == c_index and jb[1][j] == p_index:
+                    #     joint_to_base_matrix = add_edge_attributes(edge, joint_to_base_matrix, j, child_node, True)
 
             elif parent_type == 'joint' and child_type == 'foot':
                 for j in range(0, len(jf[0])):
                     if jf[0][j] == p_index and jf[1][j] == c_index:
                         joint_to_foot_matrix = add_edge_attributes(edge, joint_to_foot_matrix, j, child_node, False)
-                    if fj[0][j] == c_index and fj[1][j] == p_index:
-                        foot_to_joint_matrix = add_edge_attributes(edge, foot_to_joint_matrix, j, child_node, True)
+                    # if fj[0][j] == c_index and fj[1][j] == p_index:
+                    #     foot_to_joint_matrix = add_edge_attributes(edge, foot_to_joint_matrix, j, child_node, True)
             else:
                 raise Exception("Not possible")
-            
         return base_to_joint_matrix, joint_to_base_matrix, joint_to_joint_matrix, \
                foot_to_joint_matrix, joint_to_foot_matrix

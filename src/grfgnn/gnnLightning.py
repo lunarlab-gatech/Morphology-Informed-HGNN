@@ -4,7 +4,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 from torch_geometric.nn.models import GAT
-from torch_geometric.nn import Linear, HeteroConv, GATv2Conv, HeteroDictLinear, CGConv
+from torch_geometric.nn import Linear, HeteroConv, GATv2Conv, HeteroDictLinear, GCNConv, GraphConv, NNConv, CGConv
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -108,25 +108,18 @@ class GRF_HGNN(torch.nn.Module):
         # Hopefully for all node and edge features
         self.node_encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0])
         self.edge_encoder_0 = Linear(edge_dim, hidden_channels)
-        self.edge_encoder_1 = Linear(edge_dim, hidden_channels)
-        self.edge_encoder_2 = Linear(edge_dim, hidden_channels)
-        self.edge_encoder_3 = Linear(edge_dim, hidden_channels)
-        self.edge_encoder_4 = Linear(edge_dim, hidden_channels)
 
         # Create dictionary that maps edge connections type to convolutional operator
         conv_dict = {}
+        if_use_edges_conv = CGConv(hidden_channels, hidden_channels, aggr='add')
         for edge_connection in data_metadata[1]:
             # TODO: Maybe wrap this out with an operation that better matches what we want to happen with the edges.
             if use_edge_attr:
-                conv_dict[edge_connection] = CGConv(hidden_channels,
-                                                    dim=hidden_channels,
-                                                    aggr='add')
+                conv_dict[edge_connection] = if_use_edges_conv
             else:
-                conv_dict[edge_connection] = GATv2Conv(hidden_channels,
-                                                   hidden_channels,
-                                                   add_self_loops=False,
-                                                   edge_dim=hidden_channels,
-                                                   aggr='sum')
+                conv_dict[edge_connection] = GraphConv(hidden_channels,
+                                                 hidden_channels,
+                                                 aggr='add')
         # Create a convolution for each layer
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
@@ -157,10 +150,10 @@ class GRF_HGNN(torch.nn.Module):
         x_dict = self.node_encoder(x_dict)
         if self.use_edge_attr:
             edge_attr_dict[self.data_metadata[1][0]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][0]])
-            edge_attr_dict[self.data_metadata[1][1]] = self.edge_encoder_1(edge_attr_dict[self.data_metadata[1][1]])
-            edge_attr_dict[self.data_metadata[1][2]] = self.edge_encoder_2(edge_attr_dict[self.data_metadata[1][2]])
-            edge_attr_dict[self.data_metadata[1][3]] = self.edge_encoder_3(edge_attr_dict[self.data_metadata[1][3]])
-            edge_attr_dict[self.data_metadata[1][4]] = self.edge_encoder_4(edge_attr_dict[self.data_metadata[1][4]])
+            edge_attr_dict[self.data_metadata[1][1]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][1]])
+            edge_attr_dict[self.data_metadata[1][2]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][2]])
+            edge_attr_dict[self.data_metadata[1][3]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][3]])
+            edge_attr_dict[self.data_metadata[1][4]] = self.edge_encoder_0(edge_attr_dict[self.data_metadata[1][4]])
             edge_attr_dict = {key: self.activation(x) for key, x in edge_attr_dict.items()}
         x_dict = {key: self.activation(x) for key, x in x_dict.items()}
 
