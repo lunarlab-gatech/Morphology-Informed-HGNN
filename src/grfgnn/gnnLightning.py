@@ -106,20 +106,18 @@ class GRF_HGNN(torch.nn.Module):
         # TODO: Test that it encodes both node and edge features
         self.encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0])
 
-        # Create dictionary that maps edge connections type to convolutional operator
-        conv_dict = {}
-        for edge_connection in data_metadata[1]:
-            # TODO: Maybe wap this out with an operation that better matches what we want to happen with the edges,
-            # instead of just using it for the attention calculation.
-            conv_dict[edge_connection] = GATv2Conv(hidden_channels,
-                                                   hidden_channels,
-                                                   add_self_loops=False,
-                                                   edge_dim=edge_dim,
-                                                   aggr='sum')
-
         # Create a convolution for each layer
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
+            conv_dict = {}
+            for edge_connection in data_metadata[1]:
+                # TODO: Maybe wap this out with an operation that better matches what we want to happen with the edges,
+                # instead of just using it for the attention calculation.
+                conv_dict[edge_connection] = GATv2Conv(hidden_channels,
+                                                    hidden_channels,
+                                                    add_self_loops=False,
+                                                    edge_dim=edge_dim,
+                                                   aggr='sum')
             conv = HeteroConv(conv_dict, aggr='sum')
             self.convs.append(conv)
 
