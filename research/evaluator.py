@@ -1,6 +1,6 @@
 from grfgnn.datasets import QuadSDKDataset
 from pathlib import Path
-from grfgnn.gnnLightning import evaluate_model
+from grfgnn.lightning_py.gnnLightning import evaluate_model
 from grfgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
 from grfgnn.visualization import visualize_model_outputs
 import torch

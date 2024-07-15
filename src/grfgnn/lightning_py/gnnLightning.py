@@ -1,127 +1,18 @@
+from lib2to3.pytree import Base
 import torch
 from torch import optim, nn
 import lightning as L
-from torch_geometric.nn import Linear, HeteroConv, HeteroDictLinear, GraphConv
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
 import names
 from torch.utils.data import Subset
-import torchmetrics
 import numpy as np
+import torchmetrics
 import torchmetrics.classification
 from .customMetrics import CrossEntropyLossMetric
-
-def get_foot_node_outputs_gnn(out_raw, batch, is_regression):
-    """
-    Helper method that reshapes the raw output of the
-    gnn-based models and extracts the foot node so that 
-    we can properly calculate the loss.
-    """
-    if is_regression:
-        return torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
-    else: 
-        return torch.reshape(out_raw.squeeze(), (batch.batch_size, 8))
-
-def get_foot_node_labels_gnn(batch):
-    """
-    Helper method that reshapes the labels of the gnn
-    datasets so we can properly calculate the loss.
-    """
-    return torch.reshape(batch.y, (batch.batch_size, 4))
-
-
-def gnn_classification_output(y_pred: torch.Tensor, y: torch.Tensor):
-    """
-    Convert the y labels from Bx[4] individual foot contact classes
-    into a single Bx1 class out of 16 options.
-
-    Also, convert the y_pred from Bx[4x2] individual foot contact log probabilities
-    into a single Bx16 class probability which comprises the four states.
-    """
-    
-    # Convert y labels from four sets of 2 classes to one set of 16 classes
-    y_np = y.cpu().numpy()
-    y_new = np.zeros((y.shape[0], 1))
-    for i in range(0, y.shape[0]):
-        y_new[i] = y_np[i,0] * 8 + y_np[i,1] * 4 + y_np[i,2] * 2  + y_np[i,3]
-    y_new = torch.tensor(y_new, dtype=int)
-
-    # Convert y_pred from two class predictions per foot to a single 16 class prediction
-    y_pred_new = torch.zeros((y_pred.shape[0], 16))
-    for i in range(0, y_pred.shape[0]):
-        for j in range(0, 16):
-            foot_0_prob = y_pred[i,int(np.floor(j / 8.0) % 2)]
-            foot_1_prob = y_pred[i,int((np.floor(j / 4.0) % 2) + 2)]
-            foot_2_prob = y_pred[i,int((np.floor(j / 2.0) % 2) + 4)]
-            foot_3_prob = y_pred[i,int((j % 2) + 6)]
-            
-            # Note, log probabilities of independent events add instead of multiply
-            y_pred_new[i,j] = torch.add(torch.add(foot_0_prob, foot_1_prob), torch.add(foot_2_prob, foot_3_prob))
-
-    return y_pred_new, y_new
-
-class GRF_HGNN(torch.nn.Module):
-    """
-    The Ground Reaction Force Heterogeneous Graph Neural Network model.
-    """
-
-    def __init__(self, hidden_channels: int, edge_dim: int, num_layers: int, 
-                 out_channels: int, data_metadata, regression: bool = True, 
-                 activation_fn = nn.ReLU()):
-        """
-        Parameters:
-            out_channels (int): Only used for regression problems. The number
-                of predicted output values.
-            out_classes (int): Only used for classification problems. The number
-                of predicted output classes PER FOOT. Ex: if out_classes is 2, 
-                then the total # of output classes for all four legs is 2^4, or 16.
-        """
-
-
-        super().__init__()
-        self.regression = regression
-
-        # Create the first layer encoder to convert features into embeddings
-        # Just does node features
-        self.encoder = HeteroDictLinear(-1, hidden_channels, data_metadata[0])
-
-        # Create a convolution for each layer
-        self.convs = torch.nn.ModuleList()
-        for _ in range(num_layers):
-            conv_dict = {}
-            for edge_connection in data_metadata[1]:
-                # TODO: Maybe wap this out with an operation that better matches what we want to happen with the edges,
-                # instead of just using it for the attention calculation.
-                conv_dict[edge_connection] = GraphConv(hidden_channels,
-                                                    hidden_channels,
-                                                    aggr='add')
-            conv = HeteroConv(conv_dict, aggr='sum')
-            self.convs.append(conv)
-
-        # Save the activation function
-        self.activation = activation_fn
-
-        # Create the final linear layer (Decoder) -> Just for nodes of type "foot"
-        # Meant to calculate the final GRF values
-        if self.regression:
-            self.decoder = Linear(hidden_channels, out_channels)
-        else: # Add a Softmax for classification problems
-            modules = []
-            modules.append(nn.Linear(hidden_channels, 2))
-            modules.append(nn.LogSoftmax(dim=1))
-            self.decoder = nn.Sequential(*modules)
-
-    def forward(self, x_dict, edge_index_dict):
-        x_dict = self.encoder(x_dict)
-        x_dict = {key: self.activation(x) for key, x in x_dict.items()}
-        for conv in self.convs:
-            # TODO: Does the Activation function actually work?
-            x_dict = conv(x_dict, edge_index_dict)
-            x_dict = {key: self.activation(x) for key, x in x_dict.items()}
-        return self.decoder(x_dict['foot'])
-
+from .hgnn import GRF_HGNN
 
 class Base_Lightning(L.LightningModule):
     """
@@ -230,14 +121,22 @@ class Base_Lightning(L.LightningModule):
 
             # Make 2 binary class floats for CE_loss
             y_long = y.long()
-            self.ce_loss = self.metric_ce(torch.reshape(y_pred, (batch_size*4, 2)), y_long.flatten())
+            print("y_pred: ", y_pred[0:5])
+            print(torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1).shape)
+            print(torch.flatten(y_pred).unsqueeze(dim=1).shape)
+            y_pred_2_floats = torch.cat((torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1), 
+                                           torch.flatten(y_pred).unsqueeze(dim=1)), dim=1)
+            print("y_pred_2_floats: ", y_pred_2_floats[0:20])
+            
+            self.ce_loss = self.metric_ce(y_pred_2_floats, y_long.flatten())
 
             # Calculate 16 class predictions for accuracy
-            y_pred_16, y_16 = gnn_classification_output(y_pred, y)
+            y_pred_16, y_16 = self.classification_conversion_16_class(y_pred, y)
             self.acc = self.metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze())
 
             # Calculate binary class predictions for f1-scores
-            y_pred_2 = torch.reshape(torch.argmax(torch.reshape(y_pred, (batch_size*4, 2)), dim=1), (batch_size, 4))
+            y_pred_2 = torch.reshape(torch.argmax(y_pred_2_floats, dim=1), (batch_size, 4))
+            print("y_pred_2: ", y_pred_2)
             self.f1_leg0 = self.metric_f1_leg0(y_pred_2[:,0], y[:,0])
             self.f1_leg1 = self.metric_f1_leg1(y_pred_2[:,1], y[:,1])
             self.f1_leg2 = self.metric_f1_leg2(y_pred_2[:,2], y[:,2])
@@ -313,7 +212,7 @@ class Base_Lightning(L.LightningModule):
     def predict_step(self, batch, batch_idx):
         y, y_pred = self.step_helper_function(batch)
         if not self.regression:
-            y_pred, y = gnn_classification_output(y_pred, y)
+            y_pred, y = self.classification_conversion_16_class(y_pred, y)
         return y, y_pred
 
     # ======================= Optimizer =======================
@@ -333,10 +232,55 @@ class Base_Lightning(L.LightningModule):
         to get loss and model output.
 
         Returns:
-            y: The ground truth labels
-            y_pred: The predicted model output.
+            y: The ground truth labels with the shape (batch_size, 4)
+            y_pred: The predicted model output with the shape (batch_size, 4).
+                    If self.regression, these are just GRF values. If not 
+                    self.regression, then these are the probabilities of contact
+                    for each foot (where 1 is 100% probability of contact).
+
         """
         raise NotImplementedError
+    
+    def classification_conversion_16_class(self, y_pred: torch.Tensor, y: torch.Tensor):
+        """
+        Convert the y labels from individual foot contact classes into a single 
+        class out of 16 options. In other words, convert y from (batch_size, 4) to
+        (batch_size, 1).
+
+        Also, convert the y_pred from individual foot contact probabilities
+        into a 16 class probability which comprises the four states. In other words,
+        convert y_pred from (batch_size, 4) to (batch_size, 16).
+
+        Parameters:
+            y_pred (torch.Tensor) - A Tensor of shape (batch_size, 4)
+            y      (torch.Tensor) - A Tensor of shape (batch_size, 4)
+        """
+        
+        # Convert y labels from four sets of 2 classes to one set of 16 classes
+        y_np = y.cpu().numpy()
+        y_new = np.zeros((y.shape[0], 1))
+        for i in range(0, y.shape[0]):
+            y_new[i] = y_np[i,0] * 8 + y_np[i,1] * 4 + y_np[i,2] * 2 + y_np[i,3]
+        y_new = torch.tensor(y_new, dtype=int)
+
+        # Convert y_pred from two class predictions per foot to a single 16 class prediction
+        y_pred_new = torch.zeros((y_pred.shape[0], 16))
+        for j in range(0, 16):
+            if (np.floor(j / 8.0) % 2): foot_0_prob = y_pred[:,0]
+            else: foot_0_prob = 1 - y_pred[:,0]
+
+            if (np.floor(j / 4.0) % 2): foot_1_prob = y_pred[:,1]
+            else: foot_1_prob = 1 - y_pred[:,1]
+
+            if (np.floor(j / 2.0) % 2): foot_2_prob = y_pred[:,2]
+            else: foot_2_prob = 1 - y_pred[:,2]
+
+            if j % 2: foot_3_prob = y_pred[:,3]
+            else: foot_3_prob = 1 - y_pred[:,3]
+
+            y_pred_new[:,j] = torch.mul(torch.mul(foot_0_prob, foot_1_prob), torch.mul(foot_2_prob, foot_3_prob))
+
+        return y_pred_new, y_new
 
 
 class MLP_Lightning(Base_Lightning):
@@ -360,8 +304,6 @@ class MLP_Lightning(Base_Lightning):
         super().__init__(optimizer, lr, regression)
         self.batch_size = batch_size
         self.regression = regression
-        if regression is False:
-            raise ValueError("MLP_Lightning currently only supports regressions problems.")
 
         # Create the proper number of layers
         modules = []
@@ -371,6 +313,8 @@ class MLP_Lightning(Base_Lightning):
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
+            if not self.regression:
+                modules.append(nn.Sigmoid())
         else:
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
@@ -378,6 +322,8 @@ class MLP_Lightning(Base_Lightning):
                 modules.append(nn.Linear(hidden_channels, hidden_channels))
                 modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
+            if not self.regression:
+                modules.append(nn.Sigmoid())
 
         self.mlp_model = nn.Sequential(*modules)
         self.save_hyperparameters()
@@ -425,10 +371,10 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                              edge_index_dict=batch.edge_index_dict)
 
         # Get the outputs from the foot nodes
-        y_pred = get_foot_node_outputs_gnn(out_raw, batch, self.regression)
+        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
 
         # Get the labels
-        y = get_foot_node_labels_gnn(batch)
+        y = torch.reshape(batch.y, (batch.batch_size, 4))
         return y, y_pred
 
 
@@ -485,14 +431,10 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                                       edge_index_dict=batch.edge_index_dict)
 
                 # Get the outputs from the foot nodes
-                pred_batch = get_foot_node_outputs_gnn(out_raw, batch, model.regression)
+                pred_batch = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
 
                 # Get the labels
-                labels_batch = get_foot_node_labels_gnn(batch)
-
-                if not model.regression:
-                    pred_batch, labels_batch = gnn_classification_output(pred_batch, labels_batch)
-                    pred_batch = torch.argmax(pred_batch, dim=1)
+                labels_batch = torch.reshape(batch.y, (batch.batch_size, 4))
 
                 # Append to the previously collected data
                 pred = torch.cat((pred, pred_batch), dim=0)

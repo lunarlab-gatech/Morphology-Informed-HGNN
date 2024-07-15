@@ -1,5 +1,5 @@
 from pathlib import Path
-from grfgnn.gnnLightning import train_model
+from grfgnn.lightning_py.gnnLightning import train_model
 import torch
 from grfgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver, annGRFDataset
 from torch.utils.data import Subset

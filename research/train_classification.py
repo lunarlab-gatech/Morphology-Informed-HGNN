@@ -4,7 +4,7 @@ import grfgnn.datasets_py.LinTzuYaunDataset as linData
 from pathlib import Path
 import numpy as np
 import torch
-from grfgnn.gnnLightning import train_model
+from grfgnn.lightning_py.gnnLightning import train_model
 
 def main():
     """
