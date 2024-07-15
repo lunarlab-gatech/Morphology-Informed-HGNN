@@ -13,7 +13,7 @@ class CrossEntropyLossMetric(Metric):
         self.add_state("total_num", default=torch.tensor(0, dtype=torch.float64), dist_reduce_fx="sum")
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction='sum')
 
-    def update(self, target: torch.Tensor, preds: torch.Tensor) -> None:
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
         if preds.size(0) != target.size(0):
             raise ValueError("Both tensors must have the same number of batches.")
         self.summed_loss += self.loss_fn(preds, target)

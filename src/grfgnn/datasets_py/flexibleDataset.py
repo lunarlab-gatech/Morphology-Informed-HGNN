@@ -52,9 +52,9 @@ class FlexibleDataset(Dataset):
         """
         # Check for valid data format
         self.data_format = data_format
-        if self.data_format != 'mlp' and self.data_format != 'gnn' and self.data_format != 'heterogeneous_gnn':
+        if self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
             raise ValueError(
-                "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'."
+                "Parameter 'data_format' must be 'mlp' or 'heterogeneous_gnn'."
             )
 
         # Setup the directories for raw and processed data, download it, 
@@ -92,6 +92,12 @@ class FlexibleDataset(Dataset):
         else:
             self.robotGraph = NormalRobotGraph(urdf_path, ros_builtin_path,
                                                urdf_to_desc_path)
+            
+            # Create second one so that MLP can order outputs to match
+            # the URDF file.
+            self.robotGraphHetero = HeterogeneousRobotGraph(urdf_path,
+                                                      ros_builtin_path,
+                                                      urdf_to_desc_path)
 
         # Make sure the URDF file we were given properly matches
         # what we are expecting
@@ -120,12 +126,6 @@ class FlexibleDataset(Dataset):
         for urdf_node_name in self.get_foot_node_sorted_order():
             self.foot_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
         self.foot_node_indices_sorted = np.array(self.foot_node_indices_sorted, dtype=np.uint)
-
-        # Precompute the return value for get_foot_node_indices_matching_labels()
-        self.foot_node_indices_of_graph_matching_labels = []
-        for urdf_name in self.get_foot_node_sorted_order():
-            self.foot_node_indices_of_graph_matching_labels.append(self.urdf_name_to_graph_index[urdf_name])
-        self.foot_node_indices_of_graph_matching_labels = np.array(self.foot_node_indices_of_graph_matching_labels, dtype=np.uint)
 
         # Calculate means and stds for input and label standardization later
         # self.calculate_mean_and_std()
@@ -187,26 +187,6 @@ class FlexibleDataset(Dataset):
     # ================================================================
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     # ================================================================
-
-    def get_foot_node_indices_matching_labels(self) -> np.array:
-        """
-        This helper method returns the foot node indices that correspond 
-        to the ground truth GRF labels contained in the "y" of each 
-        Data object. The number x in the ith index tells us that 
-        ground truth label i matches up with node x from the GNN output.
-
-        For example, if the graph has 8 nodes, and there are only 4 
-        ground truth labels, this method might return [0, 3, 4, 7].
-        This means that the first ground truth label should match
-        the output of the node at index 0, the second ground truth label
-        should match the output of the node at index 3, and so on.
-
-        Returns:
-            foot_node_indices (np.array) - List of the indices of
-            the graph nodes that should output the ground truth labels 
-            at the same corresponding index.
-        """
-        return self.foot_node_indices_of_graph_matching_labels
 
     def get_base_node_sorted_order(self) -> list[str]:
         """
@@ -439,9 +419,7 @@ class FlexibleDataset(Dataset):
             raise IndexError("Index value out of Dataset bounds.")
 
         # Return data in the proper format
-        if self.data_format == 'gnn':
-            return self.get_helper_gnn(idx)
-        elif self.data_format == 'mlp':
+        if self.data_format == 'mlp':
             return self.get_helper_mlp(idx)
         elif self.data_format == 'heterogeneous_gnn':
             return self.get_helper_heterogeneous_gnn(idx)
@@ -481,56 +459,17 @@ class FlexibleDataset(Dataset):
 
         # Create the ground truth labels
         lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
-        y = torch.tensor(labels, dtype=torch.float64)
-        return x, y
-
-    def get_helper_gnn(self, idx: int):
-        """
-        Get a dataset entry if we are using a GNN model.
-        """
-
-        # Find out which necessary variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
-        variables_to_check = [j_p, j_v, j_T]
-        variables_to_use = self.find_variables_to_use(variables_to_check)
-        if len(variables_to_use) == 0:
-            raise ValueError("Dataset must provide at least one input.")
-        
-        # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), len(variables_to_use) * self.history_length), dtype=torch.float64)
-
-        # For each dataset entry we include in the history
-        for j in range(0, self.history_length):
-            # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + j)
-            dataset_inputs = [j_p, j_v, j_T]
-
-            # For each joint specified
-            for i, urdf_node_name in enumerate(self.get_joint_node_sorted_order()):
+        y = torch.ones((4), dtype=torch.float64)
+        urdf_name_to_hetero_graph_index = self.robotGraphHetero.get_node_name_to_index_dict()
+        for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
 
                 # Find the index of this particular node
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+                node_index = urdf_name_to_hetero_graph_index[urdf_node_name]
 
-                # For each variable to use
-                for k in variables_to_use:
+                # Add the label feature
+                y[node_index] = labels[i]
 
-                    # Add the features to x matrix
-                    x[node_index, k*self.history_length+j] = dataset_inputs[k][i]
-
-        # Create the edge matrix
-        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
-
-        # Create the labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
-            self.first_index + idx + self.history_length - 1)
-        y = torch.tensor(labels, dtype=torch.float64)
-
-        # Create the graph
-        graph = Data(x=x, edge_index=self.edge_matrix_tensor,
-                     y=y, num_nodes=self.robotGraph.get_num_nodes())
-        return graph
+        return x, y
     
     def get_helper_heterogeneous_gnn(self, idx):
         """
@@ -566,11 +505,20 @@ class FlexibleDataset(Dataset):
         data['joint', 'connect',
              'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
 
-        # Save the labels and number of nodes
+        # Save the number of nodes
+        data.num_nodes = self.robotGraph.get_num_nodes()
+
+        # Make the labels
         lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(
             self.first_index + idx + self.history_length - 1)
-        data.y = torch.tensor(labels, dtype=torch.float64)
-        data.num_nodes = self.robotGraph.get_num_nodes()
+        data.y = torch.ones((4), dtype=torch.float64)
+        for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
+
+                # Find the index of this particular node
+                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+
+                # Add the label feature
+                data.y[node_index] = labels[i]
 
         # Find out which variables are available
         lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
