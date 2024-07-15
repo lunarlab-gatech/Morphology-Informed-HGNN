@@ -313,7 +313,7 @@ class Base_Lightning(L.LightningModule):
     def predict_step(self, batch, batch_idx):
         y, y_pred = self.step_helper_function(batch)
         if not self.regression:
-            y, y_pred = gnn_classification_output(y, y_pred)
+            y_pred, y = gnn_classification_output(y_pred, y)
         return y, y_pred
 
     # ======================= Optimizer =======================
@@ -491,7 +491,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 labels_batch = get_foot_node_labels_gnn(batch)
 
                 if not model.regression:
-                    labels_batch, pred_batch = gnn_classification_output(labels_batch, pred_batch)
+                    pred_batch, labels_batch = gnn_classification_output(pred_batch, labels_batch)
                     pred_batch = torch.argmax(pred_batch, dim=1)
 
                 # Append to the previously collected data
