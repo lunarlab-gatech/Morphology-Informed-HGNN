@@ -29,18 +29,12 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.quad_dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
-        self.quad_dataset_gnn_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
-            self.path_to_a1_urdf, 'package://a1_description/',
-                            'unitree_ros/robots/a1_description', 'gnn', 1)
         self.quad_dataset_mlp_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 1)
         self.quad_dataset_hgnn_3 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 3)
-        self.quad_dataset_gnn_3 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
-            self.path_to_a1_urdf, 'package://a1_description/',
-                            'unitree_ros/robots/a1_description', 'gnn', 3)
         self.quad_dataset_mlp_3 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 3)
@@ -49,18 +43,12 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.lin_dataset_hgnn_1 = LinTzuYaunDataset_concrete_right_circle(
             self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'heterogeneous_gnn', 1)
-        self.lin_dataset_gnn_1 = LinTzuYaunDataset_concrete_right_circle(
-            self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
-            'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'gnn', 1)
         self.lin_dataset_mlp_1 = LinTzuYaunDataset_concrete_right_circle(
             self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'mlp', 1)
         self.lin_dataset_hgnn_3 = LinTzuYaunDataset_concrete_right_circle(
             self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'heterogeneous_gnn', 3)
-        self.lin_dataset_gnn_3 = LinTzuYaunDataset_concrete_right_circle(
-            self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
-            'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'gnn', 3)
         self.lin_dataset_mlp_3 = LinTzuYaunDataset_concrete_right_circle(
             self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'mlp', 3)
@@ -237,69 +225,6 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_equal(y, des_y)
         np.testing.assert_array_almost_equal(x, des_x, 14)
 
-    def test_get_helper_gnn(self):
-        # ====================== Test QuadSDK dataset ======================
-        data: Data = self.quad_dataset_gnn_1.get_helper_gnn(10000)
-
-        # Define the desired data
-        des_x = np.array([[1, 1, 1],
-                        [0.11254642823264671, -1.2845189574751656, -0.6701594400127251],
-                        [0.5695073200020913,  2.2337115054710917, -0.48841280756095506],
-                        [0.9825683053175158, 3.4964483387811476, -0.1350813273560049],
-                        [1, 1, 1],
-                        [-0.16056788963386381, -1.015061543404335, -3.658930090797254],
-                        [ 0.6448773402529877, 0.459564643757568,-3.858403899440098],
-                        [1.1609664103261004, 0.15804277355899754, 12.475195605359755],
-                        [1, 1, 1],
-                        [0.22800622574234453, 1.020374615076573, 3.6351217639084576],
-                        [0.4399285706508147, -0.34825271015763287, 4.456326408036115],
-                        [1.1786520769378077, 0.3185087654826033,  7.829759255207876],
-                        [1, 1, 1],
-                        [-0.1931352599922853, 1.9489188274516005, 0.6111713969715354],
-                        [ 0.4076711540455795, 1.3299772937985548, -0.11888726638996594],
-                        [ 0.9424138768126973, 3.644698146547278, -0.24871924601280232],
-                        [1, 1, 1]], dtype=np.float64)
-        des_y = np.array([0, 64.74924447333427, 64.98097097053076, 0], dtype=np.float64)
-        des_nodes = self.quad_dataset_gnn_1.robotGraph.get_num_nodes()
-        des_edge = self.quad_dataset_gnn_1.robotGraph.get_edge_index_matrix()
-
-        # Test the values
-        np.testing.assert_array_equal(data.y, des_y)
-        np.testing.assert_array_equal(data.x, des_x)
-        self.assertEqual(data.num_nodes, des_nodes)
-        np.testing.assert_array_equal(data.edge_index, des_edge)
-
-        # ===================== Test LinTzuYaun dataset ====================
-        data: Data = self.lin_dataset_gnn_1.get_helper_gnn(30000)
-
-        # Define the desired data
-        des_x = np.array([[1, 1],
-                        [0.0394830703735352, 0.301589965820313],
-                        [-0.420838713645935,-1.47618865966797],
-                        [0.846460103988648,-0.418396085500717],
-                        [1, 1],
-                        [0.000190734863281250,0.142860412597656],
-                        [-0.625548958778381,8.93650817871094],
-                        [1.45497155189514,-9.21489906311035],
-                        [1, 1],
-                        [0.00858306884765625,-1.60317611694336],
-                        [-0.650104880332947,9.79365158081055],
-                        [1.49907255172730,-9.19449234008789],
-                        [1, 1],
-                        [0.0581750869750977,0.0793685913085938],
-                        [-0.498899102210999,-1.38095092773438],
-                        [1.01744437217712,0.0102071752771735],
-                        [1, 1]], dtype=np.float64)
-        des_y = np.array([1, 0,	0, 1], dtype=np.float64)
-        des_nodes = self.quad_dataset_gnn_1.robotGraph.get_num_nodes()
-        des_edge = self.quad_dataset_gnn_1.robotGraph.get_edge_index_matrix()
-
-        # Test the values
-        np.testing.assert_array_equal(data.y, des_y)
-        np.testing.assert_array_almost_equal(data.x, des_x, 14)
-        self.assertEqual(data.num_nodes, des_nodes)
-        np.testing.assert_array_equal(data.edge_index, des_edge)
-
     def test_get_helper_heterogeneous_gnn(self):
         # ====================== Test QuadSDK dataset ======================
         heteroData: HeteroData = self.quad_dataset_hgnn_1.get_helper_heterogeneous_gnn(10000)
@@ -329,9 +254,6 @@ class TestFlexibleDatasets(unittest.TestCase):
         labels_des = [0, 64.74924447333427, 64.98097097053076, 0]
         np.testing.assert_array_equal(heteroData.y.numpy(),
                                       np.array(labels_des, dtype=np.float64))
-
-        # Check the foot node indices matching labels
-        np.testing.assert_array_equal([0, 1, 2, 3], self.quad_dataset_hgnn_1.get_foot_node_indices_matching_labels())
 
         # Check the number of nodes
         number_des = self.quad_dataset_hgnn_1.robotGraph.get_num_nodes()
@@ -385,9 +307,6 @@ class TestFlexibleDatasets(unittest.TestCase):
         labels_des = [1, 0,	0, 1]
         np.testing.assert_array_equal(heteroData.y.numpy(), np.array(labels_des, dtype=np.float64))
 
-        # Check the foot node indices matching labels
-        np.testing.assert_array_equal([3, 1, 2, 0], self.lin_dataset_hgnn_1.get_foot_node_indices_matching_labels())
-
         # Check the number of nodes
         number_des = self.lin_dataset_hgnn_1.robotGraph.get_num_nodes()
         self.assertEqual(heteroData.num_nodes, number_des)
@@ -429,9 +348,6 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.assertEqual(type(x), torch.Tensor)
         self.assertEqual(type(y), torch.Tensor)
 
-        data = self.quad_dataset_gnn_1.get(0)
-        self.assertEqual(type(data), Data)
-
         data = self.quad_dataset_hgnn_1.get(0)
         self.assertEqual(type(data), HeteroData)
 
@@ -467,32 +383,6 @@ class TestFlexibleDatasets(unittest.TestCase):
             # Test the values
             np.testing.assert_equal(x_actual.numpy(), x_des.numpy())
             np.testing.assert_equal(y_actual.numpy(), y_des.numpy())
-
-        # ================================= GNN ==========================================
-        gnn_3_datasets = [self.quad_dataset_gnn_3, self.lin_dataset_gnn_3]
-        gnn_1_datasets = [self.quad_dataset_gnn_1, self.lin_dataset_gnn_1]
-        for i in range(0, 2):
-            data_actual: Data = gnn_3_datasets[i].get_helper_gnn(9998)
-
-            # Get desired node attributes and labels
-            datab2 = gnn_1_datasets[i].get_helper_gnn(9998)
-            datab1 = gnn_1_datasets[i].get_helper_gnn(9999)
-            data = gnn_1_datasets[i].get_helper_gnn(10000)
-            x_des = None
-            if i == 0:
-                x_des = torch.cat((datab2.x[:,0].unsqueeze(1), datab1.x[:,0].unsqueeze(1), data.x[:,0].unsqueeze(1),
-                                datab2.x[:,1].unsqueeze(1), datab1.x[:,1].unsqueeze(1), data.x[:,1].unsqueeze(1),
-                                datab2.x[:,2].unsqueeze(1), datab1.x[:,2].unsqueeze(1), data.x[:,2].unsqueeze(1)), 1)
-            elif i == 1:
-                x_des = torch.cat((datab2.x[:,0].unsqueeze(1), datab1.x[:,0].unsqueeze(1), data.x[:,0].unsqueeze(1),
-                                datab2.x[:,1].unsqueeze(1), datab1.x[:,1].unsqueeze(1), data.x[:,1].unsqueeze(1)), 1)
-            else:
-                raise NotImplementedError
-            y_des = data.y
-
-            # Check the values
-            np.testing.assert_equal(data_actual.x.numpy(), x_des.numpy())
-            np.testing.assert_equal(data_actual.y.numpy(), y_des.numpy())
 
         # ================================= Heterogeneous GNN ==========================================
         hgnn_3_datasets = [self.quad_dataset_hgnn_3, self.lin_dataset_hgnn_3]
