@@ -121,12 +121,12 @@ class Base_Lightning(L.LightningModule):
 
             # Make 2 binary class floats for CE_loss
             y_long = y.long()
-            print("y_pred: ", y_pred[0:5])
-            print(torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1).shape)
-            print(torch.flatten(y_pred).unsqueeze(dim=1).shape)
+            # print("y_pred: ", y_pred[0:5])
+            # print(torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1).shape)
+            # print(torch.flatten(y_pred).unsqueeze(dim=1).shape)
             y_pred_2_floats = torch.cat((torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1), 
                                            torch.flatten(y_pred).unsqueeze(dim=1)), dim=1)
-            print("y_pred_2_floats: ", y_pred_2_floats[0:20])
+            # print("y_pred_2_floats: ", y_pred_2_floats[0:20])
             
             self.ce_loss = self.metric_ce(y_pred_2_floats, y_long.flatten())
 
@@ -136,7 +136,7 @@ class Base_Lightning(L.LightningModule):
 
             # Calculate binary class predictions for f1-scores
             y_pred_2 = torch.reshape(torch.argmax(y_pred_2_floats, dim=1), (batch_size, 4))
-            print("y_pred_2: ", y_pred_2)
+            # print("y_pred_2: ", y_pred_2)
             self.f1_leg0 = self.metric_f1_leg0(y_pred_2[:,0], y[:,0])
             self.f1_leg1 = self.metric_f1_leg1(y_pred_2[:,1], y[:,1])
             self.f1_leg2 = self.metric_f1_leg2(y_pred_2[:,2], y[:,2])
@@ -509,15 +509,15 @@ def train_model(train_dataset: Subset,
     trainLoader: DataLoader = DataLoader(train_dataset,
                                          batch_size=batch_size,
                                          shuffle=True,
-                                         num_workers=15)
+                                         num_workers=30)
     valLoader: DataLoader = DataLoader(val_dataset,
                                        batch_size=batch_size,
                                        shuffle=False,
-                                       num_workers=15)
+                                       num_workers=30)
     testLoader: DataLoader = DataLoader(test_dataset,
                                         batch_size=batch_size,
                                         shuffle=False,
-                                        num_workers=15)
+                                        num_workers=30)
 
     # Get a dummy_batch
     dummy_batch = None

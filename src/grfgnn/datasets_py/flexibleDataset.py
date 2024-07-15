@@ -130,6 +130,46 @@ class FlexibleDataset(Dataset):
         # Calculate means and stds for input and label standardization later
         # self.calculate_mean_and_std()
 
+        # Precompute values for variables_to_use
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index)
+        self.variables_to_use_all = self.find_variables_to_use([lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v])
+        self.variables_to_use_base = self.find_variables_to_use([lin_acc, ang_vel])
+        self.variables_to_use_joint = self.find_variables_to_use([j_p, j_v, j_T])
+        self.variables_to_use_foot = self.find_variables_to_use([f_p, f_v])
+
+        # Check we have necessary variables for some models
+        if len(self.variables_to_use_joint) == 0 and self.data_format == 'gnn':
+            raise ValueError("Dataset must provide at least one joint input for GNN models.")
+        if len(self.variables_to_use_base) + len(self.variables_to_use_joint) + len(self.variables_to_use_foot) == 0:
+            raise ValueError("Dataset must provide at least one input.")
+
+        # Premake the tensors for edge attributes and connections for HGNN
+        if self.data_format == 'heterogeneous_gnn':
+            bj, jb, jj, fj, jf = self.robotGraph.get_edge_index_matrices()
+            self.bj = torch.tensor(bj, dtype=torch.long)
+            self.jb = torch.tensor(jb, dtype=torch.long)
+            self.jj = torch.tensor(jj, dtype=torch.long)
+            self.fj = torch.tensor(fj, dtype=torch.long)
+            self.jf = torch.tensor(jf, dtype=torch.long)
+
+            bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
+            self.bj_attr = torch.tensor(bj_attr, dtype=torch.float64)
+            self.jb_attr = torch.tensor(jb_attr, dtype=torch.float64)
+            self.jj_attr = torch.tensor(jj_attr, dtype=torch.float64)
+            self.fj_attr = torch.tensor(fj_attr, dtype=torch.float64)
+            self.jf_attr = torch.tensor(jf_attr, dtype=torch.float64)
+
+        # Precompute feature matrix sizes for HGNN
+        # Calculate the size of the feature matrices
+        if self.data_format == 'heterogeneous_gnn':
+            self.hgnn_number_nodes = self.robotGraph.get_num_of_each_node_type()
+            self.base_width = len(self.variables_to_use_base) * 3 * self.history_length
+            self.joint_width = len(self.variables_to_use_joint) * self.history_length
+            self.foot_width = len(self.variables_to_use_foot) * 3 * self.history_length
+            if self.base_width <= 0: self.base_width = 1
+            if self.joint_width <= 0: self.joint_width = 1
+            if self.foot_width <= 0: self.foot_width = 1
+
     # ================================================================
     # ========================= DOWNLOADING ==========================
     # ================================================================
@@ -429,22 +469,15 @@ class FlexibleDataset(Dataset):
         Gets a Dataset entry if we are using an MLP model.
         """
 
-        # Make the network inputs
+        # Load the dataset information
         x = None
-
-        # Find out which variables we have to use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
-        variables_to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
-        variables_to_use = self.find_variables_to_use(variables_to_check)
-
-        # Load the dataset information information
         for i in range(0, self.history_length):
 
             # Only add variables that aren't None
             lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx + i)
             dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
             final_input = np.array([])
-            for y in variables_to_use:
+            for y in self.variables_to_use_all:
                 final_input = np.concatenate((final_input, dataset_inputs[y]), axis=0) 
 
             # Construct the input tensor
@@ -480,30 +513,18 @@ class FlexibleDataset(Dataset):
         data = HeteroData()
 
         # Get the edge matrices
-        bj, jb, jj, fj, jf = self.robotGraph.get_edge_index_matrices()
-        data['base', 'connect',
-               'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
-        data['joint', 'connect',
-             'base'].edge_index = torch.tensor(jb, dtype=torch.long)
-        data['joint', 'connect',
-             'joint'].edge_index = torch.tensor(jj, dtype=torch.long)
-        data['foot', 'connect',
-             'joint'].edge_index = torch.tensor(fj, dtype=torch.long)
-        data['joint', 'connect',
-             'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
+        data['base', 'connect','joint'].edge_index = self.bj
+        data['joint', 'connect','base'].edge_index = self.jb
+        data['joint', 'connect','joint'].edge_index = self.jj
+        data['foot', 'connect','joint'].edge_index = self.fj
+        data['joint', 'connect','foot'].edge_index = self.jf
 
         # Set the edge attributes
-        bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
-        data['base', 'connect',
-               'joint'].edge_attr = torch.tensor(bj_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'base'].edge_attr = torch.tensor(jb_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'joint'].edge_attr = torch.tensor(jj_attr, dtype=torch.float64)
-        data['foot', 'connect',
-             'joint'].edge_attr = torch.tensor(fj_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
+        data['base', 'connect','joint'].edge_attr = self.bj_attr
+        data['joint', 'connect','base'].edge_attr = self.jb_attr
+        data['joint', 'connect','joint'].edge_attr = self.jj_attr
+        data['foot', 'connect','joint'].edge_attr = self.fj_attr
+        data['joint', 'connect','foot'].edge_attr = self.jf_attr
 
         # Save the number of nodes
         data.num_nodes = self.robotGraph.get_num_nodes()
@@ -520,27 +541,10 @@ class FlexibleDataset(Dataset):
                 # Add the label feature
                 data.y[node_index] = labels[i]
 
-        # Find out which variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(self.first_index + idx)
-        base_variables_to_use = self.find_variables_to_use([lin_acc, ang_vel])
-        joint_variables_to_use = self.find_variables_to_use([j_p, j_v, j_T])
-        foot_variables_to_use = self.find_variables_to_use([f_p, f_v])
-        if len(base_variables_to_use) + len(joint_variables_to_use) + len(foot_variables_to_use) == 0:
-            raise ValueError("Dataset must provide at least one input.")
-        
-        # Calculate the size of the feature matrices
-        number_nodes = self.robotGraph.get_num_of_each_node_type()
-        base_width = len(base_variables_to_use) * 3 * self.history_length
-        joint_width = len(joint_variables_to_use) * self.history_length
-        foot_width = len(foot_variables_to_use) * 3 * self.history_length
-        if base_width <= 0: base_width = 1
-        if joint_width <= 0: joint_width = 1
-        if foot_width <= 0: foot_width = 1
-
         # Create the feature matrices
-        base_x = torch.ones((number_nodes[0], base_width), dtype=torch.float64)
-        joint_x = torch.ones((number_nodes[1], joint_width), dtype=torch.float64)
-        foot_x = torch.ones((number_nodes[2], foot_width), dtype=torch.float64)
+        base_x = torch.ones((self.hgnn_number_nodes[0], self.base_width), dtype=torch.float64)
+        joint_x = torch.ones((self.hgnn_number_nodes[1], self.joint_width), dtype=torch.float64)
+        foot_x = torch.ones((self.hgnn_number_nodes[2], self.foot_width), dtype=torch.float64)
 
         # For each dataset entry we include in the history
         for j in range(0, self.history_length):
@@ -553,7 +557,7 @@ class FlexibleDataset(Dataset):
                 node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
                 # For each variable to use
-                for k in joint_variables_to_use:
+                for k in self.variables_to_use_joint:
                     joint_x[node_index, k*self.history_length+j] = joint_data[k][i]
 
             # For each base specified (should be 1)
@@ -562,7 +566,7 @@ class FlexibleDataset(Dataset):
                 node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
                 # For each variable to use
-                for k in base_variables_to_use:
+                for k in self.variables_to_use_base:
                     base_x[node_index, ((k*3)+0)*self.history_length+j] = base_data[k][i*3]
                     base_x[node_index, ((k*3)+1)*self.history_length+j] = base_data[k][i*3+1]
                     base_x[node_index, ((k*3)+2)*self.history_length+j] = base_data[k][i*3+2]
@@ -573,7 +577,7 @@ class FlexibleDataset(Dataset):
                 node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
                 # For each variable to use
-                for k in foot_variables_to_use:
+                for k in self.variables_to_use_foot:
                     foot_x[node_index, ((k*3)+0)*self.history_length+j] = foot_data[k][i*3]
                     foot_x[node_index, ((k*3)+1)*self.history_length+j] = foot_data[k][i*3+1]
                     foot_x[node_index, ((k*3)+2)*self.history_length+j] = foot_data[k][i*3+2]
