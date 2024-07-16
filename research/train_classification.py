@@ -1,7 +1,6 @@
-from asyncio import SafeChildWatcher
-from venv import logger
 import grfgnn.datasets_py.LinTzuYaunDataset as linData
 from pathlib import Path
+from torch_geometric.loader import DataLoader
 import numpy as np
 import torch
 from grfgnn.lightning_py.gnnLightning import train_model
@@ -71,7 +70,8 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=4, hidden_size=50,  logger_project_name="grfgnn-classification", batch_size=30, regression=False, lr=0.0003, epochs=30)
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=4, hidden_size=50, 
+                logger_project_name="grfgnn-classification", batch_size=30, regression=False, lr=0.0003, epochs=30)
 
 if __name__ == "__main__":
     main()

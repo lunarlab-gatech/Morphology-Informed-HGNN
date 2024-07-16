@@ -1,4 +1,5 @@
 from lib2to3.pytree import Base
+from lightning.pytorch.callbacks import DeviceStatsMonitor
 import torch
 from torch import optim, nn
 import lightning as L
@@ -509,11 +510,13 @@ def train_model(train_dataset: Subset,
     trainLoader: DataLoader = DataLoader(train_dataset,
                                          batch_size=batch_size,
                                          shuffle=True,
-                                         num_workers=30)
+                                         num_workers=30,
+                                         persistent_workers=True)
     valLoader: DataLoader = DataLoader(val_dataset,
                                        batch_size=batch_size,
                                        shuffle=False,
-                                       num_workers=30)
+                                       num_workers=30,
+                                       persistent_workers=True)
     testLoader: DataLoader = DataLoader(test_dataset,
                                         batch_size=batch_size,
                                         shuffle=False,
@@ -582,6 +585,7 @@ def train_model(train_dataset: Subset,
         benchmark=True,
         devices='auto',
         accelerator="auto",
+        # profiler="simple",
         max_epochs=epochs,
         limit_train_batches=limit_train_batches,
         limit_val_batches=limit_val_batches,

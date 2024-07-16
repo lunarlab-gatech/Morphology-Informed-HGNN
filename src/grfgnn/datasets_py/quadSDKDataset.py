@@ -1,12 +1,10 @@
-import torch
-from torch_geometric.data import Data, Dataset, HeteroData
-from ..graphParser import NormalRobotGraph, HeterogeneousRobotGraph
 from rosbags.highlevel import AnyReader
 from pathlib import Path
 from torchvision.datasets.utils import download_file_from_google_drive
 import os
 from .flexibleDataset import FlexibleDataset
 import numpy as np
+import scipy.io as sio
 
 class QuadSDKDataset(FlexibleDataset):
     """
@@ -28,9 +26,22 @@ class QuadSDKDataset(FlexibleDataset):
         connections = [x for x in self.reader.connections if x.topic == '/quadruped_dataset_entries']
 
         # Iterate through the generators and write important data
-        # to a file
+        # into a dictionary
         prev_grf_time, prev_joint_time, prev_imu_time = 0, 0, 0
         dataset_entries = 0
+
+        # Create arrays for all of the data types
+        timestamps = np.empty((0, 3), dtype=np.float64)
+        imu_acc = np.empty((0, 3), dtype=np.float64)
+        imu_omega = np.empty((0, 3), dtype=np.float64)
+        q = np.empty((0, 12), dtype=np.float64)
+        qd = np.empty((0, 12), dtype=np.float64) 
+        tau = np.empty((0, 12), dtype=np.float64) 
+        F = np.empty((0, 12), dtype=np.float64)
+        r_p = np.empty((0, 3), dtype=np.float64) 
+        r_o = np.empty((0, 4), dtype=np.float64)
+
+        # For each message
         for connection, _timestamp, rawdata in self.reader.messages(connections=connections):
 
             data = self.reader.deserialize(rawdata, connection.msgtype)
@@ -55,59 +66,62 @@ class QuadSDKDataset(FlexibleDataset):
             prev_joint_time = joint_time
             prev_imu_time = imu_time
 
-            # Save the important data
-            with open(str(Path(self.processed_dir,
-                            str(dataset_entries) + ".txt")), "w") as f:
-                arrays = []
+            # Add on the timestamp info
+            timestamps = np.concatenate((timestamps, np.array([[grf_time, joint_time, imu_time]], dtype=np.float64)), axis=0)
 
-                # Add on the timestamp info
-                arrays.append([grf_time, joint_time, imu_time])
+            # Add on the GRF data
+            grf_vec = grf_data.vectors
+            grf_array = np.array([[grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
+                                    grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
+                                    grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
+                                    grf_vec[3].x, grf_vec[3].y, grf_vec[3].z]], dtype=np.float64)
+            F = np.concatenate((F, grf_array), axis=0)
 
-                # Add on the GRF data
-                grf_vec = grf_data.vectors
-                arrays.append([grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
-                            grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
-                            grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
-                            grf_vec[3].x, grf_vec[3].y, grf_vec[3].z])
+            # Add on the IMU data
+            imu_acc = np.concatenate((imu_acc, np.array([[imu_data.linear_acceleration.x,
+                imu_data.linear_acceleration.y,
+                imu_data.linear_acceleration.z]], dtype=np.float64)), axis=0)
+            imu_omega = np.concatenate((imu_omega, np.array([[imu_data.angular_velocity.x,
+                imu_data.angular_velocity.y,
+                imu_data.angular_velocity.z]], dtype=np.float64)), axis=0)
 
-                # Add on the IMU data
-                arrays.append([
-                    imu_data.linear_acceleration.x,
-                    imu_data.linear_acceleration.y,
-                    imu_data.linear_acceleration.z
-                ])
-                arrays.append([
-                    imu_data.angular_velocity.x,
-                    imu_data.angular_velocity.y,
-                    imu_data.angular_velocity.z
-                ])
+            # Add on the joint data
+            q = np.concatenate((q, np.array([joint_data.joints.position], dtype=np.float64)), axis=0)
+            qd = np.concatenate((qd, np.array([joint_data.joints.velocity], dtype=np.float64)), axis=0)
+            tau = np.concatenate((tau, np.array([joint_data.joints.effort], dtype=np.float64)), axis=0)
 
-                # Add on the joint data
-                arrays.append(joint_data.joints.position)
-                arrays.append(joint_data.joints.velocity)
-                arrays.append(joint_data.joints.effort)
-
-                # Add on the robot pose information
-                arrays.append([joint_data.body.pose.position.x,
-                               joint_data.body.pose.position.y,
-                               joint_data.body.pose.position.z])
-                arrays.append([joint_data.body.pose.orientation.x,
-                               joint_data.body.pose.orientation.y,
-                               joint_data.body.pose.orientation.z,
-                               joint_data.body.pose.orientation.w])
-
-                for array in arrays:
-                    for val in array:
-                        f.write(str(val) + " ")
-                    f.write('\n')
+            # Add on the robot pose information
+            r_p = np.concatenate((r_p, np.array([[joint_data.body.pose.position.x,
+                            joint_data.body.pose.position.y,
+                            joint_data.body.pose.position.z]], dtype=np.float64)), axis=0)
+            r_o = np.concatenate((r_o, np.array([[joint_data.body.pose.orientation.x,
+                            joint_data.body.pose.orientation.y,
+                            joint_data.body.pose.orientation.z,
+                            joint_data.body.pose.orientation.w]], dtype=np.float64)), axis=0)
 
             # Track how many entries we have
             dataset_entries += 1
 
+        # Create the dictionary with all of the data
+        data_dict = {
+            'timestamps': timestamps,
+            'imu_acc': imu_acc,
+            'imu_omega': imu_omega,
+            'q': q,
+            'qd': qd, 
+            'tau': tau ,
+            'F': F,
+            'r_p': r_p,
+            'r_o': r_o 
+        }
+
+        # Save the mat file
+        sio.savemat(os.path.join(self.processed_dir, "data.mat"), data_dict, do_compression=True)
+
         # Write a txt file to save the dataset length, first sequence index,
         # and the download id (for ensuring we have the right dataset later)
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(dataset_entries) + " " + str(0) + " " + self.get_google_drive_file_id())
+            f.write(str(dataset_entries) + " " + self.get_google_drive_file_id())
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================    
     
@@ -151,56 +165,20 @@ class QuadSDKDataset(FlexibleDataset):
     
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
-        grfs, lin_acc, ang_vel, positions, velocities, torques, r_p, r_quat = [], [], [], [], [], [], [], []
-        with open(os.path.join(self.processed_dir,
-                               str(seq_num) + ".txt"), 'r') as f:
-
-            # Skip the timestamp info
-            line = f.readline().split(" ")[:-1]
-
-            # Start reading data
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                grfs.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                lin_acc.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                ang_vel.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                positions.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                velocities.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                torques.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                r_p.append(float(line[i]))
-            line = f.readline().split(" ")[:-1]
-            for i in range(0, len(line)):
-                r_quat.append(float(line[i]))
-
-        # Extract the ground truth Z GRF
-        z_grfs = []
-        for val in range(0, 4):
-            start_index = val * 3
-            z_grfs.append(grfs[start_index + 2])
+        # Outline the indices to extract the just the Z-GRFs
+        z_indices = [2, 5, 8, 11]
 
         # Convert them all to numpy arrays
-        lin_acc = np.array(lin_acc)
-        ang_vel = np.array(ang_vel)
-        positions = np.array(positions)
-        velocities = np.array(velocities)
-        torques = np.array(torques)
-        z_grfs = np.array(z_grfs)
-        r_p = np.array(r_p)
-        r_quat = np.array(r_quat)
+        lin_acc = np.array(self.mat_data['imu_acc'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        ang_vel = np.array(self.mat_data['imu_omega'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        j_p = np.array(self.mat_data['q'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        j_v = np.array(self.mat_data['qd'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        j_T = np.array(self.mat_data['tau'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        z_grfs = np.array(self.mat_data['F'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)[:,z_indices]
+        r_p = np.array(self.mat_data['r_p'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        r_quat = np.array(self.mat_data['r_o'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 4)
 
-        return lin_acc, ang_vel, positions, velocities, torques, None, None, z_grfs, r_p, r_quat
+        return lin_acc, ang_vel, j_p, j_v, j_T, None, None, z_grfs, r_p, r_quat
 
 # ================================================================
 # ===================== DATASET SEQUENCES ========================
