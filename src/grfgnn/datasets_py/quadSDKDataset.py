@@ -115,6 +115,9 @@ class QuadSDKDataset(FlexibleDataset):
             'r_o': r_o 
         }
 
+        # Close the bag
+        self.reader.close()
+
         # Save the mat file
         sio.savemat(os.path.join(self.processed_dir, "data.mat"), data_dict, do_compression=True)
 

@@ -370,13 +370,13 @@ class FlexibleDataset(Dataset):
             labels_sorted = labels[:,self.foot_node_indices_sorted]
 
         # Normalize the data if desired
-        norm_arrs = []
+        norm_arrs = [None, None, None, None, None, None, None, None, None]
         if self.normalize:
             # Normalize all data except the labels
             to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
-            for array in to_normalize_array:
-                if array is not None:
-                    norm_arrs.append((array-np.mean(array,axis=0))/np.std(array, axis=0))
+            for i, array in enumerate(to_normalize_array):
+                if (array is not None) and (len(array.shape[0]) > 1):
+                    norm_arrs[i] = np.nan_to_num((array-np.mean(array,axis=0))/np.std(array, axis=0), copy=False, nan=0.0)
 
             return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
         else:
