@@ -27,6 +27,7 @@ class FlexibleDataset(Dataset):
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
                  history_length: int = 1,
+                 normalize: bool = False,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -47,6 +48,11 @@ class FlexibleDataset(Dataset):
                     Determines how the get() method returns data.
                 history_length (int): The length of the history of inputs to use
                     for our graph entries.
+                normalize (bool): If true, each individual 'Data' or 'HeteroData' 
+                    object will return each of the node inputs normalized across the
+                    time domain, specifically only for the `history_length` considered
+                    in the current entry. The normalization is unique per node input, and 
+                    unique per specific dataset entry.
         """
         # Check for valid data format
         self.data_format = data_format
@@ -126,8 +132,8 @@ class FlexibleDataset(Dataset):
             self.foot_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
         self.foot_node_indices_sorted = np.array(self.foot_node_indices_sorted, dtype=np.uint)
 
-        # Calculate means and stds for input and label standardization later
-        # self.calculate_mean_and_std()
+        # Set normalize parameter for use later
+        self.normalize = normalize
 
         # Precompute values for variables_to_use
         lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(0)
@@ -307,50 +313,6 @@ class FlexibleDataset(Dataset):
         raise self.notImplementedError
     
     # ================================================================
-    # ====================== STANDARDIZATION =========================
-    # ================================================================
-    def calculate_mean_and_std(self):
-        """
-        This helper method calculates the mean and std of
-        the dataset data per feature, for use in standardization
-        later.
-        """
-
-        # Calculate the number of features we need to get mean and std for.
-        num_features = 0
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(0)
-        to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels]        
-        for array in to_check:
-            if array is not None:
-                num_features += len(array)
-
-        # Calculate the line_num and line_index for each feature
-        file_data_array = np.zeros((2, num_features), dtype=np.int64)
-        line_i = 0
-        curr_feature_i = 0
-        for array in to_check:
-            if array is not None:
-                line_index_i = 0
-                for val in array:
-                    file_data_array[0,curr_feature_i] = line_i
-                    file_data_array[1,curr_feature_i] = line_index_i
-                    line_index_i += 1
-                    curr_feature_i += 1
-                line_i += 1
-
-        # For each feature
-        self.means = np.zeros((num_features))
-        self.stds = np.zeros((num_features))
-        vfunc = np.vectorize(self.load_single_value)
-        for i in range(0, num_features):
-            # Get every occurance of that feature
-            vals: np.array = vfunc(range(0, self.len()), file_data_array[0,i], file_data_array[1,i])
-
-            # Calculate mean and std
-            self.means[i] = np.mean(vals)
-            self.stds[i] = np.std(vals)
-
-    # ================================================================
     # ======================== DATA LOADING ==========================
     # ================================================================
     
@@ -365,13 +327,16 @@ class FlexibleDataset(Dataset):
 
         Next, labels are checked to make sure they aren't None.
 
+        Finally, normalize the data if self.normalize was set as True.
+
         Parameters:
             seq_num (int): The sequence number of the txt file
                 whose data should be loaded.
 
         Returns:
             Same values as load_data_at_dataset_seq(), but order of
-            values inside arrays have been sorted.
+            values inside arrays have been sorted (and potentially
+            normalized).
         """
         lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
 
@@ -404,40 +369,43 @@ class FlexibleDataset(Dataset):
         else:
             labels_sorted = labels[:,self.foot_node_indices_sorted]
 
-        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
+        # Normalize the data if desired
+        norm_arrs = []
+        if self.normalize:
+            # Normalize all data except the labels
+            to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
+            for array in to_normalize_array:
+                if array is not None:
+                    norm_arrs.append((array-np.mean(array,axis=0))/np.std(array, axis=0))
 
-    def load_single_value(self, seq_num: int, line_num: int, line_index: int):
-        """
-        This helper method loads a single value from the txt file
-        at "seq_num", using the given line_num and line_index.
-        """
+            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
+        else:
+            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
 
-        with open(str(Path(self.processed_dir, str(seq_num) + ".txt")), 'r') as f:
-            line = None
-            for i in range(0, line_num+1):
-                line = f.readline().split(" ")[:-1]
-            return float(line[line_index])
 
     def load_data_at_dataset_seq(self, seq_num: int):
         """
         This helper function opens the txt file at "seq_num"
         and loads dataset information for that sequence.
 
+        NOTE: even if self.normalize is set, this WON'T return
+        normalized data. Use load_data_sorted() for that.
+
         Parameters:
             seq_num (int): The sequence number of the txt file
                 whose data should be loaded.
 
         Returns:
-            lin_acc (np.array) - IMU linear acceleration
-            ang_vel (np.array) - IMU angular velocity
-            j_p (np.array) - Joint positions 
-            j_v (np.array) - Joint velocities
-            j_T (np.array) - Joint Torques
-            f_p (np.array) - Foot position
-            f_v (np.array) - Foot velocity
-            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states) 
-            r_p (np.array) - Robot position (GT), in the order (x, y, z).
-            r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w).
+            lin_acc (np.array) - IMU linear acceleration, of shape [history_length, 3]
+            ang_vel (np.array) - IMU angular velocity, of shape [history_length, 3]
+            j_p (np.array) - Joint positions, of shape [history_length, 12]
+            j_v (np.array) - Joint velocities, of shape [history_length, 12]
+            j_T (np.array) - Joint Torques, of shape [history_length, 12]
+            f_p (np.array) - Foot position, of shape [history_length, 12]
+            f_v (np.array) - Foot velocity, of shape [history_length, 12]
+            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states), of shape [history_length, 4]
+            r_p (np.array) - Robot position (GT), in the order (x, y, z), of shape [history_length, 3]
+            r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w), of shape [history_length, 4]
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
