@@ -367,7 +367,7 @@ class FlexibleDataset(Dataset):
         if labels is None:
             raise ValueError("Dataset must provide labels.")
         else:
-            labels_sorted = labels[:,self.foot_node_indices_sorted]
+            labels_sorted = labels[self.foot_node_indices_sorted]
 
         # Normalize the data if desired
         norm_arrs = [None, None, None, None, None, None, None, None, None]
@@ -375,7 +375,7 @@ class FlexibleDataset(Dataset):
             # Normalize all data except the labels
             to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
             for i, array in enumerate(to_normalize_array):
-                if (array is not None) and (len(array.shape[0]) > 1):
+                if (array is not None) and (array.shape[0] > 1):
                     norm_arrs[i] = np.nan_to_num((array-np.mean(array,axis=0))/np.std(array, axis=0), copy=False, nan=0.0)
 
             return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
@@ -403,7 +403,8 @@ class FlexibleDataset(Dataset):
             j_T (np.array) - Joint Torques, of shape [history_length, 12]
             f_p (np.array) - Foot position, of shape [history_length, 12]
             f_v (np.array) - Foot velocity, of shape [history_length, 12]
-            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states), of shape [history_length, 4]
+            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states), of shape [4]
+                Only the latest entry in the time window is used as the labels.
             r_p (np.array) - Robot position (GT), in the order (x, y, z), of shape [history_length, 3]
             r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w), of shape [history_length, 4]
 
@@ -460,7 +461,7 @@ class FlexibleDataset(Dataset):
                 node_index = urdf_name_to_hetero_graph_index[urdf_node_name]
 
                 # Add the label feature
-                y[node_index] = labels[-1][i]
+                y[node_index] = labels[i]
 
         return x, y
     
@@ -540,7 +541,7 @@ class FlexibleDataset(Dataset):
                 node_index = self.urdf_name_to_graph_index[urdf_node_name]
 
                 # Add the label feature
-                data.y[node_index] = labels[-1][i]
+                data.y[node_index] = labels[i]
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x

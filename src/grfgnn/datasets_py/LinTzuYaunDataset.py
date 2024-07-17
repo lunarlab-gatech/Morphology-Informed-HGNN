@@ -84,7 +84,7 @@ class LinTzuYaunDataset(FlexibleDataset):
         j_T = np.array(self.mat_data['tau_est'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
         f_p = np.array(self.mat_data['p'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
         f_v = np.array(self.mat_data['v'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
-        contact_labels = np.array(self.mat_data['contacts'][seq_num:seq_num+self.history_length])
+        contact_labels = np.squeeze(np.array(self.mat_data['contacts'][seq_num:seq_num+self.history_length])[-1])
 
         return lin_acc, ang_vel, j_p, j_v, None, f_p, f_v, contact_labels, None, None
     
