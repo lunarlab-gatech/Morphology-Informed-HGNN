@@ -212,8 +212,6 @@ class Base_Lightning(L.LightningModule):
     # ======================= Prediction =======================
     def predict_step(self, batch, batch_idx):
         y, y_pred = self.step_helper_function(batch)
-        if not self.regression:
-            y_pred, y = self.classification_conversion_16_class(y_pred, y)
         return y, y_pred
 
     # ======================= Optimizer =======================
@@ -379,7 +377,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis: int = 1000):
     """
     Runs the provided model on the corresponding dataset,
     and returns the predicted GRF values and the ground truth values.
@@ -393,7 +391,11 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     torch.set_default_dtype(torch.float64)
 
     # Get the model type
-    model_type = predict_dataset.dataset.get_data_format()
+    model_type = None
+    if isinstance(predict_dataset.dataset, torch.utils.data.ConcatDataset):
+        model_type = predict_dataset.dataset.datasets[0].get_data_format()
+    elif isinstance(predict_dataset.dataset, torch.utils.data.Dataset):
+        model_type = predict_dataset.dataset.get_data_format()
 
     # Initialize the model
     model = None
@@ -402,7 +404,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     else:
-        raise ValueError("model_type must be gnn, mlp, or heterogeneous_gnn.")
+        raise ValueError("model_type must be mlp or heterogeneous_gnn.")
 
     # Create a validation dataloader
     valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, shuffle=False, num_workers=15)
@@ -441,7 +443,10 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 pred = torch.cat((pred, pred_batch), dim=0)
                 labels = torch.cat((labels, labels_batch), dim=0)
 
-    return pred, labels
+                if pred.shape[0] >= num_to_vis:
+                    break
+
+    return pred[0:num_to_vis], labels[0:num_to_vis]
 
 def train_model(train_dataset: Subset,
                 val_dataset: Subset,

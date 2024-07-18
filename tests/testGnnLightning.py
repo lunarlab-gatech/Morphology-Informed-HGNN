@@ -3,6 +3,7 @@ from pathlib import Path
 from grfgnn import QuadSDKDataset_A1Speed1_0
 from grfgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
 from grfgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
+from grfgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
 import torch
 from torch.utils.data import random_split
 import numpy as np
@@ -59,11 +60,12 @@ class TestGnnLightning(unittest.TestCase):
         self.models = [self.dataset_mlp, self.dataset_hgnn, self.dataset_hgnn_3]
         self.class_models = [self.class_dataset_mlp, self.class_dataset_hgnn, self.class_dataset_hgnn_3]
 
-    def test_train_and_eval_model(self):
+    def test_train_eval_vis_model(self):
         """
         Make sure that the train model function runs and
-        finishes successfully, and test that we can evaluate
-        each model as well without a crash.
+        finishes successfully. Also, test that we can evaluate
+        each model as well without a crash, and that we can
+        visualize the results.
         """
 
         # For each regression model
@@ -78,13 +80,16 @@ class TestGnnLightning(unittest.TestCase):
             self.assertEqual(len(models), 2)
 
             # Predict with the model
-            pred, labels = evaluate_model(models[0], test_dataset)
+            pred, labels = evaluate_model(models[0], test_dataset, 485)
 
             # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], len(test_dataset.indices))
+            self.assertEqual(pred.shape[0], 485)
             self.assertEqual(pred.shape[1], 4)
-            self.assertEqual(labels.shape[0], len(test_dataset.indices))
+            self.assertEqual(labels.shape[0], 485)
             self.assertEqual(labels.shape[1], 4)
+
+            # Try and visualize with the model
+            visualize_model_outputs_regression(pred, labels)
 
         # For each classification model
         for model in self.class_models:
@@ -100,11 +105,16 @@ class TestGnnLightning(unittest.TestCase):
             self.assertEqual(len(models), 2)
 
             # Predict with the model
-            pred, labels = evaluate_model(models[0], test_dataset)
+            pred, labels = evaluate_model(models[0], test_dataset, 234)
 
             # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], len(test_dataset.indices))
-            self.assertEqual(labels.shape[0], len(test_dataset.indices))
+            self.assertEqual(pred.shape[0], 234)
+            self.assertEqual(pred.shape[1], 4)
+            self.assertEqual(labels.shape[0], 234)
+            self.assertEqual(labels.shape[1], 4)
+            
+            # Try to visualize the results
+            visualize_model_outputs_classification(pred, labels)
 
     def test_loss_calculation_for_epoch(self):
         """
