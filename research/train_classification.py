@@ -16,7 +16,7 @@ def main():
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
     # Set model parameters (so they all match)
-    model_type = 'mlp'
+    model_type = 'heterogeneous_gnn'
     history_length = 150
 
     # Initialize the Training/Validation datasets
@@ -70,8 +70,9 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=16, hidden_size=200, 
-                logger_project_name="grfgnn-classification", batch_size=30, regression=False, lr=0.0001, epochs=30)
+    train_model(train_dataset, val_dataset, test_dataset, num_layers=8, hidden_size=128, 
+                logger_project_name="grfgnn-class-official", batch_size=30, regression=False, lr=0.0001, epochs=10,
+                testing_mode=True, disable_logger=True)
 
 if __name__ == "__main__":
     main()

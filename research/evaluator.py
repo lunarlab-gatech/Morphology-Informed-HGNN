@@ -29,17 +29,17 @@ def main():
         Path(Path('.').parent, 'datasets', 'LinTzuYaun-F').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
     small_pebble = linData.LinTzuYaunDataset_small_pebble(
         Path(Path('.').parent, 'datasets', 'LinTzuYaun-SP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
-    test_dataset = torch.utils.data.ConcatDataset([air_jumping_gait, concrete_pronking, concrete_right_circle, forest, small_pebble])
-    
+    #test_dataset = torch.utils.data.ConcatDataset([air_jumping_gait, concrete_pronking, concrete_right_circle, forest, small_pebble])
+    test_dataset = torch.utils.data.ConcatDataset([concrete_pronking])
+
     # Convert them to subsets
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
-    print(test_dataset.__len__())
 
     # ================================= FILL THESE IN ===================================
-    num_entries_to_visualize = 60000  # Ex: 2000
+    num_entries_to_visualize = 10000  # Ex: 2000
     # ===================================================================================
     pred, labels = evaluate_model(path_to_checkpoint, test_dataset, num_entries_to_visualize)
-    visualize_model_outputs_classification(pred[50000:], labels[50000:], str(path_to_checkpoint) + ".pdf", 100)
+    visualize_model_outputs_classification(pred, labels, str(path_to_checkpoint) + ".pdf", 100)
 
 if __name__ == "__main__":
     main()

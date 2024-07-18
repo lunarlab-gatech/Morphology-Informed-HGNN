@@ -122,22 +122,26 @@ class Base_Lightning(L.LightningModule):
 
             # Make 2 binary class floats for CE_loss
             y_long = y.long()
-            # print("y_pred: ", y_pred[0:5])
-            # print(torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1).shape)
-            # print(torch.flatten(y_pred).unsqueeze(dim=1).shape)
+            #print("y: ", y[0:5])
+            #print("y_pred: ", y_pred[0:5])
             y_pred_2_floats = torch.cat((torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1), 
                                            torch.flatten(y_pred).unsqueeze(dim=1)), dim=1)
-            # print("y_pred_2_floats: ", y_pred_2_floats[0:20])
+            #print("y_pred_2_floats: ", y_pred_2_floats[0:20])
+            #print("y_long: ", y_long.flatten()[0:20])
             
             self.ce_loss = self.metric_ce(y_pred_2_floats, y_long.flatten())
 
             # Calculate 16 class predictions for accuracy
             y_pred_16, y_16 = self.classification_conversion_16_class(y_pred, y)
+            #print("y_pred_16: ", y_pred_16[0:5])
+            #print("y_pred_16 max: ", torch.argmax(y_pred_16, dim=1)[0:5])
+            #print("y_16: ", y_16.squeeze()[0:5])
             self.acc = self.metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze())
 
             # Calculate binary class predictions for f1-scores
             y_pred_2 = torch.reshape(torch.argmax(y_pred_2_floats, dim=1), (batch_size, 4))
-            # print("y_pred_2: ", y_pred_2)
+            #print("y_pred_2: ", y_pred_2[0:5])
+            #print("y: ", y[0:5])
             self.f1_leg0 = self.metric_f1_leg0(y_pred_2[:,0], y[:,0])
             self.f1_leg1 = self.metric_f1_leg1(y_pred_2[:,1], y[:,1])
             self.f1_leg2 = self.metric_f1_leg2(y_pred_2[:,2], y[:,2])
@@ -410,14 +414,8 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
     valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, shuffle=False, num_workers=15)
 
     # Predict with the model
-    pred = None
-    labels = None
-    if model.regression:
-        pred = torch.zeros((0, 4))
-        labels = torch.zeros((0, 4))
-    else:
-        pred = torch.zeros((0))
-        labels = torch.zeros((0))
+    pred = torch.zeros((0, 4))
+    labels = torch.zeros((0, 4))
     if model_type != 'heterogeneous_gnn':
         trainer = L.Trainer()
         predictions_result = trainer.predict(model, valLoader)
@@ -502,7 +500,6 @@ def train_model(train_dataset: Subset,
     limit_test_batches = None
     deterministic = False
     if testing_mode:
-        epochs = 2
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
@@ -577,7 +574,14 @@ def train_model(train_dataset: Subset,
         dirpath=path_to_save,
         filename='{epoch}-{' + monitor + ':.5f}',
         save_top_k=5,
+        mode='min',
         monitor=monitor)
+    last_model_callback = ModelCheckpoint(
+        dirpath=path_to_save,
+        filename='{epoch}-{' + monitor + ':.5f}',
+        save_top_k=1,
+        mode='max',
+        monitor="epoch")
 
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
@@ -598,7 +602,7 @@ def train_model(train_dataset: Subset,
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
         logger=wandb_logger,
-        callbacks=[checkpoint_callback])
+        callbacks=[checkpoint_callback, last_model_callback])
     trainer.fit(lightning_model, trainLoader, valLoader)
     trainer.test(lightning_model, dataloaders=testLoader)
 
