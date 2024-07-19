@@ -90,20 +90,9 @@ class FlexibleDataset(Dataset):
                 raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
 
         # Parse the robot graph from the URDF file
-        if self.data_format == 'heterogeneous_gnn':
-            self.robotGraph = HeterogeneousRobotGraph(urdf_path,
-                                                      ros_builtin_path,
+        self.robotGraph = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
                                                       urdf_to_desc_path)
-        else:
-            self.robotGraph = NormalRobotGraph(urdf_path, ros_builtin_path,
-                                               urdf_to_desc_path)
-            
-            # Create second one so that MLP can order outputs to match
-            # the URDF file.
-            self.robotGraphHetero = HeterogeneousRobotGraph(urdf_path,
-                                                      ros_builtin_path,
-                                                      urdf_to_desc_path)
-
+ 
         # Make sure the URDF file we were given properly matches
         # what we are expecting
         passed_urdf_name = self.robotGraph.robot_urdf.name
@@ -116,21 +105,30 @@ class FlexibleDataset(Dataset):
                 expected_name + "\" robot, not for the \"" + passed_urdf_name +
                 "\" robot.")
 
-        # Get node name to index mapping
-        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict()
 
         # Define the order that the sorted joint and foot data should be in
-        self.foot_node_sorted_order = self.get_foot_node_sorted_order()
+        self.urdf_name_to_graph_index_foot = self.robotGraph.get_node_name_to_index_dict_for_type('foot')
+        self.urdf_name_to_graph_index_joint = self.robotGraph.get_node_name_to_index_dict_for_type('joint')
+        self.urdf_name_to_graph_index_base = self.robotGraph.get_node_name_to_index_dict_for_type('base')
 
         # Precompute the array indexes matching the defined orders for joints and feet
-        self.joint_node_indices_sorted = []
-        for urdf_node_name in self.get_joint_node_sorted_order():
-            self.joint_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
-        self.joint_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
-        self.foot_node_indices_sorted = []
-        for urdf_node_name in self.get_foot_node_sorted_order():
-            self.foot_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
+        self.foot_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_foot)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_foot.keys():
+            graph_node_index = self.urdf_name_to_graph_index_foot[urdf_node_name]
+            self.foot_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
         self.foot_node_indices_sorted = np.array(self.foot_node_indices_sorted, dtype=np.uint)
+
+        self.joint_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_joint)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_joint.keys():
+            graph_node_index = self.urdf_name_to_graph_index_joint[urdf_node_name]
+            self.joint_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
+        self.joint_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
+
+        self.base_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_base)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_base.keys():
+            graph_node_index = self.urdf_name_to_graph_index_base[urdf_node_name]
+            self.base_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
+        self.base_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
 
         # Set normalize parameter for use later
         self.normalize = normalize
@@ -232,33 +230,6 @@ class FlexibleDataset(Dataset):
     # ================================================================
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     # ================================================================
-
-    def get_base_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the name of the URDF
-        base corresponding to the robot center.
-        """
-        raise self.notImplementedError
-
-    def get_joint_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the names of the URDF joints
-        corresponding to actual joints on the robot.
-
-        They are arranged in the order we want the data sorted
-        for the load_data_sorted() method.
-        """
-        raise self.notImplementedError
-
-    def get_foot_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the names of the URDF
-        joints corresponding to the robot feet.
-        
-        They are arranged in the order we want the data sorted
-        for the load_data_sorted() method.
-        """
-        raise self.notImplementedError
     
     def get_urdf_name_to_dataset_array_index(self) -> dict:
         """
@@ -319,14 +290,11 @@ class FlexibleDataset(Dataset):
     def load_data_sorted(self, seq_num: int):
         """
         Loads data from the dataset at the provided sequence number.
-        However, the joint and feet information are sorted so that 
-        they match the order returned by get_joint_node_sorted_order().
+        However, the joint and feet are sorted so that they match 
+        the order in the URDF file. Additionally, the foot labels 
+        are sorted so it matches the order in the URDF file.
 
-        Additionally, the labels are sorted so it matches the order
-        returned by get_foot_node_sorted_order().
-
-        Next, labels are checked to make sure they aren't None.
-
+        Next, labels are checked to make sure they aren't None. 
         Finally, normalize the data if self.normalize was set as True.
 
         Parameters:
@@ -453,16 +421,7 @@ class FlexibleDataset(Dataset):
             x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
 
         # Create the ground truth labels
-        y = torch.ones((4), dtype=torch.float64)
-        urdf_name_to_hetero_graph_index = self.robotGraphHetero.get_node_name_to_index_dict()
-        for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
-
-                # Find the index of this particular node
-                node_index = urdf_name_to_hetero_graph_index[urdf_node_name]
-
-                # Add the label feature
-                y[node_index] = labels[i]
-
+        y = torch.tensor(labels, dtype=torch.float64)
         return x, y
     
     def get_helper_heterogeneous_gnn(self, idx):
@@ -500,48 +459,35 @@ class FlexibleDataset(Dataset):
 
         # For each joint specified
         joint_data = [j_p, j_v, j_T]
-        for i, urdf_node_name in enumerate(self.get_joint_node_sorted_order()):
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_joint.keys()):
             # For each variable to use
             final_input = torch.ones((0), dtype=torch.float64)
             for k in self.variables_to_use_joint:
                 final_input = torch.cat((final_input, torch.tensor(joint_data[k][:,i].flatten('F'), dtype=torch.float64)), axis=0)
 
-            joint_x[node_index] = final_input
+            joint_x[i] = final_input
 
         # For each base specified (should be 1)
         base_data = [lin_acc, ang_vel]
-        for i, urdf_node_name in enumerate(self.get_base_node_sorted_order()):
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_base.keys()):
             # For each variable to use
             final_input = torch.ones((0), dtype=torch.float64)
             for k in self.variables_to_use_base:
                 final_input = torch.cat((final_input, torch.tensor(base_data[k][:,i:i+3].flatten('F'), dtype=torch.float64)), axis=0)
-            base_x[node_index] = final_input
+            base_x[i] = final_input
 
         # For each foot specified
         foot_data = [f_p, f_v]
-        for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
-            node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_foot.keys()):
             # For each variable to use
             final_input = torch.ones((0), dtype=torch.float64)
             for k in self.variables_to_use_foot:
                 final_input = torch.cat((final_input, torch.tensor(foot_data[k][:,(3*i):(3*i)+3].flatten('F'), dtype=torch.float64)), axis=0)
             if final_input.shape[0] != 0:
-                foot_x[node_index] = final_input
+                foot_x[i] = final_input
         
         # Make the labels
-        data.y = torch.ones((4), dtype=torch.float64)
-        for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
-
-                # Find the index of this particular node
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
-                # Add the label feature
-                data.y[node_index] = labels[i]
+        data.y = torch.tensor(labels, dtype=torch.float64)
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x

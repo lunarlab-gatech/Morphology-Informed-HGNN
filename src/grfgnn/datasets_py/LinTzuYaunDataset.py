@@ -30,21 +30,6 @@ class LinTzuYaunDataset(FlexibleDataset):
             f.write(str(dataset_entries) + " " + self.get_google_drive_file_id())
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
-    def get_base_node_sorted_order(self) -> list[str]:
-        return ['floating_base']
-
-    def get_joint_node_sorted_order(self) -> list[str]:
-        return ['FR_hip_joint', 'FR_thigh_joint', 'FR_calf_joint',
-                'FL_hip_joint', 'FL_thigh_joint',  'FL_calf_joint',
-                'RR_hip_joint', 'RR_thigh_joint', 'RR_calf_joint',
-                'RL_hip_joint', 'RL_thigh_joint', 'RL_calf_joint']
-
-    def get_foot_node_sorted_order(self) -> list[str]:
-        return ['FR_foot_fixed',
-               'FL_foot_fixed',
-               'RR_foot_fixed',
-               'RL_foot_fixed']
-    
     def get_urdf_name_to_dataset_array_index(self) -> dict:
 
         # Order of joint data can be found here: https://github.com/mit-biomimetics/Cheetah-Software/blob/master/documentation/getting_started.md
@@ -52,6 +37,8 @@ class LinTzuYaunDataset(FlexibleDataset):
         # our "hip_joint" corresponds to their abduction/adduction joint, and our "thigh_joint" corresponds to what they call the hip joint.
         # Dataset order of label data can be found here: https://github.com/UMich-CURLY/deep-contact-estimator/blob/master/utils/mat2numpy.py
         return {
+            'floating_base': 0,
+
             'FR_hip_joint': 0,
             'FR_thigh_joint': 1,
             'FR_calf_joint': 2,

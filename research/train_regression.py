@@ -1,7 +1,7 @@
 from pathlib import Path
 from grfgnn.lightning_py.gnnLightning import train_model
 import torch
-from grfgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver, annGRFDataset
+from grfgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
 from torch.utils.data import Subset
 
 def main():
@@ -15,7 +15,7 @@ def main():
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.5FlippedOver').absolute()
 
     # Define model type
-    model_type = 'gnn'
+    model_type = 'heterogeneous_gnn'
 
     # Initalize the datasets
     dataset_05 = QuadSDKDataset_A1Speed0_5(
@@ -27,6 +27,7 @@ def main():
     dataset_15Flipped = QuadSDKDataset_A1Speed1_5FlippedOver(
         path_to_quad_sdk_15Flipped, path_to_urdf, 'package://a1_description/',
         'unitree_ros/robots/a1_description', model_type, 5)
+
 
     # Split the data into training, validation, and testing sets
     rand_gen = torch.Generator().manual_seed(10341885)

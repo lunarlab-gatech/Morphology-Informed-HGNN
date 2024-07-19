@@ -438,6 +438,24 @@ class HeterogeneousRobotGraph(RobotGraph):
                 zip(nodes_names_of_type, range(len(nodes_names_of_type))))
 
         return dict(all_lists)
+    
+    def get_node_name_to_index_dict_for_type(self, type: str):
+        """
+        Get the node_name_to_index_dict, but only with the nodes
+        of the given type.
+        """
+
+        types = RobotGraph.Node.get_list_of_node_types()
+        if type not in types:
+            raise ValueError(type, " is not a valid node type.")
+
+        nodes_of_type = []
+        for node in self.nodes:
+            if node.get_node_type() == type:
+                nodes_of_type.append(node)
+
+        nodes_names_of_type = [x.name for x in nodes_of_type]
+        return dict(list(zip(nodes_names_of_type, range(len(nodes_names_of_type)))))
 
     def get_node_index_to_name_dict(self, joint_type):
         """
