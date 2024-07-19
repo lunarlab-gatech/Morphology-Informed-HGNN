@@ -73,13 +73,14 @@ class TestGnnLightning(unittest.TestCase):
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
-                                              testing_mode=True, disable_logger=True)
+                                              testing_mode=True, disable_logger=True,
+                                              epochs=2)
 
-            # Make sure two models were saved
+            # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
-            self.assertEqual(len(models), 2)
+            self.assertEqual(len(models), 3)
 
-            # Predict with the model
+            # Predict with the model 
             pred, labels = evaluate_model(models[0], test_dataset, 485)
 
             # Assert the sizes of the results match
@@ -98,11 +99,11 @@ class TestGnnLightning(unittest.TestCase):
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
                                                 testing_mode=True, disable_logger=True, 
-                                                regression=False)
+                                                regression=False, epochs=2)
 
-            # Make sure two models were saved
+            # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
-            self.assertEqual(len(models), 2)
+            self.assertEqual(len(models), 3)
 
             # Predict with the model
             pred, labels = evaluate_model(models[0], test_dataset, 234)
