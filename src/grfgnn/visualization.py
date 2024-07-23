@@ -15,7 +15,7 @@ def display_on_axes(axes, estimated, ground_truth, title):
     information on a Matplotlib.pyplot Axes.
     """
     axes.plot(ground_truth, label="Ground Truth", linestyle='-.')
-    axes.plot(estimated, label="Estimated")
+    axes.plot(estimated, label="Predicted")
     axes.legend()
     axes.set_title(title)
 
@@ -28,7 +28,7 @@ def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
 
     # Setup four graphs (one for each foot)
     fig, axes = plt.subplots(4, figsize=[20, 10])
-    fig.suptitle('Foot Estimated Forces vs. Ground Truth')
+    fig.suptitle('Foot Predicted GRF Forces vs. Ground Truth')
 
     # Display the results
     titles = [
@@ -39,21 +39,32 @@ def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
         display_on_axes(axes[i], pred[:, i], labels[:, i], titles[i])
 
     # Save the figure
-    print(path_to_file)
     if path_to_file is not None:
         plt.savefig(path_to_file)
 
 
-def visualize_model_outputs_classification(pred, labels, path_to_file: Path = None):
+def visualize_model_outputs_classification(pred, labels, path_to_file: Path = None, fig_width: int = 20):
     """
     Helper method that plots the difference between the predicted class
     and the actual.
     TODO: Plot the difference between 16 state contact and predicted.
-    TODO: Plot the contact state per leg.
     TODO: Generate a confusion matrix.
     """
 
-    raise NotImplementedError
+    # Setup four graphs (one for each foot)
+    fig, axes = plt.subplots(4, figsize=[fig_width, 20])
+    fig.suptitle('Foot Predicted Contact States vs. Ground Truth')
+
+    # Display the results
+    titles = [
+        "Foot 0 State", "Foot 1 State",
+        "Foot 2 State", "Foot 3 State"
+    ]
+    for i in range(0, 4):
+        display_on_axes(axes[i], np.rint(pred[:, i]), labels[:, i], titles[i])
+
+    if path_to_file is not None:
+        plt.savefig(path_to_file)
 
 def visualize_derivatives(dataset: QuadSDKDataset, num_to_visualize=1000):
     """
