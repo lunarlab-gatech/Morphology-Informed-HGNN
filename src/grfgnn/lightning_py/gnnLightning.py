@@ -449,6 +449,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
 def train_model(train_dataset: Subset,
                 val_dataset: Subset,
                 test_dataset: Subset,
+                normalize: bool, # Note, this is just so that we can log if the datasets were normalized.
                 testing_mode: bool = False,
                 disable_logger: bool = False,
                 logger_project_name: str = None,
@@ -560,6 +561,7 @@ def train_model(train_dataset: Subset,
         wandb_logger = WandbLogger(project=logger_project_name)
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
+        wandb_logger.experiment.config["normalize"] = normalize
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
         path_to_save = str(Path("models", model_type + "_" + names.get_full_name()))

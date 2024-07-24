@@ -16,30 +16,31 @@ def main():
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
     # Set model parameters (so they all match)
-    model_type = 'heterogeneous_gnn'
+    model_type = 'mlp'
     history_length = 150
+    normalize = True
 
     # Initialize the Training/Validation datasets
     air_walking_gait = linData.LinTzuYaunDataset_air_walking_gait(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AWG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AWG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_difficult_slippery = linData.LinTzuYaunDataset_concrete_difficult_slippery(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CDS').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CDS').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_left_circle = linData.LinTzuYaunDataset_concrete_left_circle(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CLC').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CLC').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     middle_pebble = linData.LinTzuYaunDataset_middle_pebble(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-MP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-MP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     rock_road = linData.LinTzuYaunDataset_rock_road(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-RR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-RR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     asphalt_road = linData.LinTzuYaunDataset_asphalt_road(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_galloping = linData.LinTzuYaunDataset_concrete_galloping(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     grass = linData.LinTzuYaunDataset_grass(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-G').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-G').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     old_asphalt_road = linData.LinTzuYaunDataset_old_asphalt_road(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-OAR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-OAR').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     sidewalk = linData.LinTzuYaunDataset_sidewalk(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-S').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-S').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     train_val_datasets = [air_walking_gait, concrete_difficult_slippery, concrete_left_circle, middle_pebble, rock_road, asphalt_road, concrete_galloping, grass, old_asphalt_road, sidewalk]
 
     train_subsets = []
@@ -53,15 +54,15 @@ def main():
 
     # Initialize the Testing datasets
     air_jumping_gait = linData.LinTzuYaunDataset_air_jumping_gait(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AJG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-AJG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_pronking = linData.LinTzuYaunDataset_concrete_pronking(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_right_circle = linData.LinTzuYaunDataset_concrete_right_circle(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CRC').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-CRC').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     forest = linData.LinTzuYaunDataset_forest(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-F').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-F').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     small_pebble = linData.LinTzuYaunDataset_small_pebble(
-        Path(Path('.').parent, 'datasets', 'LinTzuYaun-SP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        Path(Path('.').parent, 'datasets', 'LinTzuYaun-SP').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     test_dataset = torch.utils.data.ConcatDataset([air_jumping_gait, concrete_pronking, concrete_right_circle, forest, small_pebble])
     
     # Convert them to subsets
@@ -70,7 +71,7 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=12, hidden_size=128, 
+    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=12, hidden_size=128, 
                 logger_project_name="grfgnn-class-official", batch_size=30, regression=False, lr=0.0001, epochs=30)
 
 if __name__ == "__main__":
