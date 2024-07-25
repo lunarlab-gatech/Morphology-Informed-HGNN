@@ -73,6 +73,7 @@ class TestGnnLightning(unittest.TestCase):
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                              normalize=False,
                                               testing_mode=True, disable_logger=True,
                                               epochs=2)
 
@@ -98,6 +99,7 @@ class TestGnnLightning(unittest.TestCase):
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                              normalize=False,
                                                 testing_mode=True, disable_logger=True, 
                                                 regression=False, epochs=2)
 
