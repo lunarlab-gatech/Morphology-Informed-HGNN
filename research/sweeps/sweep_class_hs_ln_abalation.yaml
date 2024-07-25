@@ -1,12 +1,11 @@
 program: research/sweeper_classification.py
 project: grfgnn-class-official
 name: sweep_class_hs_ln_abalation
-method: grid
+method: random
 parameters:
   learning_rate:
-    distribution: log_uniform_values
-    min: 0.0000001
-    max: 0.01
+    distribution: categorical
+    values: [0.01, 0.001, 0.0001, 0.00001, 0.000001]
   hidden_size:
     distribution: int_uniform
     min: 25
