@@ -14,6 +14,7 @@ import torchmetrics
 import torchmetrics.classification
 from .customMetrics import CrossEntropyLossMetric
 from .hgnn import GRF_HGNN
+from torch_geometric.profile import count_parameters
 
 class Base_Lightning(L.LightningModule):
     """
@@ -533,11 +534,13 @@ def train_model(train_dataset: Subset,
 
     # Create the model
     lightning_model = None
+    model_parameters = None
     if model_type == 'mlp':
         lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
                                         hidden_size, 4, num_layers,
                                         batch_size, optimizer, lr, 
                                         regression)
+        model_parameters = count_parameters(lightning_model.mlp_model)
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
             hidden_channels=hidden_size,
@@ -549,6 +552,7 @@ def train_model(train_dataset: Subset,
             optimizer=optimizer,
             lr=lr, 
             regression=regression)
+        model_parameters = count_parameters(lightning_model.model)
     else:
         raise ValueError("Invalid model type.")
 
@@ -562,6 +566,7 @@ def train_model(train_dataset: Subset,
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
         wandb_logger.experiment.config["normalize"] = normalize
+        wandb_logger.experiment.config["num_parameters"] = model_parameters
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
         path_to_save = str(Path("models", model_type + "_" + names.get_full_name()))

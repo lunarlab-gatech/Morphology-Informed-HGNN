@@ -16,7 +16,7 @@ def main():
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
     # Set model parameters (so they all match)
-    model_type = 'mlp'
+    model_type = 'heterogeneous_gnn'
     history_length = 150
     normalize = True
 
