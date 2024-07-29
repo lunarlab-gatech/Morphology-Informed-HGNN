@@ -1,7 +1,9 @@
+from pathlib import Path
 import numpy as np
 import pinocchio as pin
-
+from grfgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
 from os.path import dirname, join, abspath
+import matplotlib.pyplot as plt
 
 np.set_printoptions(linewidth=np.inf)
 
@@ -47,74 +49,99 @@ np.set_printoptions(linewidth=np.inf)
 
 # ----- SOLUTION ------
 
-# 0. DATA
-# TO DO: Substitude our URDF model with this
-pinocchio_model_dir = join(dirname(dirname(str(abspath(__file__)))), "models")
+## 0. DATA
+pinocchio_model_dir = join(dirname(dirname(str(abspath(__file__)))), "urdf_files")
 
-model_path = join(pinocchio_model_dir, "example-robot-data/robots")
+model_path = join(pinocchio_model_dir, "A1")
 mesh_dir = pinocchio_model_dir
-urdf_filename = "solo12.urdf"
-urdf_model_path = join(join(model_path, "solo_description/robots"), urdf_filename)
+urdf_filename = "a1_updated.urdf"
+urdf_model_path = join(model_path, urdf_filename)
 
 model, collision_model, visual_model = pin.buildModelsFromUrdf(
     urdf_model_path, mesh_dir, pin.JointModelFreeFlyer()
 )
- 
+
 data = model.createData()
 
-# q0 = np.array(
-#     [
-#         0.0, # x
-#         0.0, # y
-#         0.235, # z
-#         0.0, 
-#         0.0, 
-#         0.0, 
-#         1.0, 
-#         0.0, 
-#         0.8, 
-#         -1.6,
-#         0.0,
-#         -0.8,
-#         1.6,
-#         0.0,
-#         0.8,
-#         -1.6,
-#         0.0,
-#         -0.8,
-#         1.6,
-#     ]
-# )
+## FIND CONTACTS
+## First, we set the frame for our contacts. We assume the contacts are placed at the following 4 frames and they are 3D
+feet_names = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+feet_ids = [model.getFrameId(n) for n in feet_names]
+# print(feet_ids)
+bl_id = model.getFrameId("base")
+ncontact = len(feet_names)
 
 # v0 = np.zeros(model.nv)
 a0 = np.zeros(model.nv) # set acceleration for 0 for drift calculation
 
-# TO DO
-# data we need
-q =                   # state:[x, y, z, quaternions, 4*(Hip_joint, Thigh_joint, Calf_joint)]
-vel =                 # velocity term
-acc =                 # acceleration term
-tau =                 # torque term
+## Get data
+## Define model type
+history_length = 1000
+model_type = 'heterogeneous_gnn'
+path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
+path_to_quad_sdk_1 = Path(
+            Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
+dataset_1 = QuadSDKDataset_A1Speed1_0(
+        path_to_quad_sdk_1, path_to_urdf, 'package://a1_description/',
+        'unitree_ros/robots/a1_description', model_type, history_length)
 
-# FIND CONTACTS
+quad_data = dataset_1.load_data_sorted_with_timestamps(0)
 
-# First, we set the frame for our contacts. We assume the contacts are placed at the following 4 frames and they are 3D
-feet_names = ["FL_FOOT", "FR_FOOT", "HL_FOOT", "HR_FOOT"]
-feet_ids = [model.getFrameId(n) for n in feet_names]
-bl_id = model.getFrameId("base_link")
-ncontact = len(feet_names)
+delta_T = quad_data[10]    # Time stamp
+joint_timestamp = delta_T[0][1]
+imu_timestamp = delta_T[0][2]
+# print(joint_timestamp)
 
-for i in range (len(q[0])):
+lin_acc = quad_data[0]     # IMU linear acc
+# print(lin_acc[1:-1, :])
+ang_vel = quad_data[1]     # IMU angular vel
+j_p = quad_data[2]         # joint position 
+# print(j_p)
+j_v = quad_data[3]         # joint velocity 
+# print(j_v)               
+j_T = quad_data[4]         # joint torque   
+f_p = quad_data[5]         # Foot position
+f_v = quad_data[6]         # Foot velocity
+# labels = quad_data[7]    # Dataset labels (Groud Truth GRF)
+r_p = quad_data[8]         # Robot position (x, y, z)
+# print(r_p)
+r_o = quad_data[9]         # Robot orientation (x, y, z, w) quaternion
+# print(r_o)
+q = np.hstack((np.hstack((r_p, r_o)), j_p))     # state:[x, y, z, quaternions, 4*(Hip_joint, Thigh_joint, Calf_joint)position]
+q = q[1:-1, :]
+# print(len(q))
 
+## Data Preprocessing and arrangement
+lin_vel, ang_acc, j_acc = [[0,0,0]], [[0,0,0]], [[0,0,0,0,0,0,0,0,0,0,0,0]]
+
+## Taking derivative to get lin_vel, ang_acc, and j_acc
+for i in range (1, len(r_p)-1):
+    new_lin_vel = (r_p[i+1, :] - r_p[i-1, :]) / (2 * imu_timestamp)
+    lin_vel = np.vstack((lin_vel, new_lin_vel))
+
+    new_ang_acc = (ang_vel[i+1, :] - ang_vel[i-1, :]) / (2 * imu_timestamp)
+    ang_acc = np.vstack((ang_acc, new_ang_acc))
+
+    new_j_acc = (j_v[i+1, :] - j_v[i-1, :]) / (2 * joint_timestamp)
+    j_acc = np.vstack((j_acc, new_j_acc))
+
+vel = np.hstack(( np.hstack((lin_vel[1:, :], ang_vel[1:-1, :])), j_v[1:-1, :]))           # velocity term
+acc = np.hstack(( np.hstack((lin_acc[1:-1, :], ang_acc[1:, :])), j_acc[1:, :]))           # acceleration term
+tau = np.hstack((np.zeros([len(vel), 6]), j_T[1:-1, :]))                                  # torque term
+# print(len(tau[0]))
+
+FL_GRF_cal = np.zeros([len(vel), 3])  # GRF of FL_FOOT (Local Frame)
+FR_GRF_cal = np.zeros([len(vel), 3])  # GRF of FR_FOOT (Local Frame)
+HL_GRF_cal = np.zeros([len(vel), 3])  # GRF of HL_FOOT (Local Frame)
+HR_GRF_cal = np.zeros([len(vel), 3])  # GRF of HR_FOOT (Local Frame)
+
+for i in range (len(vel)):
     # Find Mass matrix and Drift
-    # # compute mass matrix M
-    M = pin.crba(model, data, q[:,i])
-    # print(M)
-    # print()
+    # compute mass matrix M
+    M = pin.crba(model, data, q[i,:])
 
     # compute dynamic drift -- Coriolis, centrifugal, gravity
-    drift = pin.rnea(model, data, q[:,i], vel[:,i], a0)
-    # print(drift)
+    drift = pin.rnea(model, data, q[i,:], vel[i,:], a0)
 
     b_bl = drift[:6]
     b_j = drift[6:]
@@ -122,14 +149,16 @@ for i in range (len(q[0])):
     # Now, we need to find the contact Jacobians appearing in (1).
     # These are the Jacobians that relate the joint velocity  to the velocity of each feet
     Js__feet_q = [
-        np.copy(pin.computeFrameJacobian(model, data, q[:,i], id, pin.LOCAL)) for id in feet_ids
+        np.copy(pin.computeFrameJacobian(model, data, q[i,:], id, pin.LOCAL)) for id in feet_ids
     ]
+    # print(Js__feet_q)
 
     Js__feet_bl = [np.copy(J[:3, :6]) for J in Js__feet_q]
 
     # Notice that we can write the equation above as an horizontal stack of Jacobians transposed and vertical stack of contact forces
     Jc__feet_bl_T = np.zeros([6, 3 * ncontact])
     Jc__feet_bl_T[:, :] = np.vstack(Js__feet_bl).T
+    # print(Js__feet_bl)
 
     # Find Jc__feet_j
     Js_feet_j = [np.copy(J[:3, 6:]) for J in Js__feet_q]
@@ -139,74 +168,103 @@ for i in range (len(q[0])):
 
     # Combine Jc__feet_bl_T & Jc__feet_j_T
     Jc__feet_T = np.vstack((Jc__feet_bl_T, Jc__feet_j_T))
+    # print(Jc__feet_T)
 
     # Now I only need to do the pinv to compute the contact forces
 
-    ls = np.linalg.pinv(Jc__feet_T) @ (M @ acc[:,i] + drift)  # This is (3)
+    # ls = np.linalg.pinv(Jc__feet_T) @ (M @ acc[i,:] + drift - tau[i, :])  # This is (3)
+    ls = np.dot(np.linalg.pinv(Jc__feet_T), (np.dot(M, acc[i,:]) + drift - tau[i, :]))  # This is (3)
 
     # Contact forces at local coordinates (at each foot coordinate)
     ls__f = np.split(ls, ncontact)
+    
+    FL_GRF_cal[i] = ls__f[0]
+    FR_GRF_cal[i] = ls__f[1]
+    HL_GRF_cal[i] = ls__f[2]
+    HR_GRF_cal[i] = ls__f[3]
 
-    pin.framesForwardKinematics(model, data, q[:,i])
+    pin.framesForwardKinematics(model, data, q[i,:])
 
-    # Contact forces at base link frame
+    # # Contact forces at base link frame
     ls__bl = []
     for l__f, foot_id in zip(ls__f, feet_ids):
         l_sp__f = pin.Force(l__f, np.zeros(3))
         l_sp__bl = data.oMf[bl_id].actInv(data.oMf[foot_id].act(l_sp__f))
         ls__bl.append(np.copy(l_sp__bl.vector))
 
-    print("\n--- CONTACT FORCES ---")
-    for l__f, foot_id, name in zip(ls__bl, feet_ids, feet_names):
-        print("Contact force at foot {} expressed at the BL is: {}".format(name, l__f))
+    # print(l_sp__bl)
 
-    # Notice that if we add all the contact forces are equal to the g_grav
-    print(
-        "Error between contact forces and gravity at base link: {}".format(
-            np.linalg.norm(b_bl - sum(ls__bl))
-        )
-    )
+    # print("\n--- CONTACT FORCES ---")
+    # for l__f, foot_id, name in zip(ls__bl, feet_ids, feet_names):
+    #     print("Contact force at foot {} expressed at the BL is: {}".format(name, l__f))
 
-# # Apply (5)
-# tau = g_j - Jc__feet_j_T @ ls
+    # # Notice that if we add all the contact forces are equal to the g_grav
+    # print(
+    #     "Error between contact forces and gravity at base link: {}".format(
+    #         np.linalg.norm(b_bl - sum(ls__bl))
+    #     )
+    # )
 
-# 4. CROSS CHECKS
+desired_length = 1000
+history_length = 1
+model_type = 'heterogeneous_gnn'
+path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
+path_to_quad_sdk_1 = Path(
+                Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
+dataset_1 = QuadSDKDataset_A1Speed1_0(
+            path_to_quad_sdk_1, path_to_urdf, 'package://a1_description/',
+            'unitree_ros/robots/a1_description', model_type, history_length)
+    
+labels = np.zeros([desired_length, 4])
+for i in range (desired_length):
+        quad_data = dataset_1.load_data_sorted_with_timestamps(i)
+        labels[i] = quad_data[7]      # Dataset labels (Groud Truth GRF)
+        
+# Plot FL_FOOT
+plt.title('FL_FOOT_GRF')
+plt.plot(FL_GRF_cal[:,2])
+plt.plot(labels[:,0])
+plt.ylabel('Z_direction')
+plt.legend(["Model_Based","Ground Truth"])
+plt.show()
 
-# INVERSE DYNAMICS
-# We can compare this torques with the ones one would obtain when computing the ID considering the external forces in ls
-# pin.framesForwardKinematics(model, data, q0)
+# Plot FR_FOOT
+plt.title('FR_FOOT_GRF')
+plt.plot(FR_GRF_cal[:,2])
+plt.plot(labels[:,1])
+plt.ylabel('Z_direction')
+plt.legend(["Model_Based","Ground Truth"])
+plt.show()
 
-# joint_names = ["FL_KFE", "FR_KFE", "HL_KFE", "HR_KFE"]
-# joint_ids = [model.getJointId(n) for n in joint_names]
+# Plot HL_Foot
+plt.title('HL_FOOT_GRF')
+plt.plot(HL_GRF_cal[:,2])
+plt.plot(labels[:,2])
+plt.ylabel('Z_direction')
+plt.legend(["Model_Based","Ground Truth"])
+plt.show()
 
-# fs_ext = [pin.Force(np.zeros(6)) for _ in range(len(model.joints))]
-# for idx, joint in enumerate(model.joints):
-#     if joint.id in joint_ids:
-#         fext__bl = pin.Force(ls__bl[joint_ids.index(joint.id)])
-#         fs_ext[idx] = data.oMi[joint.id].actInv(data.oMf[bl_id].act(fext__bl))
+# Plot HR_FOOT
+plt.title('HR_FOOT')
+plt.plot(HR_GRF_cal[:,2])
+plt.plot(labels[:,3])
+plt.ylabel('Z_direction')
+plt.legend(["Model_Based","Ground Truth"])
+plt.show()
 
-# tau_rnea = pin.rnea(model, data, q0, v0, a0, fs_ext)
+# def get_label(desired_length, history_length):
+#     # history_length = 1
+#     model_type = 'heterogeneous_gnn'
+#     path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
+#     path_to_quad_sdk_1 = Path(
+#                 Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
+#     dataset_1 = QuadSDKDataset_A1Speed1_0(
+#             path_to_quad_sdk_1, path_to_urdf, 'package://a1_description/',
+#             'unitree_ros/robots/a1_description', model_type, history_length)
+    
+#     labels = np.zeros([desired_length, 4])
+#     for i in range (desired_length):
+#         quad_data = dataset_1.load_data_sorted_with_timestamps(i)
+#         labels[i] = quad_data[7]      # Dataset labels (Groud Truth GRF)
 
-# print("\n--- ID: JOINT TORQUES ---")
-# print("Tau from RNEA:         {}".format(tau_rnea))
-# print("Tau computed manually: {}".format(np.append(np.zeros(6), tau)))
-# print("Tau error: {}".format(np.linalg.norm(np.append(np.zeros(6), tau) - tau_rnea)))
-
-# FORWARD DYNAMICS
-# We can also check the results using FD. FD with the tau we got, q0 and v0, should give 0 acceleration and the contact forces
-# Js_feet3d_q = [np.copy(J[:3, :]) for J in Js__feet_q]
-# acc = pin.forwardDynamics(
-#     model,
-#     data,
-#     q0,
-#     v0,
-#     np.append(np.zeros(6), tau),
-#     np.vstack(Js_feet3d_q),
-#     np.zeros(12),
-# )
-
-# print("\n--- FD: ACC. & CONTACT FORCES ---")
-# print("Norm of the FD acceleration: {}".format(np.linalg.norm(acc)))
-# print("Contact forces manually: {}".format(ls))
-# print("Contact forces FD: {}".format(data.lambda_c))
-# print("Contact forces error: {}".format(np.linalg.norm(data.lambda_c - ls)))
+#     return labels

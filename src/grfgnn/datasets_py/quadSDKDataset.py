@@ -71,7 +71,7 @@ class QuadSDKDataset(FlexibleDataset):
 
             # Add on the GRF data
             grf_vec = grf_data.vectors
-            grf_array = np.array([[grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
+            grf_array = np.array([[ grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
                                     grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
                                     grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
                                     grf_vec[3].x, grf_vec[3].y, grf_vec[3].z]], dtype=np.float64)
@@ -98,6 +98,11 @@ class QuadSDKDataset(FlexibleDataset):
                             joint_data.body.pose.orientation.y,
                             joint_data.body.pose.orientation.z,
                             joint_data.body.pose.orientation.w]], dtype=np.float64)), axis=0)
+
+            # r_o = np.concatenate((r_o, np.array([[joint_data.body.pose.orientation.w,
+            #                 joint_data.body.pose.orientation.x,
+            #                 joint_data.body.pose.orientation.y,
+            #                 joint_data.body.pose.orientation.z]], dtype=np.float64)), axis=0)
 
             # Track how many entries we have
             dataset_entries += 1
