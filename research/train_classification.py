@@ -71,7 +71,7 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=12, hidden_size=128, 
+    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=4, hidden_size=128, 
                 logger_project_name="grfgnn-class-official", batch_size=30, regression=False, lr=0.0001, epochs=30)
 
 if __name__ == "__main__":
