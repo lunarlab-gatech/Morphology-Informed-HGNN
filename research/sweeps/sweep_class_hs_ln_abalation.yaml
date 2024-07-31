@@ -1,13 +1,9 @@
 program: research/sweeper_classification.py
 project: grfgnn-class-abalation
 name: sweep_class_hs_ln_abalation
-method: random
+method: grid
 parameters:
   hidden_size:
-    distribution: int_uniform
-    min: 25
-    max: 200
+    values: [50, 128, 256]
   num_layers:
-    distribution: int_uniform
-    min: 4
-    max: 12
+    values: [4, 8, 12]
