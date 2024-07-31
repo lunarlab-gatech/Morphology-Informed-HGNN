@@ -39,11 +39,14 @@ class Base_Lightning(L.LightningModule):
         self.lr = lr
         self.regression = regression
 
-        # Setup the metrics
+        # ====== Setup the metrics ======
         self.metric_mse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=True)
         self.metric_rmse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=False)
         self.metric_l1: torchmetrics.MeanAbsoluteError = torchmetrics.regression.MeanAbsoluteError()
+
+        # Note, this custom class for CEL skips Softmax, as we assume our network outputs already sum to 1 and are probabilites.
         self.metric_ce = CrossEntropyLossMetric()
+
         self.metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
         self.metric_f1_leg0 = torchmetrics.classification.BinaryF1Score()
         self.metric_f1_leg1 = torchmetrics.classification.BinaryF1Score()
