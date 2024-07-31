@@ -11,16 +11,9 @@ import torchmetrics
 
 
 def main():
-    # Give path to checkpoint
-    # ================================= FILL THESE IN ===================================
-    path_to_checkpoint = "/home/dbutterfield3/Research/state-estimation-gnn/models/ancient-salad-5/epoch=29-val_CE_loss=0.34249.ckpt"
+    # Set parameters
     model_type = 'heterogeneous_gnn'
     history_length = 150
-    regression = False
-    num_entries_to_visualize = test_dataset.__len__()
-
-    # ==================================================================================
-    
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
     # Initialize the Testing datasets
@@ -39,15 +32,21 @@ def main():
     # Convert them to subsets
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
+
+    # ================================= CHANGE THESE ===================================
+    path_to_checkpoint = "/home/dbutterfield3/Research/state-estimation-gnn/models/ancient-salad-5/epoch=29-val_CE_loss=0.34249.ckpt"
+    num_entries_to_eval = test_dataset.__len__()
+    # ==================================================================================
+
+
     # Evaluate with model
-    pred, labels = evaluate_model(path_to_checkpoint, test_dataset, num_entries_to_visualize)
+    pred, labels = evaluate_model(path_to_checkpoint, test_dataset, num_entries_to_eval)
 
     # Output the corresponding results
-    if not regression:
-        metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
-        y_pred_16, y_16 = Base_Lightning.classification_conversion_16_class(None, pred, labels)
-        print("Accuracy: ", metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze()))
-        visualize_model_outputs_classification(pred, labels, str(path_to_checkpoint) + ".pdf", 100)
+    metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
+    y_pred_16, y_16 = Base_Lightning.classification_conversion_16_class(None, pred, labels)
+    print("Accuracy: ", metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze()))
+    visualize_model_outputs_classification(pred, labels, str(path_to_checkpoint) + ".pdf", 100)
 
 if __name__ == "__main__":
     main()

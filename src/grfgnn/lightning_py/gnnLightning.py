@@ -385,7 +385,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis: int = 1000):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entries_to_eval: int = 1000):
     """
     Runs the provided model on the corresponding dataset,
     and returns the predicted GRF values and the ground truth values.
@@ -445,10 +445,10 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
                 pred = torch.cat((pred, pred_batch), dim=0)
                 labels = torch.cat((labels, labels_batch), dim=0)
 
-                if pred.shape[0] >= num_to_vis:
+                if pred.shape[0] >= num_entries_to_eval:
                     break
 
-    return pred[0:num_to_vis], labels[0:num_to_vis]
+    return pred[0:num_entries_to_eval], labels[0:num_entries_to_eval]
 
 def train_model(train_dataset: Subset,
                 val_dataset: Subset,
