@@ -15,7 +15,7 @@ As of the time of this commit, the main experiment has not been completed yet.
 For this paper, we conducted an abalation study to see how parameter-efficient our model is. In the paper, we give the each trained model's layer number, hidden size, parameter number, and finally, the state accuracy on the test set. The table below relates these parameters to specific trained model names so that you can find the exact checkpoint weights for each model.
 
 | Number of Layers | Hidden Sizes | Number of Parameters | State Accuracy (Test) | Model Name            |
-| ---------------- | ------------ | ---------------------| --------------------- | --------=------------ |
+| ---------------- | ------------ | ---------------------| --------------------- | --------------------- |
 | 4                | 5            | **11,621**           | 85.76                 | `restful-cosmos-25`   |
 | 4                | 10           | 25,241               | 85.71                 | `distinctive-river-24`|
 | 4                | 25           | 78,101               | 86.92                 | `noble-bird-23`       |
@@ -34,8 +34,8 @@ In our paper, we mention that we found that our MI-HGNN model performed better w
 
 | Number of Layers | Hidden Sizes | Normalization | State Accuracy (Test) | Model Name        |
 | ---------------- | ------------ | --------------| --------------------- | ----------------- |
-| 12               | 128          | False         | 0.9292                | `ancient-salad-5` |
-| 12               | 128          | True          | 0.9021                | `super-grass-6`   |
+| 12               | 128          | False         | 92.92                | `ancient-salad-5` |
+| 12               | 128          | True          | 90.21                | `super-grass-6`   |
 
 ## Ground Reaction Force Estimation (Regression) Experiment 
 
