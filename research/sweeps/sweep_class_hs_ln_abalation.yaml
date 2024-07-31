@@ -1,16 +1,13 @@
 program: research/sweeper_classification.py
-project: grfgnn-class-official
+project: grfgnn-class-abalation
 name: sweep_class_hs_ln_abalation
 method: random
 parameters:
-  learning_rate:
-    distribution: categorical
-    values: [0.01, 0.001, 0.0001, 0.00001, 0.000001]
   hidden_size:
     distribution: int_uniform
     min: 25
-    max: 300
+    max: 200
   num_layers:
     distribution: int_uniform
     min: 4
-    max: 16
+    max: 12
