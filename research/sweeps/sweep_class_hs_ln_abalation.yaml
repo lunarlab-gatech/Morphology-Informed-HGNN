@@ -4,6 +4,6 @@ name: sweep_class_hs_ln_abalation
 method: grid
 parameters:
   hidden_size:
-    values: [50, 128, 256]
+    values: [5, 10, 25, 50, 128, 256]
   num_layers:
     values: [4, 8, 12]
