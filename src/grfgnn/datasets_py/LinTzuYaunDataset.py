@@ -63,6 +63,16 @@ class LinTzuYaunDataset(FlexibleDataset):
 
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        The units of the return values are as follows:
+        - lin_acc (meters/sec)
+        - ang_vel (rad/sec)
+        - j_p (rad)
+        - j_v (rad/sec)
+        - f_p (UNCONFIRMED - meters, represented in robot's hip frame) 
+        - f_v (UNCONFIRMED - meters/sec, represented in robot's hip frame)
+        """
+
         # Convert them all to numpy arrays
         lin_acc = np.array(self.mat_data['imu_acc'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         ang_vel = np.array(self.mat_data['imu_omega'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
