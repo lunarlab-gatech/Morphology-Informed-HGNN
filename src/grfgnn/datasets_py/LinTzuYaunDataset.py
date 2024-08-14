@@ -69,8 +69,9 @@ class LinTzuYaunDataset(FlexibleDataset):
         - ang_vel (rad/sec)
         - j_p (rad)
         - j_v (rad/sec)
-        - f_p (UNCONFIRMED - meters, represented in robot's hip frame) 
-        - f_v (UNCONFIRMED - meters/sec, represented in robot's hip frame)
+        - f_p (meters, represented in robot's hip frame) 
+        - f_v (meters/sec, represented in robot's hip frame)
+        - contact_labels (no units)
         """
 
         # Convert them all to numpy arrays
