@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
-from grfgnn import FlexibleDataset, QuadSDKDataset_A1Speed1_0, QuadSDKDataset, QuadSDKDataset_A1Speed0_5
-from grfgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset, LinTzuYaunDataset_concrete_right_circle
+from mi_hgnn import FlexibleDataset, QuadSDKDataset_A1Speed1_0, QuadSDKDataset, QuadSDKDataset_A1Speed0_5
+from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset, LinTzuYaunDataset_concrete_right_circle
 from torch_geometric.data import Data, HeteroData
 import numpy as np
 import torch

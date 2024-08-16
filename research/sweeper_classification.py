@@ -1,8 +1,8 @@
-import grfgnn.datasets_py.LinTzuYaunDataset as linData
+import mi_hgnn.datasets_py.LinTzuYaunDataset as linData
 from pathlib import Path
 import numpy as np
 import torch
-from grfgnn.lightning_py.gnnLightning import train_model
+from mi_hgnn.lightning_py.gnnLightning import train_model
 import yaml
 import wandb
 

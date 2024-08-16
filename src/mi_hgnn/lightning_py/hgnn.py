@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 from torch_geometric.nn import Linear, HeteroConv, HeteroDictLinear, GraphConv
-import numpy as np
 
 class GRF_HGNN(torch.nn.Module):
     """

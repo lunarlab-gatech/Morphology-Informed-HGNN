@@ -1,17 +1,18 @@
 # MI-HGNN for contact estimation/classification
 This repository implements a Morphologically-inspired Heterogeneous graph neural network for estimating contact information on the feet of a quadruped robot.
 
-## Environment Setup
-To get started, setup a Conda Python environment with Python=3.11, and run the following command to install the necessary dependencies:
+## Installation
+To get started, setup a Conda Python environment with Python=3.11:
 ```
-pip install -r requirements.txt
+conda create -n mi-hgnn python=3.11
 ```
 
-## Installation
-Then, install the library with the following command:
+Then, install the library (and dependencies) with the following command:
 ```
 pip install .
 ```
+
+Note, if you have any issues with setup, refer to the `environment_files/README.md` so you can install the exact libraries we used.
 
 ## URDF Download
 The necessary URDF files are part of git submodules in this repository, so run the following commands to download them:

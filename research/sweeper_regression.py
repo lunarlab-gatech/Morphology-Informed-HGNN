@@ -1,8 +1,8 @@
 from pathlib import Path
-from grfgnn.lightning_py.gnnLightning import train_model, evaluate_model
-from grfgnn.visualization import visualize_model_outputs
+from mi_hgnn.lightning_py.gnnLightning import train_model, evaluate_model
+from mi_hgnn.visualization import visualize_model_outputs_regression
 import torch
-from grfgnn.datasets import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
+from mi_hgnn.datasets_py.quadSDKDataset import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
 from torch.utils.data import Subset
 import wandb
 import yaml
@@ -59,7 +59,7 @@ def main():
                                hidden_size=wandb.config.hidden_size)
     models = sorted(Path('.', path_to_ckpt).glob(("epoch=*")))
     pred, labels = evaluate_model(models[0], test_dataset)
-    visualize_model_outputs(pred[0:300], labels[0:300], str(path_to_ckpt) + ".pdf")
+    visualize_model_outputs_regression(pred[0:300], labels[0:300], str(path_to_ckpt) + ".pdf")
 
 if __name__ == '__main__':
     main()
