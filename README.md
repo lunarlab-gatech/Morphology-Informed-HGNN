@@ -1,6 +1,5 @@
-# state-estimation-gnn
-This repository implements a graph neural network for estimating the GRF values on the feet of a quadruped robot.
-Ultimately, this can be used in robotic state estimation and control.
+# MI-HGNN for contact estimation/classification
+This repository implements a Morphologically-inspired Heterogeneous graph neural network for estimating contact information on the feet of a quadruped robot.
 
 ## Environment Setup
 To get started, setup a Conda Python environment with Python=3.11, and run the following command to install the necessary dependencies:
@@ -21,50 +20,55 @@ git submodule init
 git submodule update
 ```
 
-## Training a new model
-To train a new model from QuadSDK data, run the following command within your Conda environment:
+## Training models
 
-```
-python research/train.py
-```
+Follow the commands below given to train your model below for your specific scenario. Note that you may need to put in
+a WandB key in order to log results to Weights & Biases. You can disable this logging by enabling `disable_logger`
+in the `train_model` function.
 
-First, this command will process the dataset to ensure quick data access during training. Next, it will begin a 
-training a Heterogeneous GNN and log the results to WandB (Weights and Biases). Note that you may need to put in
-a WandB key in order to use this logging feature. You can disable this logging following the instructions in 
-[#Editing this repository](#editing-this-repository), since the logger code is found on line 386 of 
-`src/grfgnn/gnnLightning.py` and can be commented out.
-
-The model weights with the best validation MSE loss will be saved in the following folder, based on the model 
+The model weights will be saved in the following folder, based on the model 
 type and the randomly chosen model name (which is output in the terminal when training begins):
 ```
 <repository base directory>/models/<model-type>-<model_name>/
 ```
+There will be the six models saved, one with the final model weights, and five with the best validation losses during training.
 
-## Evaluating a trained model
+### LinTzuYaun Contact Dataset Model
 
-If you used logging on a previous step, you can see the losses and other relevant info in WandB (Weights and Biases).
+To train a model from the dataset from [Legged Robot State Estimation using Invariant Kalman Filtering and Learned Contact Events](https://arxiv.org/abs/2106.15713), run the following command within your Conda environment:
 
-But, regardless, whether you used logging or not, you can evaluate the data on the test subset of the Quad-SDK data 
-and see the predicted and ground truth GRF values for all four legs.
-
-First, edit the file `research/evaluator.py` following the provided comments; this will tell the code what model you want to visualize, and how many entries in the dataset to use.
-
-Then, run the following command to evaluate on the model:
 ```
-python research/evaluator.py
+python research/train_classification.py
 ```
 
-The visualization of the predicted and GT GRF will be found in a file called `model_eval_results.pdf`.
+If you want to customize the model used, the number of layers, or the hidden size, feel free to change the corresponding variables.
+
+To evaluate this model, edit `evaluator_classification.py` to specify which model to evaluate, its type, and the number of dataset entries to consider. Then, run the following command:
+
+```
+python research/evaluator_classification.py
+```
+
+The visualization of the predicted and GT values will be found in a file called `model_eval_results.pdf` in the same directory as your model weights.
+
+### QuadSDK & Real World GRF Model
+
+Not Yet Implemented.
+
+### Your Own Custom Model
+
+Tutorial not yet written.
+
 
 ## Changing the model type
-Currently, three model types are supported:
+Currently, two model types are supported:
 - `mlp`
-- `gnn`
 - `heterogeneous_gnn`
-
 To change the model type, please change the `model_type` parameter in the `train.py` and `evaluator.py` files.
 
 ## Editing this repository
-
 If you want to make changes to the source files, feel free to edit them in the `src/grfgnn` folder, and then 
 rebuild the library following the instructions in [#Installation](#installation).
+
+## Paper Replication
+To replicate our paper results with the model weights we trained, see `paper/README.md`.

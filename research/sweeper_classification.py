@@ -1,29 +1,26 @@
 import grfgnn.datasets_py.LinTzuYaunDataset as linData
 from pathlib import Path
-from torch_geometric.loader import DataLoader
 import numpy as np
 import torch
 from grfgnn.lightning_py.gnnLightning import train_model
+import yaml
+import wandb
 
 def main():
-    """
-    Duplicate the experiment found in Section VI-B of "On discrete symmetries 
-    of robotics systems: A group-theoretic and data-driven analysis", but training
-    on our HGNN instead.
-    """
+    # Import the config yaml file
+    with open("./research/sweeps/sweep_class_hs_ln_abalation.yaml") as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+    wandb.init(config=config)
 
-    # ================================= CHANGE THESE ===================================
-    model_type = 'heterogeneous_gnn'
-    num_layers = 4
-    hidden_size = 128
-    # ==================================================================================
+    # Get the path to the URDF file
+    path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
     # Set model parameters (so they all match)
+    model_type = 'heterogeneous_gnn'
     history_length = 150
     normalize = True
 
     # Initialize the Training/Validation datasets
-    path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
     air_walking_gait = linData.LinTzuYaunDataset_air_walking_gait(
         Path(Path('.').parent, 'datasets', 'LinTzuYaun-AWG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_difficult_slippery = linData.LinTzuYaunDataset_concrete_difficult_slippery(
@@ -74,8 +71,8 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
+    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=wandb.config.num_layers, hidden_size=wandb.config.hidden_size, 
                 logger_project_name="grfgnn-class-abalation", batch_size=30, regression=False, lr=0.0001, epochs=30)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -1,11 +1,9 @@
-import enum
 import torch
-from torch_geometric.data import Data, Dataset, HeteroData
+from torch_geometric.data import Dataset, HeteroData
 from ..graphParser import NormalRobotGraph, HeterogeneousRobotGraph
-from rosbags.highlevel import AnyReader
 from pathlib import Path
 from torchvision.datasets.utils import download_file_from_google_drive
-import os
+import scipy.io as sio
 import numpy as np
 
 class FlexibleDataset(Dataset):
@@ -29,6 +27,7 @@ class FlexibleDataset(Dataset):
                  urdf_to_desc_path: str,
                  data_format: str = 'gnn',
                  history_length: int = 1,
+                 normalize: bool = False,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -49,12 +48,17 @@ class FlexibleDataset(Dataset):
                     Determines how the get() method returns data.
                 history_length (int): The length of the history of inputs to use
                     for our graph entries.
+                normalize (bool): If true, each individual 'Data' or 'HeteroData' 
+                    object will return each of the node inputs normalized across the
+                    time domain, specifically only for the `history_length` considered
+                    in the current entry. The normalization is unique per node input, and 
+                    unique per specific dataset entry.
         """
         # Check for valid data format
         self.data_format = data_format
-        if self.data_format != 'mlp' and self.data_format != 'gnn' and self.data_format != 'heterogeneous_gnn':
+        if self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
             raise ValueError(
-                "Parameter 'data_format' must be 'gnn', 'mlp', or 'heterogeneous_gnn'."
+                "Parameter 'data_format' must be 'mlp' or 'heterogeneous_gnn'."
             )
 
         # Setup the directories for raw and processed data, download it, 
@@ -62,37 +66,33 @@ class FlexibleDataset(Dataset):
         self.root = root
         super().__init__(str(root), transform, pre_transform, pre_filter)
 
+        # Load the data from the mat file
+        path_to_mat = Path(self.root, 'processed', 'data.mat')
+        self.mat_data = sio.loadmat(path_to_mat)
+
         # Get the first index and length of dataset
         info_path = Path(root, 'processed', 'info.txt')
         with open(info_path, 'r') as f:
             data = f.readline().split(" ")
-
-            # The longer the history, technically the lower number of total dataset entries
-            # we can use, and thus a lower dataset length.
+            
             self.history_length = history_length
-            self.length = int(data[0]) - (self.history_length - 1)
+            self.length = int(data[0]) - self.history_length + 1
             if self.length <= 0:
                 raise ValueError(
                     "Dataset has too few entries for the provided 'history_length'."
                 )
-            self.first_index = int(data[1])
 
             # Check to make sure that this dataset id matches what we expect.
             # Protects against users passing a folder path to a different
             # dataset sequence, causing a different dataset to be used than
             # expected.
-            if self.get_google_drive_file_id() != data[2]:
+            if self.get_google_drive_file_id() != data[1]:
                 raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
 
         # Parse the robot graph from the URDF file
-        if self.data_format == 'heterogeneous_gnn':
-            self.robotGraph = HeterogeneousRobotGraph(urdf_path,
-                                                      ros_builtin_path,
+        self.robotGraph = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
                                                       urdf_to_desc_path)
-        else:
-            self.robotGraph = NormalRobotGraph(urdf_path, ros_builtin_path,
-                                               urdf_to_desc_path)
-
+ 
         # Make sure the URDF file we were given properly matches
         # what we are expecting
         passed_urdf_name = self.robotGraph.robot_urdf.name
@@ -105,30 +105,73 @@ class FlexibleDataset(Dataset):
                 expected_name + "\" robot, not for the \"" + passed_urdf_name +
                 "\" robot.")
 
-        # Get node name to index mapping
-        self.urdf_name_to_graph_index = self.robotGraph.get_node_name_to_index_dict()
 
         # Define the order that the sorted joint and foot data should be in
-        self.foot_node_sorted_order = self.get_foot_node_sorted_order()
+        self.urdf_name_to_graph_index_foot = self.robotGraph.get_node_name_to_index_dict_for_type('foot')
+        self.urdf_name_to_graph_index_joint = self.robotGraph.get_node_name_to_index_dict_for_type('joint')
+        self.urdf_name_to_graph_index_base = self.robotGraph.get_node_name_to_index_dict_for_type('base')
 
         # Precompute the array indexes matching the defined orders for joints and feet
-        self.joint_node_indices_sorted = []
-        for urdf_node_name in self.get_joint_node_sorted_order():
-            self.joint_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
-        self.joint_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
-        self.foot_node_indices_sorted = []
-        for urdf_node_name in self.get_foot_node_sorted_order():
-            self.foot_node_indices_sorted.append(self.get_urdf_name_to_dataset_array_index()[urdf_node_name])
+        self.foot_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_foot)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_foot.keys():
+            graph_node_index = self.urdf_name_to_graph_index_foot[urdf_node_name]
+            self.foot_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
         self.foot_node_indices_sorted = np.array(self.foot_node_indices_sorted, dtype=np.uint)
 
-        # Precompute the return value for get_foot_node_indices_matching_labels()
-        self.foot_node_indices_of_graph_matching_labels = []
-        for urdf_name in self.get_foot_node_sorted_order():
-            self.foot_node_indices_of_graph_matching_labels.append(self.urdf_name_to_graph_index[urdf_name])
-        self.foot_node_indices_of_graph_matching_labels = np.array(self.foot_node_indices_of_graph_matching_labels, dtype=np.uint)
+        self.joint_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_joint)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_joint.keys():
+            graph_node_index = self.urdf_name_to_graph_index_joint[urdf_node_name]
+            self.joint_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
+        self.joint_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
 
-        # Calculate means and stds for input and label standardization later
-        # self.calculate_mean_and_std()
+        self.base_node_indices_sorted = np.zeros((len(self.urdf_name_to_graph_index_base)), dtype=np.float64)
+        for urdf_node_name in self.urdf_name_to_graph_index_base.keys():
+            graph_node_index = self.urdf_name_to_graph_index_base[urdf_node_name]
+            self.base_node_indices_sorted[graph_node_index] = self.get_urdf_name_to_dataset_array_index()[urdf_node_name]
+        self.base_node_indices_sorted = np.array(self.joint_node_indices_sorted, dtype=np.uint)
+
+        # Set normalize parameter for use later
+        self.normalize = normalize
+
+        # Precompute values for variables_to_use
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(0)
+        self.variables_to_use_all = self.find_variables_to_use([lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v])
+        self.variables_to_use_base = self.find_variables_to_use([lin_acc, ang_vel])
+        self.variables_to_use_joint = self.find_variables_to_use([j_p, j_v, j_T])
+        self.variables_to_use_foot = self.find_variables_to_use([f_p, f_v])
+
+        # Check we have necessary variables for some models
+        if len(self.variables_to_use_joint) == 0 and self.data_format == 'gnn':
+            raise ValueError("Dataset must provide at least one joint input for GNN models.")
+        if len(self.variables_to_use_base) + len(self.variables_to_use_joint) + len(self.variables_to_use_foot) == 0:
+            raise ValueError("Dataset must provide at least one input.")
+
+        # Premake the tensors for edge attributes and connections for HGNN
+        if self.data_format == 'heterogeneous_gnn':
+            bj, jb, jj, fj, jf = self.robotGraph.get_edge_index_matrices()
+            self.bj = torch.tensor(bj, dtype=torch.long)
+            self.jb = torch.tensor(jb, dtype=torch.long)
+            self.jj = torch.tensor(jj, dtype=torch.long)
+            self.fj = torch.tensor(fj, dtype=torch.long)
+            self.jf = torch.tensor(jf, dtype=torch.long)
+
+            bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
+            self.bj_attr = torch.tensor(bj_attr, dtype=torch.float64)
+            self.jb_attr = torch.tensor(jb_attr, dtype=torch.float64)
+            self.jj_attr = torch.tensor(jj_attr, dtype=torch.float64)
+            self.fj_attr = torch.tensor(fj_attr, dtype=torch.float64)
+            self.jf_attr = torch.tensor(jf_attr, dtype=torch.float64)
+
+        # Precompute feature matrix sizes for HGNN
+        # Calculate the size of the feature matrices
+        if self.data_format == 'heterogeneous_gnn':
+            self.hgnn_number_nodes = self.robotGraph.get_num_of_each_node_type()
+            self.base_width = len(self.variables_to_use_base) * 3 * self.history_length
+            self.joint_width = len(self.variables_to_use_joint) * self.history_length
+            self.foot_width = len(self.variables_to_use_foot) * 3 * self.history_length
+            if self.base_width <= 0: self.base_width = 1
+            if self.joint_width <= 0: self.joint_width = 1
+            if self.foot_width <= 0: self.foot_width = 1
 
     # ================================================================
     # ========================= DOWNLOADING ==========================
@@ -187,53 +230,6 @@ class FlexibleDataset(Dataset):
     # ================================================================
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     # ================================================================
-
-    def get_foot_node_indices_matching_labels(self) -> np.array:
-        """
-        This helper method returns the foot node indices that correspond 
-        to the ground truth GRF labels contained in the "y" of each 
-        Data object. The number x in the ith index tells us that 
-        ground truth label i matches up with node x from the GNN output.
-
-        For example, if the graph has 8 nodes, and there are only 4 
-        ground truth labels, this method might return [0, 3, 4, 7].
-        This means that the first ground truth label should match
-        the output of the node at index 0, the second ground truth label
-        should match the output of the node at index 3, and so on.
-
-        Returns:
-            foot_node_indices (np.array) - List of the indices of
-            the graph nodes that should output the ground truth labels 
-            at the same corresponding index.
-        """
-        return self.foot_node_indices_of_graph_matching_labels
-
-    def get_base_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the name of the URDF
-        base corresponding to the robot center.
-        """
-        raise self.notImplementedError
-
-    def get_joint_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the names of the URDF joints
-        corresponding to actual joints on the robot.
-
-        They are arranged in the order we want the data sorted
-        for the load_data_sorted() method.
-        """
-        raise self.notImplementedError
-
-    def get_foot_node_sorted_order(self) -> list[str]:
-        """
-        Returns an array with the names of the URDF
-        joints corresponding to the robot feet.
-        
-        They are arranged in the order we want the data sorted
-        for the load_data_sorted() method.
-        """
-        raise self.notImplementedError
     
     def get_urdf_name_to_dataset_array_index(self) -> dict:
         """
@@ -263,7 +259,7 @@ class FlexibleDataset(Dataset):
         """
         return self.data_format
     
-    def get_data_metadata(self):
+    def get_data_metadata(self) -> tuple:
         """
         Returns the data metadata. Only for use with
         heterogeneous graph data.
@@ -288,69 +284,18 @@ class FlexibleDataset(Dataset):
         raise self.notImplementedError
     
     # ================================================================
-    # ====================== STANDARDIZATION =========================
-    # ================================================================
-    def calculate_mean_and_std(self):
-        """
-        This helper method calculates the mean and std of
-        the dataset data per feature, for use in standardization
-        later.
-        """
-
-        # Calculate the number of features we need to get mean and std for.
-        num_features = 0
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(0)
-        to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels]        
-        for array in to_check:
-            if array is not None:
-                num_features += len(array)
-
-        # Calculate the line_num and line_index for each feature
-        file_data_array = np.zeros((2, num_features), dtype=np.int64)
-        line_i = 0
-        curr_feature_i = 0
-        for array in to_check:
-            if array is not None:
-                line_index_i = 0
-                for val in array:
-                    file_data_array[0,curr_feature_i] = line_i
-                    file_data_array[1,curr_feature_i] = line_index_i
-                    line_index_i += 1
-                    curr_feature_i += 1
-                line_i += 1
-
-        print(file_data_array)
-
-        # For each feature
-        self.means = np.zeros((num_features))
-        self.stds = np.zeros((num_features))
-        vfunc = np.vectorize(self.load_single_value)
-        for i in range(0, num_features):
-            # Get every occurance of that feature
-            vals: np.array = vfunc(range(0, self.len()), file_data_array[0,i], file_data_array[1,i])
-            print(vals)
-
-            # Calculate mean and std
-            self.means[i] = np.mean(vals)
-            self.stds[i] = np.std(vals)
-
-    # ================================================================
     # ======================== DATA LOADING ==========================
     # ================================================================
     
     def load_data_sorted(self, seq_num: int):
         """
         Loads data from the dataset at the provided sequence number.
-        However, the joint and feet information are sorted so that 
-        they match the order returned by get_joint_node_sorted_order().
+        However, the joint and feet are sorted so that they match 
+        the order in the URDF file. Additionally, the foot labels 
+        are sorted so it matches the order in the URDF file.
 
-        Additionally, the labels are sorted so it matches the order
-        returned by get_foot_node_sorted_order().
-
-        Next, labels are checked to make sure they aren't None.
-
-        Finally, the data is also standardized to a mean of 0 and
-        a standard deviation of 1 for each feature.
+        Next, labels are checked to make sure they aren't None. 
+        Finally, normalize the data if self.normalize was set as True.
 
         Parameters:
             seq_num (int): The sequence number of the txt file
@@ -358,18 +303,32 @@ class FlexibleDataset(Dataset):
 
         Returns:
             Same values as load_data_at_dataset_seq(), but order of
-            values inside arrays have been sorted.
+            values inside arrays have been sorted (and potentially
+            normalized).
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
-        unsorted_list = [j_p, j_v, j_T, f_p, f_v]
+        unsorted_list = [j_p, j_v, j_T]
         sorted_list = []
         for unsorted_array in unsorted_list:
             if unsorted_array is not None:
-                sorted_list.append(unsorted_array[self.joint_node_indices_sorted])
+                sorted_list.append(unsorted_array[:,self.joint_node_indices_sorted])
             else:
                 sorted_list.append(None)
+
+        # Sort the foot information
+        unsorted_foot_list = [f_p, f_v]
+        sorted_foot_list = []
+        for unsorted_array in unsorted_foot_list:
+            if unsorted_array is not None:
+                sorted_indices = []
+                for index in self.foot_node_indices_sorted:
+                    for i in range(0, 3):
+                        sorted_indices.append(int(index*3+i))
+                sorted_foot_list.append(unsorted_array[:,sorted_indices])
+            else:
+                sorted_foot_list.append(None)
 
         # Sort the ground truth labels
         labels_sorted = None
@@ -378,38 +337,44 @@ class FlexibleDataset(Dataset):
         else:
             labels_sorted = labels[self.foot_node_indices_sorted]
 
-        return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_list[3], sorted_list[4], labels_sorted
+        # Normalize the data if desired
+        norm_arrs = [None, None, None, None, None, None, None, None, None]
+        if self.normalize:
+            # Normalize all data except the labels
+            to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
+            for i, array in enumerate(to_normalize_array):
+                if (array is not None) and (array.shape[0] > 1):
+                    norm_arrs[i] = np.nan_to_num((array-np.mean(array,axis=0))/np.std(array, axis=0), copy=False, nan=0.0)
 
-    def load_single_value(self, seq_num: int, line_num: int, line_index: int):
-        """
-        This helper method loads a single value from the txt file
-        at "seq_num", using the given line_num and line_index.
-        """
+            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
+        else:
+            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
 
-        with open(str(Path(self.processed_dir, str(seq_num) + ".txt")), 'r') as f:
-            line = None
-            for i in range(0, line_num+1):
-                line = f.readline().split(" ")[:-1]
-            return float(line[line_index])
 
     def load_data_at_dataset_seq(self, seq_num: int):
         """
         This helper function opens the txt file at "seq_num"
         and loads dataset information for that sequence.
 
+        NOTE: even if self.normalize is set, this WON'T return
+        normalized data. Use load_data_sorted() for that.
+
         Parameters:
             seq_num (int): The sequence number of the txt file
                 whose data should be loaded.
 
         Returns:
-            lin_acc (np.array) - IMU linear acceleration
-            ang_vel (np.array) - IMU angular velocity
-            j_p (np.array) - Joint positions 
-            j_v (np.array) - Joint velocities
-            j_T (np.array) - Joint Torques
-            f_p (np.array) - Foot position
-            f_v (np.array) - Foot velocity
-            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states) 
+            lin_acc (np.array) - IMU linear acceleration, of shape [history_length, 3]
+            ang_vel (np.array) - IMU angular velocity, of shape [history_length, 3]
+            j_p (np.array) - Joint positions, of shape [history_length, 12]
+            j_v (np.array) - Joint velocities, of shape [history_length, 12]
+            j_T (np.array) - Joint Torques, of shape [history_length, 12]
+            f_p (np.array) - Foot position, of shape [history_length, 12]
+            f_v (np.array) - Foot velocity, of shape [history_length, 12]
+            labels (np.array) - The Dataset labels (either Z direction GRFs, or contact states), of shape [4]
+                Only the latest entry in the time window is used as the labels.
+            r_p (np.array) - Robot position (GT), in the order (x, y, z), of shape [history_length, 3]
+            r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w), of shape [history_length, 4]
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
@@ -427,9 +392,7 @@ class FlexibleDataset(Dataset):
             raise IndexError("Index value out of Dataset bounds.")
 
         # Return data in the proper format
-        if self.data_format == 'gnn':
-            return self.get_helper_gnn(idx)
-        elif self.data_format == 'mlp':
+        if self.data_format == 'mlp':
             return self.get_helper_mlp(idx)
         elif self.data_format == 'heterogeneous_gnn':
             return self.get_helper_heterogeneous_gnn(idx)
@@ -439,86 +402,27 @@ class FlexibleDataset(Dataset):
         Gets a Dataset entry if we are using an MLP model.
         """
 
-        # Make the network inputs
+        # Load the dataset information
         x = None
 
-        # Find out which variables we have to use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
-        variables_to_check = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
-        variables_to_use = self.find_variables_to_use(variables_to_check)
+        # Only add variables that aren't None
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
+        dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
+        final_input = np.array([])
+        for y in self.variables_to_use_all:
+            final_input = np.concatenate((final_input, dataset_inputs[y].flatten('F')), axis=0) 
 
-        # Load the dataset information information
-        for i in range(0, self.history_length):
-
-            # Only add variables that aren't None
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + i)
-            dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
-            final_input = np.array([])
-            for y in variables_to_use:
-                final_input = np.concatenate((final_input, dataset_inputs[y]), axis=0) 
-
-            # Construct the input tensor
-            tensor = torch.tensor((final_input), 
-                                  dtype=torch.float64).unsqueeze(0)
-            if x is None: x = tensor
-            else: x = torch.cat((x, tensor), 0)
+        # Construct the input tensor
+        x = torch.tensor((final_input), 
+                                dtype=torch.float64).unsqueeze(0)
 
         # Flatten the tensor if necessary
         if len(x.size()) > 1:
             x = torch.flatten(torch.transpose(x, 0, 1), 0, 1)
 
         # Create the ground truth labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + self.history_length - 1)
         y = torch.tensor(labels, dtype=torch.float64)
         return x, y
-
-    def get_helper_gnn(self, idx: int):
-        """
-        Get a dataset entry if we are using a GNN model.
-        """
-
-        # Find out which necessary variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
-        variables_to_check = [j_p, j_v, j_T]
-        variables_to_use = self.find_variables_to_use(variables_to_check)
-        if len(variables_to_use) == 0:
-            raise ValueError("Dataset must provide at least one input.")
-        
-        # Create a note feature matrix
-        x = torch.ones((self.robotGraph.get_num_nodes(), len(variables_to_use) * self.history_length), dtype=torch.float64)
-
-        # For each dataset entry we include in the history
-        for j in range(0, self.history_length):
-            # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
-            dataset_inputs = [j_p, j_v, j_T]
-
-            # For each joint specified
-            for i, urdf_node_name in enumerate(self.get_joint_node_sorted_order()):
-
-                # Find the index of this particular node
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
-                # For each variable to use
-                for k in variables_to_use:
-
-                    # Add the features to x matrix
-                    x[node_index, k*self.history_length+j] = dataset_inputs[k][i]
-
-        # Create the edge matrix
-        self.edge_matrix = self.robotGraph.get_edge_index_matrix()
-        self.edge_matrix_tensor = torch.tensor(self.edge_matrix,
-                                               dtype=torch.long)
-
-        # Create the labels
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
-            self.first_index + idx + self.history_length - 1)
-        y = torch.tensor(labels, dtype=torch.float64)
-
-        # Create the graph
-        graph = Data(x=x, edge_index=self.edge_matrix_tensor,
-                     y=y, num_nodes=self.robotGraph.get_num_nodes())
-        return graph
     
     def get_helper_heterogeneous_gnn(self, idx):
         """
@@ -529,94 +433,61 @@ class FlexibleDataset(Dataset):
         data = HeteroData()
 
         # Get the edge matrices
-        bj, jb, jj, fj, jf = self.robotGraph.get_edge_index_matrices()
-        data['base', 'connect',
-               'joint'].edge_index = torch.tensor(bj, dtype=torch.long)
-        data['joint', 'connect',
-             'base'].edge_index = torch.tensor(jb, dtype=torch.long)
-        data['joint', 'connect',
-             'joint'].edge_index = torch.tensor(jj, dtype=torch.long)
-        data['foot', 'connect',
-             'joint'].edge_index = torch.tensor(fj, dtype=torch.long)
-        data['joint', 'connect',
-             'foot'].edge_index = torch.tensor(jf, dtype=torch.long)
+        data['base', 'connect','joint'].edge_index = self.bj
+        data['joint', 'connect','base'].edge_index = self.jb
+        data['joint', 'connect','joint'].edge_index = self.jj
+        data['foot', 'connect','joint'].edge_index = self.fj
+        data['joint', 'connect','foot'].edge_index = self.jf
 
         # Set the edge attributes
-        bj_attr, jb_attr, jj_attr, fj_attr, jf_attr = self.robotGraph.get_edge_attr_matrices()
-        data['base', 'connect',
-               'joint'].edge_attr = torch.tensor(bj_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'base'].edge_attr = torch.tensor(jb_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'joint'].edge_attr = torch.tensor(jj_attr, dtype=torch.float64)
-        data['foot', 'connect',
-             'joint'].edge_attr = torch.tensor(fj_attr, dtype=torch.float64)
-        data['joint', 'connect',
-             'foot'].edge_attr = torch.tensor(jf_attr, dtype=torch.float64)
+        data['base', 'connect','joint'].edge_attr = self.bj_attr
+        data['joint', 'connect','base'].edge_attr = self.jb_attr
+        data['joint', 'connect','joint'].edge_attr = self.jj_attr
+        data['foot', 'connect','joint'].edge_attr = self.fj_attr
+        data['joint', 'connect','foot'].edge_attr = self.jf_attr
 
-        # Save the labels and number of nodes
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(
-            self.first_index + idx + self.history_length - 1)
-        data.y = torch.tensor(labels, dtype=torch.float64)
+        # Save the number of nodes
         data.num_nodes = self.robotGraph.get_num_nodes()
 
-        # Find out which variables are available
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx)
-        base_variables_to_use = self.find_variables_to_use([lin_acc, ang_vel])
-        joint_variables_to_use = self.find_variables_to_use([j_p, j_v, j_T])
-        foot_variables_to_use = self.find_variables_to_use([f_p, f_v])
-        if len(base_variables_to_use) + len(joint_variables_to_use) + len(foot_variables_to_use) == 0:
-            raise ValueError("Dataset must provide at least one input.")
-        
-        # Calculate the size of the feature matrices
-        number_nodes = self.robotGraph.get_num_of_each_node_type()
-        base_width = len(base_variables_to_use) * 3 * self.history_length
-        joint_width = len(joint_variables_to_use) * self.history_length
-        foot_width = len(foot_variables_to_use) * 3 * self.history_length
-        if base_width <= 0: base_width = 1
-        if joint_width <= 0: joint_width = 1
-        if foot_width <= 0: foot_width = 1
-
         # Create the feature matrices
-        base_x = torch.ones((number_nodes[0], base_width), dtype=torch.float64)
-        joint_x = torch.ones((number_nodes[1], joint_width), dtype=torch.float64)
-        foot_x = torch.ones((number_nodes[2], foot_width), dtype=torch.float64)
+        base_x = torch.ones((self.hgnn_number_nodes[0], self.base_width), dtype=torch.float64)
+        joint_x = torch.ones((self.hgnn_number_nodes[1], self.joint_width), dtype=torch.float64)
+        foot_x = torch.ones((self.hgnn_number_nodes[2], self.foot_width), dtype=torch.float64)
 
-        # For each dataset entry we include in the history
-        for j in range(0, self.history_length):
-            # Load the data for this entry
-            lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels = self.load_data_sorted(self.first_index + idx + j)
+        # Load the data for this entry
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
 
-            # For each joint specified
-            joint_data = [j_p, j_v, j_T]
-            for i, urdf_node_name in enumerate(self.get_joint_node_sorted_order()):
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+        # For each joint specified
+        joint_data = [j_p, j_v, j_T]
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_joint.keys()):
+            # For each variable to use
+            final_input = torch.ones((0), dtype=torch.float64)
+            for k in self.variables_to_use_joint:
+                final_input = torch.cat((final_input, torch.tensor(joint_data[k][:,i].flatten('F'), dtype=torch.float64)), axis=0)
 
-                # For each variable to use
-                for k in joint_variables_to_use:
-                    joint_x[node_index, k*self.history_length+j] = joint_data[k][i]
+            joint_x[i] = final_input
 
-            # For each base specified (should be 1)
-            base_data = [lin_acc, ang_vel]
-            for i, urdf_node_name in enumerate(self.get_base_node_sorted_order()):
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
+        # For each base specified (should be 1)
+        base_data = [lin_acc, ang_vel]
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_base.keys()):
+            # For each variable to use
+            final_input = torch.ones((0), dtype=torch.float64)
+            for k in self.variables_to_use_base:
+                final_input = torch.cat((final_input, torch.tensor(base_data[k][:,i:i+3].flatten('F'), dtype=torch.float64)), axis=0)
+            base_x[i] = final_input
 
-                # For each variable to use
-                for k in base_variables_to_use:
-                    base_x[node_index, ((k*3)+0)*self.history_length+j] = base_data[k][i*3]
-                    base_x[node_index, ((k*3)+1)*self.history_length+j] = base_data[k][i*3+1]
-                    base_x[node_index, ((k*3)+2)*self.history_length+j] = base_data[k][i*3+2]
-
-            # For each foot specified
-            foot_data = [f_p, f_v]
-            for i, urdf_node_name in enumerate(self.get_foot_node_sorted_order()):
-                node_index = self.urdf_name_to_graph_index[urdf_node_name]
-
-                # For each variable to use
-                for k in foot_variables_to_use:
-                    foot_x[node_index, ((k*3)+0)*self.history_length+j] = foot_data[k][i*3]
-                    foot_x[node_index, ((k*3)+1)*self.history_length+j] = foot_data[k][i*3+1]
-                    foot_x[node_index, ((k*3)+2)*self.history_length+j] = foot_data[k][i*3+2]
+        # For each foot specified
+        foot_data = [f_p, f_v]
+        for i, urdf_node_name in enumerate(self.urdf_name_to_graph_index_foot.keys()):
+            # For each variable to use
+            final_input = torch.ones((0), dtype=torch.float64)
+            for k in self.variables_to_use_foot:
+                final_input = torch.cat((final_input, torch.tensor(foot_data[k][:,(3*i):(3*i)+3].flatten('F'), dtype=torch.float64)), axis=0)
+            if final_input.shape[0] != 0:
+                foot_x[i] = final_input
+        
+        # Make the labels
+        data.y = torch.tensor(labels, dtype=torch.float64)
 
         # Save the matrices into the HeteroData object
         data['base'].x = base_x

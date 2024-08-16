@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "grfgnn"
-version = "0.0.1"
+version = "0.1.0"
 authors = [
   { name="Daniel Butterfield", email="dbutterfield3@gatech.edu" },
   { name="Jackson Cheng", email="ncheng49@gatech.edu" },
 ]
-description = "A graph neural network implementation that learns to estimate GRF on a robotic quadruped, using joint position and velocities."
+description = "A graph neural network implementation that learns to estimate contact state on a robotic quadruped."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
