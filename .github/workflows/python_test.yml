@@ -42,6 +42,8 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Install the package
       run: |
+        echo "cython<3" > /tmp/constraint.txt
+        PIP_CONSTRAINT=/tmp/constraint.txt
         python -m pip install .
     - name: Import URDF files
       uses: snickerbockers/submodules-init@v4
