@@ -259,7 +259,7 @@ class FlexibleDataset(Dataset):
         """
         return self.data_format
     
-    def get_data_metadata(self):
+    def get_data_metadata(self) -> tuple:
         """
         Returns the data metadata. Only for use with
         heterogeneous graph data.

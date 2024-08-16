@@ -11,8 +11,13 @@ import torchmetrics
 
 
 def main():
-    # Set parameters
+    # ================================= CHANGE THESE ===================================
+    path_to_checkpoint = "/home/dbutterfield3/Research/state-estimation-gnn/models/ancient-salad-5/epoch=29-val_CE_loss=0.34249.ckpt"
     model_type = 'heterogeneous_gnn'
+    num_entries_to_eval = 100
+    # ==================================================================================
+
+    # Set parameters
     history_length = 150
     path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
@@ -31,13 +36,6 @@ def main():
 
     # Convert them to subsets
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
-
-
-    # ================================= CHANGE THESE ===================================
-    path_to_checkpoint = "/home/dbutterfield3/Research/state-estimation-gnn/models/ancient-salad-5/epoch=29-val_CE_loss=0.34249.ckpt"
-    num_entries_to_eval = test_dataset.__len__()
-    # ==================================================================================
-
 
     # Evaluate with model
     pred, labels = evaluate_model(path_to_checkpoint, test_dataset, num_entries_to_eval)

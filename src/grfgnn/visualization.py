@@ -43,12 +43,21 @@ def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
         plt.savefig(path_to_file)
 
 
-def visualize_model_outputs_classification(pred, labels, path_to_file: Path = None, fig_width: int = 20):
+def visualize_model_outputs_classification(y_pred_per_foot_prob_only_1: torch.Tensor, 
+                                           labels: torch.Tensor, path_to_file: Path = None, 
+                                           fig_width: int = 20):
     """
     Helper method that plots the difference between the predicted class
     and the actual.
     TODO: Plot the difference between 16 state contact and predicted.
     TODO: Generate a confusion matrix.
+
+    Parameters:
+        - y_pred_per_foot_prob_only_1 (torch.Tensor): A Tensor of shape 
+            (batch_size, 4) that contains probability values of stable 
+            contact for each foot.
+        - labels (torch.Tensor): A Tensor of shape (batch_size, 4) that 
+            contains contact state for each foot.
     """
 
     # Setup four graphs (one for each foot)
@@ -61,7 +70,7 @@ def visualize_model_outputs_classification(pred, labels, path_to_file: Path = No
         "Foot 2 State", "Foot 3 State"
     ]
     for i in range(0, 4):
-        display_on_axes(axes[i], np.rint(pred[:, i]), labels[:, i], titles[i])
+        display_on_axes(axes[i], np.rint(y_pred_per_foot_prob_only_1[:, i]), labels[:, i], titles[i])
 
     if path_to_file is not None:
         plt.savefig(path_to_file)

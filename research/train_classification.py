@@ -12,15 +12,18 @@ def main():
     on our HGNN instead.
     """
 
-
-    path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
+    # ================================= CHANGE THESE ===================================
+    model_type = 'heterogeneous_gnn'
+    num_layers = 4
+    hidden_size = 128
+    # ==================================================================================
 
     # Set model parameters (so they all match)
-    model_type = 'heterogeneous_gnn'
     history_length = 150
     normalize = True
 
     # Initialize the Training/Validation datasets
+    path_to_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
     air_walking_gait = linData.LinTzuYaunDataset_air_walking_gait(
         Path(Path('.').parent, 'datasets', 'LinTzuYaun-AWG').absolute(), path_to_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=normalize)
     concrete_difficult_slippery = linData.LinTzuYaunDataset_concrete_difficult_slippery(
@@ -71,7 +74,7 @@ def main():
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
     # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=4, hidden_size=128, 
+    train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
                 logger_project_name="grfgnn-class-abalation", batch_size=30, regression=False, lr=0.0001, epochs=30)
 
 if __name__ == "__main__":
