@@ -116,7 +116,6 @@ python-qt-binding==0.4.4
 python-utils==3.6.0
 pytorch-lightning==2.4.0
 pytz==2023.3
-PyYAML==5.4.1
 qt-dotgraph==0.4.2
 qt-gui==0.4.2
 qt-gui-cpp==0.4.2
