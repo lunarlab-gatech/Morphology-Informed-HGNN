@@ -494,7 +494,8 @@ def train_model(
         epochs: int = 100,
         hidden_size: int = 10,
         regression: bool = True,
-        seed: int = 0):
+        seed: int = 0,
+        devices: int = 1):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -655,8 +656,7 @@ def train_model(
     trainer = L.Trainer(
         default_root_dir=path_to_save,
         deterministic=True,  # Reproducability
-        benchmark=True,
-        devices='auto',
+        devices=devices,
         accelerator="auto",
         # profiler="simple",
         max_epochs=epochs,

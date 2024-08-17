@@ -5,6 +5,7 @@ This repository implements a Morphologically-inspired Heterogeneous graph neural
 To get started, setup a Conda Python environment with Python=3.11:
 ```
 conda create -n mi-hgnn python=3.11
+conda activate mi-hgnn
 ```
 
 Then, install the library (and dependencies) with the following command:
