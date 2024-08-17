@@ -564,6 +564,9 @@ def train_model(
                                         batch_size=batch_size,
                                         shuffle=False,
                                         num_workers=num_workers)
+    
+    # Set a random seed (need to be before we get dummy_batch)
+    seed_everything(seed, workers=True)
 
     # Get a dummy_batch
     dummy_batch = None
@@ -607,9 +610,6 @@ def train_model(
         model_parameters = count_parameters(lightning_model.model)
     else:
         raise ValueError("Invalid model type.")
-
-    # Set a random seed
-    seed_everything(seed, workers=True)
 
     # Create Logger
     wandb_logger = False
