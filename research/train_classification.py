@@ -14,7 +14,7 @@ def main():
 
     # ================================= CHANGE THESE ===================================
     model_type = 'heterogeneous_gnn'
-    num_layers = 4
+    num_layers = 8
     hidden_size = 128
     # ==================================================================================
 
@@ -75,7 +75,7 @@ def main():
 
     # Train the model
     train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
-                logger_project_name="grfgnn-class-abalation", batch_size=30, regression=False, lr=0.0001, epochs=30,
+                logger_project_name="mi_hgnn_class_abalation", batch_size=30, regression=False, lr=0.0001, epochs=30,
                 seed=3)
 
 if __name__ == "__main__":
