@@ -1,12 +1,15 @@
 import unittest
 from pathlib import Path
-from grfgnn import QuadSDKDataset_A1Speed1_0
-from grfgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
-from grfgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
-from grfgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
+
+import torchmetrics.classification
+from mi_hgnn import QuadSDKDataset_A1Speed1_0
+from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
+from mi_hgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
+from mi_hgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
 import torch
 from torch.utils.data import random_split
 import numpy as np
+import torchmetrics
 from torch_geometric.loader import DataLoader
 
 class TestGnnLightning(unittest.TestCase):
@@ -69,53 +72,112 @@ class TestGnnLightning(unittest.TestCase):
         """
 
         # For each regression model
-        for model in self.models:
+        for i, model in enumerate(self.models):
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                              normalize=False,
                                               testing_mode=True, disable_logger=True,
-                                              epochs=2)
+                                              epochs=2, seed=1919)
 
             # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
             self.assertEqual(len(models), 3)
 
-            # Predict with the model 
-            pred, labels = evaluate_model(models[0], test_dataset, 485)
+            try:
+                # Predict with the model 
+                pred, labels = evaluate_model(models[0], test_dataset, 485)
 
-            # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], 485)
-            self.assertEqual(pred.shape[1], 4)
-            self.assertEqual(labels.shape[0], 485)
-            self.assertEqual(labels.shape[1], 4)
+                # Assert the sizes of the results match
+                self.assertEqual(pred.shape[0], 485)
+                self.assertEqual(pred.shape[1], 4)
+                self.assertEqual(labels.shape[0], 485)
+                self.assertEqual(labels.shape[1], 4)
 
-            # Try and visualize with the model
-            visualize_model_outputs_regression(pred, labels)
+                # Try and visualize with the model
+                visualize_model_outputs_regression(pred, labels)
+
+            except Exception as e:
+                for path in models:
+                    Path.unlink(path, missing_ok=False)
+                raise e
+            
+            for path in models:
+                Path.unlink(path, missing_ok=False)
 
         # For each classification model
-        for model in self.class_models:
+        for i, model in enumerate(self.class_models):
             # Test for classification
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+                                              normalize=False,
                                                 testing_mode=True, disable_logger=True, 
-                                                regression=False, epochs=2)
+                                                regression=False, epochs=2, seed=1919)
 
             # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
             self.assertEqual(len(models), 3)
 
-            # Predict with the model
-            pred, labels = evaluate_model(models[0], test_dataset, 234)
+            try:
+                # Predict with the model
+                pred, labels = evaluate_model(models[0], test_dataset, 234)
 
-            # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], 234)
-            self.assertEqual(pred.shape[1], 4)
-            self.assertEqual(labels.shape[0], 234)
-            self.assertEqual(labels.shape[1], 4)
+                # Assert the sizes of the results match
+                self.assertEqual(pred.shape[0], 234)
+                self.assertEqual(pred.shape[1], 4)
+                self.assertEqual(labels.shape[0], 234)
+                self.assertEqual(labels.shape[1], 4)
+                
+                # Try to visualize the results
+                visualize_model_outputs_classification(pred, labels)
+            except Exception as e:
+                for path in models:
+                    Path.unlink(path, missing_ok=False)
+                raise e
             
-            # Try to visualize the results
-            visualize_model_outputs_classification(pred, labels)
+            for path in models:
+                Path.unlink(path, missing_ok=False)
+
+    def test_MIHGNN_model_output_assumption(self):
+        """
+        The code as written assumes that the MIHGNN model output follows
+        the corresponding convention. Given the output is a tensor
+        of shape (batch_size * 4, out_channels), we assume that:
+        - Every four sequential values corresponds to the outputs 
+          of the feet nodes in a particular graph, in the order
+          of the URDF file.
+        - Treating each group of four values as the output of a graph,
+          the order of the graphs is the same as the order of the input
+          graphs.
+
+        This method verifies these assumptions. 
+        """
+        batch_size = 100
+        trainLoader: DataLoader = DataLoader(self.class_dataset_hgnn, batch_size=batch_size,
+                                         shuffle=False, num_workers=1)
+        
+        dummy_batch = None
+        for batch in trainLoader:
+            dummy_batch = batch
+            break
+
+        # Test the the HeteroDataBatch gets things in the order we assume
+        des_order = []
+        for i in range(0, batch_size):
+            for j in range(0, 4):
+                des_order.append(i)
+        des_order = np.array(des_order)
+        np.testing.assert_array_equal(des_order, batch['foot'].batch.numpy())
+
+        for i in range(0, batch_size):
+            np.testing.assert_array_equal(batch['foot'].x[i*4:(i+1)*4,:], self.class_dataset_hgnn.get(i)['foot'].x)
+            np.testing.assert_array_equal(batch.y[i*4:(i+1)*4], self.class_dataset_hgnn.get(i).y)
+
+        # Assert that when we get x_dict, the foot values stay in the same order
+        np.testing.assert_array_equal(batch.x_dict['foot'], batch['foot'].x)
+
+        # Therefore, the MIHGNN model outputs are also in the same order as above.
 
     def test_loss_calculation_for_epoch(self):
         """
@@ -159,11 +221,11 @@ class TestGnnLightning(unittest.TestCase):
             losses are calculated for an epoch.
             """
 
-            a_pred = torch.nn.functional.normalize(torch.rand((a_size, 4)), p=1, dim=1)
+            a_pred = torch.rand((a_size, 8))
             a_gt = torch.zeros((a_size, 4), dtype=int)
             for i in range(0, a_size):
                 a_gt[i] = int(torch.randint(0, 2, (1,)))
-            b_pred = torch.nn.functional.normalize(torch.rand((b_size, 4)), p=1, dim=1)
+            b_pred = torch.rand((b_size, 8))
             b_gt = torch.zeros((b_size, 4), dtype=int)
             for i in range(0, b_size):
                 b_gt[i] = int(torch.randint(0, 2, (1,)))
@@ -174,14 +236,33 @@ class TestGnnLightning(unittest.TestCase):
             base.calculate_losses_epoch()
 
             # Calculate the desired losses
-            y_pred = torch.concat((a_pred, b_pred), 0)
-            pred = torch.cat((torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1), 
-                                           torch.flatten(y_pred).unsqueeze(dim=1)), dim=1)
-            gt = torch.concat((a_gt, b_gt), 0).long().flatten()
-            ce_loss_des = torch.nn.functional.cross_entropy(pred, gt)
-            
+            pred = torch.concat((a_pred, b_pred), 0)
+            pred_reshaped = torch.reshape(torch.concat((a_pred, b_pred), 0), (pred.shape[0] * 4, 2))
+            gt = torch.concat((a_gt, b_gt), 0)
+            gt_reshaped = gt.long().flatten()
+            loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
+            ce_loss_des = loss_fn(pred_reshaped, gt_reshaped)
+
+            y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
+                    base.classification_calculate_useful_values(pred, pred.shape[0])
+            y_pred_16, y_16 = base.classification_conversion_16_class(y_pred_per_foot_prob_only_1, gt)
+            metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
+            acc_des = metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze())
+
+            y_pred_2 = torch.reshape(torch.argmax(y_pred_per_foot_prob, dim=1), (pred.shape[0], 4))
+            metric_f1 =torchmetrics.classification.BinaryF1Score()
+            f1_leg0 = metric_f1(y_pred_2[:,0], gt[:,0])
+            f1_leg1 = metric_f1(y_pred_2[:,1], gt[:,1])
+            f1_leg2 = metric_f1(y_pred_2[:,2], gt[:,2])
+            f1_leg3 = metric_f1(y_pred_2[:,3], gt[:,3])
+
             # Make sure that they match
-            np.testing.assert_array_almost_equal(ce_loss_des, base.ce_loss, 7)
+            np.testing.assert_almost_equal(ce_loss_des.item(), base.ce_loss.item(), 7)
+            np.testing.assert_almost_equal(acc_des.item(), base.acc.item(), 16)
+            np.testing.assert_almost_equal(f1_leg0.item(), base.f1_leg0.item(), 16)
+            np.testing.assert_almost_equal(f1_leg1.item(), base.f1_leg1.item(), 16)
+            np.testing.assert_almost_equal(f1_leg2.item(), base.f1_leg2.item(), 16)
+            np.testing.assert_almost_equal(f1_leg3.item(), base.f1_leg3.item(), 16)
 
         # Define a BaseLightning model
         base = Base_Lightning("adam", 0.003, True)
@@ -206,8 +287,6 @@ class TestGnnLightning(unittest.TestCase):
         base.reset_all_metrics()
         test_classification_loss_helper(base, 777, 777)
         base.reset_all_metrics()
-
-        # TODO: Add Accuracy and F1-Scores to this test case
 
     def test_classification_conversion_16_class(self):
         """
@@ -237,5 +316,59 @@ class TestGnnLightning(unittest.TestCase):
         np.testing.assert_array_almost_equal(y_pred_new_des.numpy(), y_pred_new.numpy(), 15)
         np.testing.assert_array_almost_equal(y_new_des.numpy(), y_new.numpy(), 15)
 
+    def test_classification_metric_calculations(self):
+        """
+        This incredibly important test makes sure that our metric calculations are correct
+        for classification.
+        """
+
+        # Setup a dummy dataloader so we can get a batch
+        trainLoader: DataLoader = DataLoader(self.class_dataset_hgnn_3,
+                                    batch_size=4, shuffle=True, num_workers=1)
+        
+        # Extract a batch
+        batch = None
+        for batch in trainLoader:
+            batch = batch
+            break
+
+        # Set our own y_pred and y values
+        y_pred = torch.tensor([[0.1, 11, 100, 19, 0.12, 0.14, 15, 24.45],
+                               [15, 11, 19, 19, 0.9898, 0.14, -10000, 24.45],
+                               [0.1, 13, 100, 19, 0.12, -10, 15, -24.45],
+                               [15, 11, 200, 19, 0.9898, 0.14, -10000, 44.45],
+                               [-0.1, 11, 100, 19, 0.12, 0.14, 15, 24.45],
+                               [-15, 11, 19, 19, -0.9898, 0.14, -10000, 24.45],
+                               [-0.1, 13, 100, 19, 0.12, -10, 15, -24.45],
+                               [-15, 11, 200, 19, -0.9898, 0.14, -10000, 44.45]], dtype=torch.float64)
+        y = torch.tensor([[1, 1, 1, 1],
+                          [1, 1, 0, 1],
+                          [0, 1, 1, 0],
+                          [0, 1, 0, 0],
+                          [0, 0, 1, 1],
+                          [1, 1, 1, 0],
+                          [1, 0, 0, 0],
+                          [1, 0, 0, 1]], dtype=torch.int)
+
+        # Calculate classification metrics
+        base = Base_Lightning('adam', 0.0001, False)
+        base.calculate_losses_step(y, y_pred)
+
+        # Make sure our CE loss matches what we expect
+        y_pred_per_leg_log_soft = torch.nn.functional.log_softmax(torch.reshape(y_pred, (y_pred.shape[0] * 4, 2)), dim=1,  dtype=torch.float64)
+        y_per_leg = torch.reshape(y, (y.shape[0] * 4, 1))
+        des_loss = 0
+        for i in range(0, y_pred_per_leg_log_soft.shape[0]):
+            des_loss -= y_pred_per_leg_log_soft[i,y_per_leg[i]]
+        des_loss = des_loss / y_pred_per_leg_log_soft.shape[0]
+        np.testing.assert_almost_equal(base.ce_loss.item(), des_loss.item(), 5)
+    
+        # Other metric Regression Tests from MorphoSymm-Replication
+        self.assertEqual(base.acc.item(), 0.125)
+        self.assertEqual(base.f1_leg0.item(), 0.7272727272727272)
+        self.assertEqual(base.f1_leg1.item(), 0.0)
+        self.assertEqual(base.f1_leg2.item(), 0.75)
+        self.assertEqual(base.f1_leg3.item(), 0.8)
+        
 if __name__ == "__main__":
     unittest.main()
