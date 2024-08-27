@@ -1,8 +1,7 @@
-from lib2to3.pytree import Base
-from lightning.pytorch.callbacks import DeviceStatsMonitor
 import torch
 from torch import optim, nn
 import lightning as L
+from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -12,9 +11,10 @@ from torch.utils.data import Subset
 import numpy as np
 import torchmetrics
 import torchmetrics.classification
-from .customMetrics import CrossEntropyLossMetric
 import pinocchio as pin
+from .customMetrics import CrossEntropyLossMetric, BinaryF1Score
 from .hgnn import GRF_HGNN
+from torch_geometric.profile import count_parameters
 
 class Base_Lightning(L.LightningModule):
     """
@@ -39,16 +39,17 @@ class Base_Lightning(L.LightningModule):
         self.lr = lr
         self.regression = regression
 
-        # Setup the metrics
+        # ====== Setup the metrics ======
         self.metric_mse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=True)
         self.metric_rmse: torchmetrics.MeanSquaredError = torchmetrics.regression.MeanSquaredError(squared=False)
         self.metric_l1: torchmetrics.MeanAbsoluteError = torchmetrics.regression.MeanAbsoluteError()
+
         self.metric_ce = CrossEntropyLossMetric()
         self.metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
-        self.metric_f1_leg0 = torchmetrics.classification.BinaryF1Score()
-        self.metric_f1_leg1 = torchmetrics.classification.BinaryF1Score()
-        self.metric_f1_leg2 = torchmetrics.classification.BinaryF1Score()
-        self.metric_f1_leg3 = torchmetrics.classification.BinaryF1Score()
+        self.metric_f1_leg0 = BinaryF1Score()
+        self.metric_f1_leg1 = BinaryF1Score()
+        self.metric_f1_leg2 = BinaryF1Score()
+        self.metric_f1_leg3 = BinaryF1Score()
 
         # Setup variables to hold the losses
         self.mse_loss = None
@@ -68,7 +69,7 @@ class Base_Lightning(L.LightningModule):
 
         # Log the losses
         if self.regression:
-            self.log(step_name + "_MSE_loss", 
+            self.log(step_name + "_MSE_loss",
                     self.mse_loss,
                     on_step=on_step,
                     on_epoch=on_epoch)
@@ -81,37 +82,37 @@ class Base_Lightning(L.LightningModule):
                     on_step=on_step,
                     on_epoch=on_epoch)
         else:
-            self.log(step_name + "_CE_loss", 
+            self.log(step_name + "_CE_loss",
                     self.ce_loss,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_Accuracy", 
+            self.log(step_name + "_Accuracy",
                     self.acc,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_Avg", 
+            self.log(step_name + "_F1_Score_Leg_Avg",
                     (self.f1_leg0 + self.f1_leg1 + self.f1_leg2 + self.f1_leg3) / 4.0,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_0", 
+            self.log(step_name + "_F1_Score_Leg_0",
                     self.f1_leg0,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_1", 
+            self.log(step_name + "_F1_Score_Leg_1",
                     self.f1_leg1,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_2", 
+            self.log(step_name + "_F1_Score_Leg_2",
                     self.f1_leg2,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_3", 
+            self.log(step_name + "_F1_Score_Leg_3",
                     self.f1_leg3,
                     on_step=on_step,
                     on_epoch=on_epoch)
-    
+
     # ======================= Loss Calculation =======================
-    def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor) -> None:
+    def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor):
         if self.regression:
             y = y.flatten()
             y_pred = y_pred.flatten()
@@ -121,33 +122,24 @@ class Base_Lightning(L.LightningModule):
         else:
             batch_size = y_pred.shape[0]
 
-            # Make 2 binary class floats for CE_loss
-            y_long = y.long()
-            #print("y: ", y[0:5])
-            #print("y_pred: ", y_pred[0:5])
-            y_pred_2_floats = torch.cat((torch.sub(1, torch.flatten(y_pred)).unsqueeze(dim=1), 
-                                           torch.flatten(y_pred).unsqueeze(dim=1)), dim=1)
-            #print("y_pred_2_floats: ", y_pred_2_floats[0:20])
-            #print("y_long: ", y_long.flatten()[0:20])
-            
-            self.ce_loss = self.metric_ce(y_pred_2_floats, y_long.flatten())
+            # Calculate useful values
+            y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
+                    self.classification_calculate_useful_values(y_pred, batch_size)
 
-            # Calculate 16 class predictions for accuracy
-            y_pred_16, y_16 = self.classification_conversion_16_class(y_pred, y)
-            #print("y_pred_16: ", y_pred_16[0:5])
-            #print("y_pred_16 max: ", torch.argmax(y_pred_16, dim=1)[0:5])
-            #print("y_16: ", y_16.squeeze()[0:5])
+            # Calculate CE_loss
+            self.ce_loss = self.metric_ce(y_pred_per_foot, y.long().flatten())
+
+            # Calculate 16 class accuracy
+            y_pred_16, y_16 = self.classification_conversion_16_class(y_pred_per_foot_prob_only_1, y)
             self.acc = self.metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze())
 
             # Calculate binary class predictions for f1-scores
-            y_pred_2 = torch.reshape(torch.argmax(y_pred_2_floats, dim=1), (batch_size, 4))
-            #print("y_pred_2: ", y_pred_2[0:5])
-            #print("y: ", y[0:5])
+            y_pred_2 = torch.reshape(torch.argmax(y_pred_per_foot_prob, dim=1), (batch_size, 4))
             self.f1_leg0 = self.metric_f1_leg0(y_pred_2[:,0], y[:,0])
             self.f1_leg1 = self.metric_f1_leg1(y_pred_2[:,1], y[:,1])
             self.f1_leg2 = self.metric_f1_leg2(y_pred_2[:,2], y[:,2])
             self.f1_leg3 = self.metric_f1_leg3(y_pred_2[:,3], y[:,3])
-    
+
     def calculate_losses_epoch(self) -> None:
         if self.regression:
             self.mse_loss = self.metric_mse.compute()
@@ -160,7 +152,7 @@ class Base_Lightning(L.LightningModule):
             self.f1_leg1 = self.metric_f1_leg1.compute()
             self.f1_leg2 = self.metric_f1_leg2.compute()
             self.f1_leg3 = self.metric_f1_leg3.compute()
-    
+
     def reset_all_metrics(self) -> None:
         self.metric_mse.reset()
         self.metric_rmse.reset()
@@ -181,11 +173,11 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     # ======================= Validation =======================
     def on_validation_epoch_start(self):
         self.reset_all_metrics()
-    
+
     def validation_step(self, batch, batch_idx):
         y, y_pred = self.step_helper_function(batch)
         self.calculate_losses_step(y, y_pred)
@@ -193,7 +185,7 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     def on_validation_epoch_end(self):
         self.calculate_losses_epoch()
         self.log_losses("val", on_step=False)
@@ -209,15 +201,29 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     def on_test_epoch_end(self):
         self.calculate_losses_epoch()
         self.log_losses("test", on_step=False)
 
     # ======================= Prediction =======================
     def predict_step(self, batch, batch_idx):
+        """
+        Returns the predicted values from the model given a specific batch.
+
+        Returns:
+            y (torch.Tensor) - Ground Truth labels per foot (contact labels 
+                for classifiction, GRF labels for regression)
+            y_pred (torch.Tensor) - Predicted outputs per foot (GRF labels 
+                for regression, probability of stable contact for classification)
+        """
         y, y_pred = self.step_helper_function(batch)
-        return y, y_pred
+        if self.regression:
+            return y, y_pred
+        else:
+            y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
+                    self.classification_calculate_useful_values(y_pred, y_pred.shape[0])
+            return y, y_pred_per_foot_prob_only_1
 
     # ======================= Optimizer =======================
     def configure_optimizers(self):
@@ -236,30 +242,55 @@ class Base_Lightning(L.LightningModule):
         to get loss and model output.
 
         Returns:
-            y: The ground truth labels with the shape (batch_size, 4)
-            y_pred: The predicted model output with the shape (batch_size, 4).
-                    If self.regression, these are just GRF values. If not 
-                    self.regression, then these are the probabilities of contact
-                    for each foot (where 1 is 100% probability of contact).
+            y: The ground truth labels with the shape (batch_size, 4).
+            y_pred: The predicted model output. If self.regression, these are 
+                just GRF values with the shape (batch_size, 4). If not 
+                self.regression, then these are contact probabilty logits,
+                two per foot, with shape (batch_size, 4). Foot order matches
+                order of URDF file, and logit assumes first value is logit of
+                no contact, and second value is logit of contact.
 
         """
         raise NotImplementedError
-    
-    def classification_conversion_16_class(self, y_pred: torch.Tensor, y: torch.Tensor):
+
+    def classification_calculate_useful_values(self, y_pred, batch_size):
+        """
+        Helper method that calculates useful values for us:
+
+        Returns:
+            y_pred_per_foot (torch.Tensor): Contains contact probability logits per foot, 
+                in the shape (batch_size * 4, 2). In dimension 1, first value represents
+                logit for no/unstable contact, and second value respresents logit for
+                stable contact.
+            y_pred_per_foot_prob (torch.Tensor): Same as above, but contains probablity 
+                values instead of logits.
+            y_pred_per_foot_prob_only_1 (torch.Tensor): Contains probabilities of stable
+                contact for each foot, in the shape (batch_size, 4). Note that there are no
+                probabilities of unstable contact.
+        """
+        y_pred_per_foot = torch.reshape(y_pred, (batch_size * 4, 2))
+        y_pred_per_foot_prob = torch.nn.functional.softmax(y_pred_per_foot, dim=1)
+        y_pred_per_foot_prob_only_1 = torch.reshape(y_pred_per_foot_prob[:,1], (batch_size, 4))
+
+        return y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1
+
+    def classification_conversion_16_class(self, y_pred_per_foot_prob_only_1: torch.Tensor, y: torch.Tensor):
         """
         Convert the y labels from individual foot contact classes into a single 
         class out of 16 options. In other words, convert y from (batch_size, 4) to
         (batch_size, 1).
 
-        Also, convert the y_pred from individual foot contact probabilities
-        into a 16 class probability which comprises the four states. In other words,
-        convert y_pred from (batch_size, 4) to (batch_size, 16).
+        Also, convert the y_pred_per_foot_prob_only_1 from individual foot contact 
+        probabilities into a 16 class probability which comprises the four states. 
+        In other words, convert y_pred from (batch_size, 4) to (batch_size, 16).
 
         Parameters:
-            y_pred (torch.Tensor) - A Tensor of shape (batch_size, 4)
-            y      (torch.Tensor) - A Tensor of shape (batch_size, 4)
+            y_pred_per_foot_prob_only_1(torch.Tensor): A Tensor of shape 
+                (batch_size, 4), containing the probability values of stable contact 
+                for each individual foot.
+            y (torch.Tensor): A Tensor of shape (batch_size, 4).
         """
-        
+
         # Convert y labels from four sets of 2 classes to one set of 16 classes
         y_np = y.cpu().numpy()
         y_new = np.zeros((y.shape[0], 1))
@@ -268,6 +299,7 @@ class Base_Lightning(L.LightningModule):
         y_new = torch.tensor(y_new, dtype=int)
 
         # Convert y_pred from two class predictions per foot to a single 16 class prediction
+        y_pred = y_pred_per_foot_prob_only_1
         y_pred_new = torch.zeros((y_pred.shape[0], 16))
         for j in range(0, 16):
             if (np.floor(j / 8.0) % 2): foot_0_prob = y_pred[:,0]
@@ -289,8 +321,8 @@ class Base_Lightning(L.LightningModule):
 
 class MLP_Lightning(Base_Lightning):
 
-    def __init__(self, in_channels: int, hidden_channels: int, 
-                 out_channels: int, num_layers: int, 
+    def __init__(self, in_channels: int, hidden_channels: int,
+                 out_channels: int, num_layers: int,
                  batch_size: int, optimizer: str = "adam", lr: float = 0.003,
                  regression: bool = True, activation_fn = nn.ReLU()):
         """
@@ -298,11 +330,17 @@ class MLP_Lightning(Base_Lightning):
         wrapper around the Pytorch Torchvision MLP class.
 
         Parameters:
-            in_channels (int) - Number of input parameters to the model.
-            hidden_channels (int) - The hidden size.
-            out_channels (int) - The number of outputs from the MLP.
-            num_layers (int) - The number of layers in the model.
-            batch_size (int) - The size of the batches from the dataloaders.
+            in_channels (int): Number of input parameters to the MLP.
+            hidden_channels (int): The hidden size.
+            out_channels (int): The number of outputs from the MLP.
+            num_layers (int): The number of layers in the model.
+            batch_size (int): The size of the batches from the dataloaders.
+            optimizer (str): String name of the optimizer that should
+                be used.
+            lr (float): The learning rate used by the model.
+            regression (bool): True if the problem is regression, false if 
+                classification. Mainly for tracking model usage using W&B.
+            activation_fn (class): The activation function used between the layers.
         """
 
         super().__init__(optimizer, lr, regression)
@@ -317,8 +355,6 @@ class MLP_Lightning(Base_Lightning):
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
-            if not self.regression:
-                modules.append(nn.Sigmoid())
         else:
             modules.append(nn.Linear(in_channels, hidden_channels))
             modules.append(activation_fn)
@@ -326,8 +362,6 @@ class MLP_Lightning(Base_Lightning):
                 modules.append(nn.Linear(hidden_channels, hidden_channels))
                 modules.append(activation_fn)
             modules.append(nn.Linear(hidden_channels, out_channels))
-            if not self.regression:
-                modules.append(nn.Sigmoid())
 
         self.mlp_model = nn.Sequential(*modules)
         self.save_hyperparameters()
@@ -339,25 +373,23 @@ class MLP_Lightning(Base_Lightning):
 
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
-    def __init__(self, hidden_channels: int, edge_dim: int, 
-                 num_layers: int, data_metadata, dummy_batch, 
-                 optimizer: str = "adam", lr: float = 0.003,
+    def __init__(self, hidden_channels: int, num_layers: int, data_metadata,
+                 dummy_batch, optimizer: str = "adam", lr: float = 0.003,
                  regression: bool = True, activation_fn = nn.ReLU()):
         """
         Constructor for Heterogeneous GNN.
 
         Parameters:
-            hidden_channels (int) - The hidden size.
-            edge_dim (int) - Edge feature dimensionality
-            num_layers (int) - The number of layers in the model.
-            data_metadata (tuple) - See https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html?highlight=to_hetero#torch_geometric.nn.to_hetero_transformer.to_hetero for details.
-            dummy_batch - Used to initialize the lazy modules.
+            dummy_batch: Used to initialize the lazy modules.
+            optimizer (str): String name of the optimizer that should
+                be used.
+            lr (float): The learning rate used by the model.
+
+            See hgnn.py for information on remaining parameters.
         """
         super().__init__(optimizer, lr, regression)
         self.model = GRF_HGNN(hidden_channels=hidden_channels,
-                              edge_dim=edge_dim,
                               num_layers=num_layers,
-                              out_channels=1,
                               data_metadata=data_metadata,
                               regression=regression,
                               activation_fn=activation_fn)
@@ -375,7 +407,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                              edge_index_dict=batch.edge_index_dict)
 
         # Get the outputs from the foot nodes
-        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
+        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, self.model.out_channels_per_foot * 4))
 
         # Get the labels
         y = torch.reshape(batch.y, (batch.batch_size, 4))
@@ -424,14 +456,14 @@ class Full_Dyamics_Model_Lightning(Base_Lightning):
         return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis: int = 1000):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entries_to_eval: int = 1000):
     """
     Runs the provided model on the corresponding dataset,
-    and returns the predicted GRF values and the ground truth values.
+    and returns the predicted values and the ground truth values.
 
     Returns:
-        pred - Predicted GRF values
-        labels - Ground Truth GRF values
+        pred - Predicted values
+        labels - Ground Truth values
     """
 
     # Set the dtype to be 64 by default
@@ -445,7 +477,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
         model_type = predict_dataset.dataset.get_data_format()
 
     # Initialize the model
-    model = None
+    model: Base_Lightning = None
     if model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
@@ -459,7 +491,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
     # Predict with the model
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
-    if model_type != 'heterogeneous_gnn':
+    if model_type == 'mlp':
         trainer = L.Trainer()
         predictions_result = trainer.predict(model, valLoader)
         for batch_result in predictions_result:
@@ -471,37 +503,42 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_to_vis
         model.model = model.model.to(device)
         with torch.no_grad():
             for batch in valLoader:
-                out_raw = model.model(x_dict=batch.x_dict,
-                                      edge_index_dict=batch.edge_index_dict)
+                labels_batch, y_pred = model.step_helper_function(batch)
 
-                # Get the outputs from the foot nodes
-                pred_batch = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
-
-                # Get the labels
-                labels_batch = torch.reshape(batch.y, (batch.batch_size, 4))
+                # If classification, convert probability logits to stable contact probabilities
+                if not model.model.regression:
+                    y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
+                        model.classification_calculate_useful_values(y_pred, y_pred.shape[0])
+                    pred_batch = y_pred_per_foot_prob_only_1
+                else:
+                    pred_batch = y_pred
 
                 # Append to the previously collected data
                 pred = torch.cat((pred, pred_batch), dim=0)
                 labels = torch.cat((labels, labels_batch), dim=0)
-
-                if pred.shape[0] >= num_to_vis:
+                if pred.shape[0] >= num_entries_to_eval:
                     break
 
-    return pred[0:num_to_vis], labels[0:num_to_vis]
+    return pred[0:num_entries_to_eval], labels[0:num_entries_to_eval]
 
-def train_model(train_dataset: Subset,
-                val_dataset: Subset,
-                test_dataset: Subset,
-                testing_mode: bool = False,
-                disable_logger: bool = False,
-                logger_project_name: str = None,
-                batch_size: int = 100,
-                num_layers: int = 8,
-                optimizer: str = "adam", 
-                lr: float = 0.003,
-                epochs: int = 100,
-                hidden_size: int = 10,
-                regression: bool = True):
+
+def train_model(
+        train_dataset: Subset,
+        val_dataset: Subset,
+        test_dataset: Subset,
+        normalize: bool,  # Note, this is just so that we can log if the datasets were normalized.
+        testing_mode: bool = False,
+        disable_logger: bool = False,
+        logger_project_name: str = None,
+        batch_size: int = 100,
+        num_layers: int = 8,
+        optimizer: str = "adam",
+        lr: float = 0.003,
+        epochs: int = 100,
+        hidden_size: int = 10,
+        regression: bool = True,
+        seed: int = 0,
+        devices: int = 1):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -516,8 +553,10 @@ def train_model(train_dataset: Subset,
     # is all the same type.
     train_data_format, val_data_format, test_data_format = None, None, None
     if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-        train_data_format = train_dataset.dataset.datasets[0].dataset.get_data_format()
-        val_data_format = val_dataset.dataset.datasets[0].dataset.get_data_format()
+        train_data_format = train_dataset.dataset.datasets[
+            0].dataset.get_data_format()
+        val_data_format = val_dataset.dataset.datasets[
+            0].dataset.get_data_format()
         test_data_format = test_dataset.dataset.datasets[0].get_data_format()
     elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
         train_data_format = train_dataset.dataset.get_data_format()
@@ -533,7 +572,8 @@ def train_model(train_dataset: Subset,
     data_metadata = None
     if model_type == 'heterogeneous_gnn':
         if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-            data_metadata = train_dataset.dataset.datasets[0].dataset.get_data_metadata()
+            data_metadata = train_dataset.dataset.datasets[
+                0].dataset.get_data_metadata()
         elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
             data_metadata = train_dataset.dataset.get_data_metadata()
 
@@ -541,12 +581,14 @@ def train_model(train_dataset: Subset,
     limit_train_batches = None
     limit_val_batches = None
     limit_test_batches = None
-    deterministic = False
+    num_workers = 30
+    persistent_workers = True
     if testing_mode:
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
-        deterministic = True
+        num_workers = 1
+        persistent_workers = False
 
     # Set the dtype to be 64 by default
     torch.set_default_dtype(torch.float64)
@@ -555,17 +597,20 @@ def train_model(train_dataset: Subset,
     trainLoader: DataLoader = DataLoader(train_dataset,
                                          batch_size=batch_size,
                                          shuffle=True,
-                                         num_workers=30,
-                                         persistent_workers=True)
+                                         num_workers=num_workers,
+                                         persistent_workers=persistent_workers)
     valLoader: DataLoader = DataLoader(val_dataset,
                                        batch_size=batch_size,
                                        shuffle=False,
-                                       num_workers=30,
-                                       persistent_workers=True)
+                                       num_workers=num_workers,
+                                       persistent_workers=persistent_workers)
     testLoader: DataLoader = DataLoader(test_dataset,
                                         batch_size=batch_size,
                                         shuffle=False,
-                                        num_workers=30)
+                                        num_workers=num_workers)
+    
+    # Set a random seed (need to be before we get dummy_batch)
+    seed_everything(seed, workers=True)
 
     # Get a dummy_batch
     dummy_batch = None
@@ -575,22 +620,38 @@ def train_model(train_dataset: Subset,
 
     # Create the model
     lightning_model = None
+    model_parameters = None
     if model_type == 'mlp':
-        lightning_model = MLP_Lightning(train_dataset[0][0].shape[0],
-                                        hidden_size, 4, num_layers,
-                                        batch_size, optimizer, lr, 
-                                        regression)
+
+        # Determine the number of output channels
+        out_channels = None
+        if regression:
+            out_channels = 4
+        else:
+            out_channels = 8
+
+        # Create the model
+        lightning_model = MLP_Lightning(
+            in_channels=train_dataset[0][0].shape[0],
+            hidden_channels=hidden_size,
+            out_channels=out_channels,
+            num_layers=num_layers,
+            batch_size=batch_size,
+            optimizer=optimizer,
+            lr=lr,
+            regression=regression)
+        model_parameters = count_parameters(lightning_model.mlp_model)
+
     elif model_type == 'heterogeneous_gnn':
         lightning_model = Heterogeneous_GNN_Lightning(
             hidden_channels=hidden_size,
-            edge_dim=dummy_batch['base', 'connect',
-                                 'joint'].edge_attr.size()[1],
             num_layers=num_layers,
             data_metadata=data_metadata,
             dummy_batch=dummy_batch,
             optimizer=optimizer,
-            lr=lr, 
+            lr=lr,
             regression=regression)
+        model_parameters = count_parameters(lightning_model.model)
     else:
         raise ValueError("Invalid model type.")
 
@@ -599,13 +660,18 @@ def train_model(train_dataset: Subset,
     path_to_save = None
     if not disable_logger:
         if logger_project_name is None:
-            raise ValueError("Need to define \"logger_project_name\" if logger is enabled.")
+            raise ValueError(
+                "Need to define \"logger_project_name\" if logger is enabled.")
         wandb_logger = WandbLogger(project=logger_project_name)
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
+        wandb_logger.experiment.config["normalize"] = normalize
+        wandb_logger.experiment.config["num_parameters"] = model_parameters
+        wandb_logger.experiment.config["seed"] = seed
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
-        path_to_save = str(Path("models", model_type + "_" + names.get_full_name()))
+        path_to_save = str(
+            Path("models", model_type + "_" + names.get_full_name()))
 
     # Set up precise checkpointing
     monitor = None
@@ -613,29 +679,27 @@ def train_model(train_dataset: Subset,
         monitor = "val_MSE_loss"
     else:
         monitor = "val_CE_loss"
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=path_to_save,
-        filename='{epoch}-{' + monitor + ':.5f}',
-        save_top_k=5,
-        mode='min',
-        monitor=monitor)
-    last_model_callback = ModelCheckpoint(
-        dirpath=path_to_save,
-        filename='{epoch}-{' + monitor + ':.5f}',
-        save_top_k=1,
-        mode='max',
-        monitor="epoch")
+    checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
+                                          filename='{epoch}-{' + monitor +
+                                          ':.5f}',
+                                          save_top_k=5,
+                                          mode='min',
+                                          monitor=monitor)
+    last_model_callback = ModelCheckpoint(dirpath=path_to_save,
+                                          filename='{epoch}-{' + monitor +
+                                          ':.5f}',
+                                          save_top_k=1,
+                                          mode='max',
+                                          monitor="epoch")
 
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
 
     # Train the model and test
-    # seed_everything(rand_seed, workers=True)
     trainer = L.Trainer(
         default_root_dir=path_to_save,
-        deterministic=deterministic,  # Reproducability
-        benchmark=True,
-        devices='auto',
+        deterministic=True,  # Reproducability
+        devices=devices,
         accelerator="auto",
         # profiler="simple",
         max_epochs=epochs,

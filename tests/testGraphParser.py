@@ -1,6 +1,6 @@
 from pathlib import Path
 import unittest
-from grfgnn import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
+from mi_hgnn import RobotGraph, NormalRobotGraph, HeterogeneousRobotGraph
 from pathlib import Path
 import copy
 import pandas as pd

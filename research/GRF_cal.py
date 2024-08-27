@@ -87,29 +87,22 @@ dataset_1 = QuadSDKDataset_A1Speed1_0(
 
 quad_data = dataset_1.load_data_sorted_with_timestamps(0)
 
-delta_T = quad_data[10]    # Time stamp
+delta_T = quad_data[10] * (10**(-3))   # Time stamp
 joint_timestamp = delta_T[0][1]
 imu_timestamp = delta_T[0][2]
-# print(joint_timestamp)
 
 lin_acc = quad_data[0]     # IMU linear acc
-# print(lin_acc[1:-1, :])
 ang_vel = quad_data[1]     # IMU angular vel
 j_p = quad_data[2]         # joint position 
-# print(j_p)
-j_v = quad_data[3]         # joint velocity 
-# print(j_v)               
+j_v = quad_data[3]         # joint velocity             
 j_T = quad_data[4]         # joint torque   
 f_p = quad_data[5]         # Foot position
 f_v = quad_data[6]         # Foot velocity
 # labels = quad_data[7]    # Dataset labels (Groud Truth GRF)
 r_p = quad_data[8]         # Robot position (x, y, z)
-# print(r_p)
 r_o = quad_data[9]         # Robot orientation (x, y, z, w) quaternion
-# print(r_o)
 q = np.hstack((np.hstack((r_p, r_o)), j_p))     # state:[x, y, z, quaternions, 4*(Hip_joint, Thigh_joint, Calf_joint)position]
 q = q[1:-1, :]
-# print(len(q))
 
 ## Data Preprocessing and arrangement
 lin_vel, ang_acc, j_acc = [[0,0,0]], [[0,0,0]], [[0,0,0,0,0,0,0,0,0,0,0,0]]
@@ -128,20 +121,27 @@ for i in range (1, len(r_p)-1):
 vel = np.hstack(( np.hstack((lin_vel[1:, :], ang_vel[1:-1, :])), j_v[1:-1, :]))           # velocity term
 acc = np.hstack(( np.hstack((lin_acc[1:-1, :], ang_acc[1:, :])), j_acc[1:, :]))           # acceleration term
 tau = np.hstack((np.zeros([len(vel), 6]), j_T[1:-1, :]))                                  # torque term
-# print(len(tau[0]))
+
+real_vel = np.zeros([len(vel), 18])
+real_acc = np.zeros([len(acc), 18])
+f_c = 2.0
+alpha = 1/(2*np.pi*f_c)
+for i in range (1,len(vel)):
+    real_vel[i,:] = alpha * vel[i,:] + (1-alpha) * real_vel[i-1,:]
+    real_acc[i,:] = alpha * acc[i,:] + (1-alpha) * real_acc[i-1,:]
 
 FL_GRF_cal = np.zeros([len(vel), 3])  # GRF of FL_FOOT (Local Frame)
 FR_GRF_cal = np.zeros([len(vel), 3])  # GRF of FR_FOOT (Local Frame)
 HL_GRF_cal = np.zeros([len(vel), 3])  # GRF of HL_FOOT (Local Frame)
 HR_GRF_cal = np.zeros([len(vel), 3])  # GRF of HR_FOOT (Local Frame)
 
-for i in range (len(vel)):
+for i in range (len(real_vel)):
     # Find Mass matrix and Drift
     # compute mass matrix M
     M = pin.crba(model, data, q[i,:])
 
     # compute dynamic drift -- Coriolis, centrifugal, gravity
-    drift = pin.rnea(model, data, q[i,:], vel[i,:], a0)
+    drift = pin.rnea(model, data, q[i,:], real_vel[i,:], a0)
 
     b_bl = drift[:6]
     b_j = drift[6:]
@@ -191,19 +191,6 @@ for i in range (len(vel)):
         l_sp__f = pin.Force(l__f, np.zeros(3))
         l_sp__bl = data.oMf[bl_id].actInv(data.oMf[foot_id].act(l_sp__f))
         ls__bl.append(np.copy(l_sp__bl.vector))
-
-    # print(l_sp__bl)
-
-    # print("\n--- CONTACT FORCES ---")
-    # for l__f, foot_id, name in zip(ls__bl, feet_ids, feet_names):
-    #     print("Contact force at foot {} expressed at the BL is: {}".format(name, l__f))
-
-    # # Notice that if we add all the contact forces are equal to the g_grav
-    # print(
-    #     "Error between contact forces and gravity at base link: {}".format(
-    #         np.linalg.norm(b_bl - sum(ls__bl))
-    #     )
-    # )
 
 desired_length = 1000
 history_length = 1

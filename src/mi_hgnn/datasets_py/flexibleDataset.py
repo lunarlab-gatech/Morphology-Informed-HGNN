@@ -259,7 +259,7 @@ class FlexibleDataset(Dataset):
         """
         return self.data_format
     
-    def get_data_metadata(self):
+    def get_data_metadata(self) -> tuple:
         """
         Returns the data metadata. Only for use with
         heterogeneous graph data.
@@ -296,6 +296,8 @@ class FlexibleDataset(Dataset):
 
         Next, labels are checked to make sure they aren't None. 
         Finally, normalize the data if self.normalize was set as True.
+        We calculate the standard deviation for this normalization 
+        using Bessel's correction (n-1 used instead of n).
 
         Parameters:
             seq_num (int): The sequence number of the txt file
@@ -344,7 +346,8 @@ class FlexibleDataset(Dataset):
             to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
             for i, array in enumerate(to_normalize_array):
                 if (array is not None) and (array.shape[0] > 1):
-                    norm_arrs[i] = np.nan_to_num((array-np.mean(array,axis=0))/np.std(array, axis=0), copy=False, nan=0.0)
+                    array_tensor = torch.from_numpy(array)
+                    norm_arrs[i] = np.nan_to_num((array_tensor-torch.mean(array_tensor,axis=0))/torch.std(array_tensor, axis=0, correction=1).numpy(), copy=False, nan=0.0)
 
             return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
         else:
