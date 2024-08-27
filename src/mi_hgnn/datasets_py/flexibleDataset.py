@@ -25,7 +25,7 @@ class FlexibleDataset(Dataset):
                  urdf_path: Path,
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
-                 data_format: str = 'gnn',
+                 data_format: str = 'heterogeneous_gnn',
                  history_length: int = 1,
                  normalize: bool = False,
                  transform=None,
@@ -44,7 +44,7 @@ class FlexibleDataset(Dataset):
                 urdf_to_desc_path (str): The relative path from the urdf file to
                     the urdf description directory. This directory typically contains
                     folders like "meshes" and "urdf".
-                data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
+                data_format (str): Either 'dynamics', 'mlp', or 'heterogeneous_gnn'. 
                     Determines how the get() method returns data.
                 history_length (int): The length of the history of inputs to use
                     for our graph entries.
@@ -56,9 +56,9 @@ class FlexibleDataset(Dataset):
         """
         # Check for valid data format
         self.data_format = data_format
-        if self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
+        if self.data_format != 'dynamics' and self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
             raise ValueError(
-                "Parameter 'data_format' must be 'mlp' or 'heterogeneous_gnn'."
+                "Parameter 'data_format' must be 'dynamics', 'mlp', or 'heterogeneous_gnn'."
             )
 
         # Setup the directories for raw and processed data, download it, 
@@ -76,7 +76,12 @@ class FlexibleDataset(Dataset):
             data = f.readline().split(" ")
             
             self.history_length = history_length
+            if self.history_length != 1 and self.data_format == 'dynamics':
+                raise ValueError("Data format of 'dynamics' only supports history length of 1.")
+
             self.length = int(data[0]) - self.history_length + 1
+            if self.data_format == 'dynamics':
+                self.length -= 2 # We can't use the first or last entry, due to the derivative.
             if self.length <= 0:
                 raise ValueError(
                     "Dataset has too few entries for the provided 'history_length'."
@@ -141,8 +146,6 @@ class FlexibleDataset(Dataset):
         self.variables_to_use_foot = self.find_variables_to_use([f_p, f_v])
 
         # Check we have necessary variables for some models
-        if len(self.variables_to_use_joint) == 0 and self.data_format == 'gnn':
-            raise ValueError("Dataset must provide at least one joint input for GNN models.")
         if len(self.variables_to_use_base) + len(self.variables_to_use_joint) + len(self.variables_to_use_foot) == 0:
             raise ValueError("Dataset must provide at least one input.")
 
@@ -214,16 +217,13 @@ class FlexibleDataset(Dataset):
         Make the list of all the processed 
         files we are expecting.
         """
-        return ["info.txt"]
+        return ["data.mat", "info.txt"]
 
     def process(self):
         """
         Called when we don't have all of the processed
         files we are expecting, so we process the data
         to generate those files.
-
-        Data must be saved into text files, in the order
-        returned by load_data_at_dataset_seq().
         """
         raise self.notImplementedError
     
@@ -308,7 +308,7 @@ class FlexibleDataset(Dataset):
             values inside arrays have been sorted (and potentially
             normalized).
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
         unsorted_list = [j_p, j_v, j_T]
@@ -349,9 +349,9 @@ class FlexibleDataset(Dataset):
                     array_tensor = torch.from_numpy(array)
                     norm_arrs[i] = np.nan_to_num((array_tensor-torch.mean(array_tensor,axis=0))/torch.std(array_tensor, axis=0, correction=1).numpy(), copy=False, nan=0.0)
 
-            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
+            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8], timestamps
         else:
-            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
+            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o, timestamps
 
 
     def load_data_at_dataset_seq(self, seq_num: int):
@@ -378,6 +378,13 @@ class FlexibleDataset(Dataset):
                 Only the latest entry in the time window is used as the labels.
             r_p (np.array) - Robot position (GT), in the order (x, y, z), of shape [history_length, 3]
             r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w), of shape [history_length, 4]
+            timestamps (np.array) - Array containing the timestamps of the data. The rows
+                correspond to the history length and the columns correspond to the specific
+                timestamp per data. Column 0 contains the grf_timestamp (for the GRF labels),
+                Column 1 contains the joint_timestamp (for the joint data, and additionally
+                the robot pose information), and Column 2 contains the imu_timestamp (for the
+                linear acceleration and angular velocity of the IMU). This value is in the 
+                shape of (history_length, 3).
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
@@ -395,11 +402,25 @@ class FlexibleDataset(Dataset):
             raise IndexError("Index value out of Dataset bounds.")
 
         # Return data in the proper format
+        if self.data_format == 'dynamics':
+            return self.get_helper_dynamics(idx)
         if self.data_format == 'mlp':
             return self.get_helper_mlp(idx)
         elif self.data_format == 'heterogeneous_gnn':
             return self.get_helper_heterogeneous_gnn(idx)
         
+    def get_helper_dynamics(self, idx: int):
+        """
+        Gets a dataset entry for the dynamics model. Shifts the idx internally
+        by 1 so that we can calculate the derivative of certain variables.
+        """
+        _, _, _, _, _, _, _, _, _, _, timestamps_prev = self.load_data_sorted(idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx + 1)
+        _, _, _, _, _, _, _, _, _, _, timestamps_next = self.load_data_sorted(idx + 2)
+
+        joint_ts = timestamps[:,1]
+        imu_ts = timestamps[:,2]
+
     def get_helper_mlp(self, idx: int):
         """
         Gets a Dataset entry if we are using an MLP model.

@@ -89,7 +89,7 @@ ncontact = len(feet_names)
 
 ## Get data
 ## Define model type
-history_length = 1000
+history_length = 1
 model_type = 'heterogeneous_gnn'
 path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
 path_to_quad_sdk_1 = Path(
@@ -101,7 +101,7 @@ dataset_1 = QuadSDKDataset_A1Speed1_0(
 quad_data = dataset_1.load_data_sorted_with_timestamps(0)
 
 delta_T = quad_data[10] * (10**(0))   # Time stamp (unit: s)
-joint_timestamp = delta_T[:,0]
+joint_timestamp = delta_T[:,1]
 imu_timestamp = delta_T[:,2] 
 
 lin_acc = quad_data[0]     # IMU linear acc
@@ -121,7 +121,10 @@ f_v = quad_data[6]         # Foot velocity
 r_p = quad_data[8]         # Robot position (x, y, z)
 r_o = quad_data[9]         # Robot orientation (x, y, z, w) quaternion
 q = np.hstack((np.hstack((r_p, r_o)), j_p))     # state:[x, y, z, quaternions, 4*(Hip_joint, Thigh_joint, Calf_joint) position]
+print(q.shape)
 q = q[1:-1, :]
+print(q.shape)
+print(q)
 # print(len(q))
 
 # pin.framesForwardKinematics(model, data, q)
@@ -204,6 +207,7 @@ HR_torque = np.zeros([len(vel), 3])  # Torque of HR_FOOT
 RR_pos = np.zeros([len(vel), 3])
 
 for i in range (len(real_vel)):
+    print(q)
     # Find Mass matrix and Drift
     # compute mass matrix M
     M = pin.crba(model, data, q[i,:])
@@ -244,7 +248,7 @@ for i in range (len(real_vel)):
 
     pin.framesForwardKinematics(model, data, q[i,:])
     RR_pos[i] = data.oMf[17].translation
-    print(data.oMf[17])
+    #print(data.oMf[17])
     # print(dir(RR_pos))
     # print("Foot Position: {}".format(data.oMf[17]))
 

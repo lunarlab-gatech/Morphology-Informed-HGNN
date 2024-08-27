@@ -413,7 +413,7 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         y = torch.reshape(batch.y, (batch.batch_size, 4))
         return y, y_pred
     
-class Full_Dyamics_Model_Lightning(Base_Lightning):
+class Full_Dynamics_Model_Lightning(Base_Lightning):
 
     def __init__(self, urdf_model_path: Path, urdf_dir: Path):
         """
@@ -443,7 +443,22 @@ class Full_Dyamics_Model_Lightning(Base_Lightning):
         )
         self.data = self.model.createData()
 
+        # Setup feet frames
+        self.feet_names = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+        self.feet_ids = [self.model.getFrameId(n) for n in self.feet_names]
+
+        # Setup base frame
+        self.bl_id = self.model.getFrameId("base")
+
+        # Get number of contact points
+        self.ncontact = len(self.feet_names)
+
     def step_helper_function(self, batch):
+
+        # Get the data from the batch. Note: pinnochio model follows order of URDF, 
+        # so values are already sorted properly.
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = batch
+
         # Get the raw foot output
         out_raw = self.model(x_dict=batch.x_dict,
                              edge_index_dict=batch.edge_index_dict)
