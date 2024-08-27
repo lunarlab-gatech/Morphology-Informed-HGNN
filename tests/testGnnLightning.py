@@ -2,10 +2,10 @@ import unittest
 from pathlib import Path
 
 import torchmetrics.classification
-from grfgnn import QuadSDKDataset_A1Speed1_0
-from grfgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
-from grfgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
-from grfgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
+from mi_hgnn import QuadSDKDataset_A1Speed1_0
+from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
+from mi_hgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
+from mi_hgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
 import torch
 from torch.utils.data import random_split
 import numpy as np
@@ -72,55 +72,72 @@ class TestGnnLightning(unittest.TestCase):
         """
 
         # For each regression model
-        for model in self.models:
+        for i, model in enumerate(self.models):
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
                                               normalize=False,
                                               testing_mode=True, disable_logger=True,
-                                              epochs=2)
+                                              epochs=2, seed=1919)
 
             # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
             self.assertEqual(len(models), 3)
 
-            # Predict with the model 
-            pred, labels = evaluate_model(models[0], test_dataset, 485)
+            try:
+                # Predict with the model 
+                pred, labels = evaluate_model(models[0], test_dataset, 485)
 
-            # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], 485)
-            self.assertEqual(pred.shape[1], 4)
-            self.assertEqual(labels.shape[0], 485)
-            self.assertEqual(labels.shape[1], 4)
+                # Assert the sizes of the results match
+                self.assertEqual(pred.shape[0], 485)
+                self.assertEqual(pred.shape[1], 4)
+                self.assertEqual(labels.shape[0], 485)
+                self.assertEqual(labels.shape[1], 4)
 
-            # Try and visualize with the model
-            visualize_model_outputs_regression(pred, labels)
+                # Try and visualize with the model
+                visualize_model_outputs_regression(pred, labels)
+
+            except Exception as e:
+                for path in models:
+                    Path.unlink(path, missing_ok=False)
+                raise e
+            
+            for path in models:
+                Path.unlink(path, missing_ok=False)
 
         # For each classification model
-        for model in self.class_models:
+        for i, model in enumerate(self.class_models):
             # Test for classification
             train_dataset, val_dataset, test_dataset = random_split(
                 model, [0.7, 0.2, 0.1], generator=self.rand_gen)
             path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
                                               normalize=False,
                                                 testing_mode=True, disable_logger=True, 
-                                                regression=False, epochs=2)
+                                                regression=False, epochs=2, seed=1919)
 
             # Make sure three models were saved (2 for top, 1 for last)
             models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
             self.assertEqual(len(models), 3)
 
-            # Predict with the model
-            pred, labels = evaluate_model(models[0], test_dataset, 234)
+            try:
+                # Predict with the model
+                pred, labels = evaluate_model(models[0], test_dataset, 234)
 
-            # Assert the sizes of the results match
-            self.assertEqual(pred.shape[0], 234)
-            self.assertEqual(pred.shape[1], 4)
-            self.assertEqual(labels.shape[0], 234)
-            self.assertEqual(labels.shape[1], 4)
+                # Assert the sizes of the results match
+                self.assertEqual(pred.shape[0], 234)
+                self.assertEqual(pred.shape[1], 4)
+                self.assertEqual(labels.shape[0], 234)
+                self.assertEqual(labels.shape[1], 4)
+                
+                # Try to visualize the results
+                visualize_model_outputs_classification(pred, labels)
+            except Exception as e:
+                for path in models:
+                    Path.unlink(path, missing_ok=False)
+                raise e
             
-            # Try to visualize the results
-            visualize_model_outputs_classification(pred, labels)
+            for path in models:
+                Path.unlink(path, missing_ok=False)
 
     def test_MIHGNN_model_output_assumption(self):
         """

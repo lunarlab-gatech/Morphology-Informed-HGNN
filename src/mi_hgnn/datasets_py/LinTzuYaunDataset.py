@@ -39,23 +39,23 @@ class LinTzuYaunDataset(FlexibleDataset):
         return {
             'floating_base': 0,
 
-            'FR_hip_joint': 0,
-            'FR_thigh_joint': 1,
-            'FR_calf_joint': 2,
+            'RL_hip_joint': 9,
+            'RL_thigh_joint': 10,
+            'RL_calf_joint': 11,
             'FL_hip_joint': 3,
             'FL_thigh_joint': 4,
             'FL_calf_joint': 5,
             'RR_hip_joint': 6,
             'RR_thigh_joint': 7,
             'RR_calf_joint': 8,
-            'RL_hip_joint': 9,
-            'RL_thigh_joint': 10,
-            'RL_calf_joint': 11,
+            'FR_hip_joint': 0,
+            'FR_thigh_joint': 1,
+            'FR_calf_joint': 2,
 
-            'FR_foot_fixed': 0,
+            'RL_foot_fixed': 3,
             'FL_foot_fixed': 1,
             'RR_foot_fixed': 2,
-            'RL_foot_fixed': 3}
+            'FR_foot_fixed': 0}
 
     # ===================== DATASET PROPERTIES =======================
     def get_expected_urdf_name(self):

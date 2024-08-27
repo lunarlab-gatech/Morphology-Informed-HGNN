@@ -1,6 +1,7 @@
 import torch
 from torch import optim, nn
 import lightning as L
+from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -67,7 +68,7 @@ class Base_Lightning(L.LightningModule):
 
         # Log the losses
         if self.regression:
-            self.log(step_name + "_MSE_loss", 
+            self.log(step_name + "_MSE_loss",
                     self.mse_loss,
                     on_step=on_step,
                     on_epoch=on_epoch)
@@ -80,35 +81,35 @@ class Base_Lightning(L.LightningModule):
                     on_step=on_step,
                     on_epoch=on_epoch)
         else:
-            self.log(step_name + "_CE_loss", 
+            self.log(step_name + "_CE_loss",
                     self.ce_loss,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_Accuracy", 
+            self.log(step_name + "_Accuracy",
                     self.acc,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_Avg", 
+            self.log(step_name + "_F1_Score_Leg_Avg",
                     (self.f1_leg0 + self.f1_leg1 + self.f1_leg2 + self.f1_leg3) / 4.0,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_0", 
+            self.log(step_name + "_F1_Score_Leg_0",
                     self.f1_leg0,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_1", 
+            self.log(step_name + "_F1_Score_Leg_1",
                     self.f1_leg1,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_2", 
+            self.log(step_name + "_F1_Score_Leg_2",
                     self.f1_leg2,
                     on_step=on_step,
                     on_epoch=on_epoch)
-            self.log(step_name + "_F1_Score_Leg_3", 
+            self.log(step_name + "_F1_Score_Leg_3",
                     self.f1_leg3,
                     on_step=on_step,
                     on_epoch=on_epoch)
-    
+
     # ======================= Loss Calculation =======================
     def calculate_losses_step(self, y: torch.Tensor, y_pred: torch.Tensor):
         if self.regression:
@@ -137,7 +138,7 @@ class Base_Lightning(L.LightningModule):
             self.f1_leg1 = self.metric_f1_leg1(y_pred_2[:,1], y[:,1])
             self.f1_leg2 = self.metric_f1_leg2(y_pred_2[:,2], y[:,2])
             self.f1_leg3 = self.metric_f1_leg3(y_pred_2[:,3], y[:,3])
-    
+
     def calculate_losses_epoch(self) -> None:
         if self.regression:
             self.mse_loss = self.metric_mse.compute()
@@ -150,7 +151,7 @@ class Base_Lightning(L.LightningModule):
             self.f1_leg1 = self.metric_f1_leg1.compute()
             self.f1_leg2 = self.metric_f1_leg2.compute()
             self.f1_leg3 = self.metric_f1_leg3.compute()
-    
+
     def reset_all_metrics(self) -> None:
         self.metric_mse.reset()
         self.metric_rmse.reset()
@@ -171,11 +172,11 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     # ======================= Validation =======================
     def on_validation_epoch_start(self):
         self.reset_all_metrics()
-    
+
     def validation_step(self, batch, batch_idx):
         y, y_pred = self.step_helper_function(batch)
         self.calculate_losses_step(y, y_pred)
@@ -183,7 +184,7 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     def on_validation_epoch_end(self):
         self.calculate_losses_epoch()
         self.log_losses("val", on_step=False)
@@ -199,7 +200,7 @@ class Base_Lightning(L.LightningModule):
             return self.mse_loss
         else:
             return self.ce_loss
-    
+
     def on_test_epoch_end(self):
         self.calculate_losses_epoch()
         self.log_losses("test", on_step=False)
@@ -250,7 +251,7 @@ class Base_Lightning(L.LightningModule):
 
         """
         raise NotImplementedError
-    
+
     def classification_calculate_useful_values(self, y_pred, batch_size):
         """
         Helper method that calculates useful values for us:
@@ -271,7 +272,7 @@ class Base_Lightning(L.LightningModule):
         y_pred_per_foot_prob_only_1 = torch.reshape(y_pred_per_foot_prob[:,1], (batch_size, 4))
 
         return y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1
-    
+
     def classification_conversion_16_class(self, y_pred_per_foot_prob_only_1: torch.Tensor, y: torch.Tensor):
         """
         Convert the y labels from individual foot contact classes into a single 
@@ -288,7 +289,7 @@ class Base_Lightning(L.LightningModule):
                 for each individual foot.
             y (torch.Tensor): A Tensor of shape (batch_size, 4).
         """
-        
+
         # Convert y labels from four sets of 2 classes to one set of 16 classes
         y_np = y.cpu().numpy()
         y_new = np.zeros((y.shape[0], 1))
@@ -319,8 +320,8 @@ class Base_Lightning(L.LightningModule):
 
 class MLP_Lightning(Base_Lightning):
 
-    def __init__(self, in_channels: int, hidden_channels: int, 
-                 out_channels: int, num_layers: int, 
+    def __init__(self, in_channels: int, hidden_channels: int,
+                 out_channels: int, num_layers: int,
                  batch_size: int, optimizer: str = "adam", lr: float = 0.003,
                  regression: bool = True, activation_fn = nn.ReLU()):
         """
@@ -371,7 +372,7 @@ class MLP_Lightning(Base_Lightning):
 
 class Heterogeneous_GNN_Lightning(Base_Lightning):
 
-    def __init__(self, hidden_channels: int, num_layers: int, data_metadata, 
+    def __init__(self, hidden_channels: int, num_layers: int, data_metadata,
                  dummy_batch, optimizer: str = "adam", lr: float = 0.003,
                  regression: bool = True, activation_fn = nn.ReLU()):
         """
@@ -477,20 +478,24 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
 
     return pred[0:num_entries_to_eval], labels[0:num_entries_to_eval]
 
-def train_model(train_dataset: Subset,
-                val_dataset: Subset,
-                test_dataset: Subset,
-                normalize: bool, # Note, this is just so that we can log if the datasets were normalized.
-                testing_mode: bool = False,
-                disable_logger: bool = False,
-                logger_project_name: str = None,
-                batch_size: int = 100,
-                num_layers: int = 8,
-                optimizer: str = "adam", 
-                lr: float = 0.003,
-                epochs: int = 100,
-                hidden_size: int = 10,
-                regression: bool = True):
+
+def train_model(
+        train_dataset: Subset,
+        val_dataset: Subset,
+        test_dataset: Subset,
+        normalize: bool,  # Note, this is just so that we can log if the datasets were normalized.
+        testing_mode: bool = False,
+        disable_logger: bool = False,
+        logger_project_name: str = None,
+        batch_size: int = 100,
+        num_layers: int = 8,
+        optimizer: str = "adam",
+        lr: float = 0.003,
+        epochs: int = 100,
+        hidden_size: int = 10,
+        regression: bool = True,
+        seed: int = 0,
+        devices: int = 1):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -505,8 +510,10 @@ def train_model(train_dataset: Subset,
     # is all the same type.
     train_data_format, val_data_format, test_data_format = None, None, None
     if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-        train_data_format = train_dataset.dataset.datasets[0].dataset.get_data_format()
-        val_data_format = val_dataset.dataset.datasets[0].dataset.get_data_format()
+        train_data_format = train_dataset.dataset.datasets[
+            0].dataset.get_data_format()
+        val_data_format = val_dataset.dataset.datasets[
+            0].dataset.get_data_format()
         test_data_format = test_dataset.dataset.datasets[0].get_data_format()
     elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
         train_data_format = train_dataset.dataset.get_data_format()
@@ -522,7 +529,8 @@ def train_model(train_dataset: Subset,
     data_metadata = None
     if model_type == 'heterogeneous_gnn':
         if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-            data_metadata = train_dataset.dataset.datasets[0].dataset.get_data_metadata()
+            data_metadata = train_dataset.dataset.datasets[
+                0].dataset.get_data_metadata()
         elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
             data_metadata = train_dataset.dataset.get_data_metadata()
 
@@ -530,14 +538,12 @@ def train_model(train_dataset: Subset,
     limit_train_batches = None
     limit_val_batches = None
     limit_test_batches = None
-    deterministic = False
     num_workers = 30
     persistent_workers = True
     if testing_mode:
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
-        deterministic = True
         num_workers = 1
         persistent_workers = False
 
@@ -559,6 +565,9 @@ def train_model(train_dataset: Subset,
                                         batch_size=batch_size,
                                         shuffle=False,
                                         num_workers=num_workers)
+    
+    # Set a random seed (need to be before we get dummy_batch)
+    seed_everything(seed, workers=True)
 
     # Get a dummy_batch
     dummy_batch = None
@@ -570,7 +579,7 @@ def train_model(train_dataset: Subset,
     lightning_model = None
     model_parameters = None
     if model_type == 'mlp':
-        
+
         # Determine the number of output channels
         out_channels = None
         if regression:
@@ -579,14 +588,15 @@ def train_model(train_dataset: Subset,
             out_channels = 8
 
         # Create the model
-        lightning_model = MLP_Lightning(in_channels=train_dataset[0][0].shape[0],
-                                        hidden_channels=hidden_size, 
-                                        out_channels=out_channels, 
-                                        num_layers=num_layers,
-                                        batch_size=batch_size, 
-                                        optimizer=optimizer, 
-                                        lr=lr, 
-                                        regression=regression)
+        lightning_model = MLP_Lightning(
+            in_channels=train_dataset[0][0].shape[0],
+            hidden_channels=hidden_size,
+            out_channels=out_channels,
+            num_layers=num_layers,
+            batch_size=batch_size,
+            optimizer=optimizer,
+            lr=lr,
+            regression=regression)
         model_parameters = count_parameters(lightning_model.mlp_model)
 
     elif model_type == 'heterogeneous_gnn':
@@ -596,7 +606,7 @@ def train_model(train_dataset: Subset,
             data_metadata=data_metadata,
             dummy_batch=dummy_batch,
             optimizer=optimizer,
-            lr=lr, 
+            lr=lr,
             regression=regression)
         model_parameters = count_parameters(lightning_model.model)
     else:
@@ -607,15 +617,18 @@ def train_model(train_dataset: Subset,
     path_to_save = None
     if not disable_logger:
         if logger_project_name is None:
-            raise ValueError("Need to define \"logger_project_name\" if logger is enabled.")
+            raise ValueError(
+                "Need to define \"logger_project_name\" if logger is enabled.")
         wandb_logger = WandbLogger(project=logger_project_name)
         wandb_logger.watch(lightning_model, log="all")
         wandb_logger.experiment.config["batch_size"] = batch_size
         wandb_logger.experiment.config["normalize"] = normalize
         wandb_logger.experiment.config["num_parameters"] = model_parameters
+        wandb_logger.experiment.config["seed"] = seed
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
-        path_to_save = str(Path("models", model_type + "_" + names.get_full_name()))
+        path_to_save = str(
+            Path("models", model_type + "_" + names.get_full_name()))
 
     # Set up precise checkpointing
     monitor = None
@@ -623,29 +636,27 @@ def train_model(train_dataset: Subset,
         monitor = "val_MSE_loss"
     else:
         monitor = "val_CE_loss"
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=path_to_save,
-        filename='{epoch}-{' + monitor + ':.5f}',
-        save_top_k=5,
-        mode='min',
-        monitor=monitor)
-    last_model_callback = ModelCheckpoint(
-        dirpath=path_to_save,
-        filename='{epoch}-{' + monitor + ':.5f}',
-        save_top_k=1,
-        mode='max',
-        monitor="epoch")
+    checkpoint_callback = ModelCheckpoint(dirpath=path_to_save,
+                                          filename='{epoch}-{' + monitor +
+                                          ':.5f}',
+                                          save_top_k=5,
+                                          mode='min',
+                                          monitor=monitor)
+    last_model_callback = ModelCheckpoint(dirpath=path_to_save,
+                                          filename='{epoch}-{' + monitor +
+                                          ':.5f}',
+                                          save_top_k=1,
+                                          mode='max',
+                                          monitor="epoch")
 
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
 
     # Train the model and test
-    # seed_everything(rand_seed, workers=True)
     trainer = L.Trainer(
         default_root_dir=path_to_save,
-        deterministic=deterministic,  # Reproducability
-        benchmark=True,
-        devices='auto',
+        deterministic=True,  # Reproducability
+        devices=devices,
         accelerator="auto",
         # profiler="simple",
         max_epochs=epochs,
