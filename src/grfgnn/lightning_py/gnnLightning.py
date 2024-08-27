@@ -13,6 +13,7 @@ import numpy as np
 import torchmetrics
 import torchmetrics.classification
 from .customMetrics import CrossEntropyLossMetric
+import pinocchio as pin
 from .hgnn import GRF_HGNN
 
 class Base_Lightning(L.LightningModule):
@@ -367,6 +368,48 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
             self.model(x_dict=dummy_batch.x_dict,
                        edge_index_dict=dummy_batch.edge_index_dict)
         self.save_hyperparameters()
+
+    def step_helper_function(self, batch):
+        # Get the raw foot output
+        out_raw = self.model(x_dict=batch.x_dict,
+                             edge_index_dict=batch.edge_index_dict)
+
+        # Get the outputs from the foot nodes
+        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
+
+        # Get the labels
+        y = torch.reshape(batch.y, (batch.batch_size, 4))
+        return y, y_pred
+    
+class Full_Dyamics_Model_Lightning(Base_Lightning):
+
+    def __init__(self, urdf_model_path: Path, urdf_dir: Path):
+        """
+        Constructor for a Full Dynamics Model using the Equations
+        of motion calculated using Lagrangian Mechanics.
+
+        There is not any learned parameters here. This wrapper simply
+        lets us reuse the same metric calculations.
+
+        Only supports regression problems.
+
+        Parameters:
+            urdf_model_path (Path) - The path to the urdf file that the model
+                will be constructed from.
+            urdf_dir (Path) - The path to the urdf file directory
+        """
+
+        # Note we set optimizer and lr, but they are unused here
+        # as we don't instantiate any underlying model.
+        super().__init__("adam", 0.001, regression=True)
+        self.regression = True
+        self.save_hyperparameters()
+
+        # Build the pinnochio model
+        self.model, collision_model, visual_model = pin.buildModelsFromUrdf(
+            str(urdf_model_path), str(urdf_dir), pin.JointModelFreeFlyer(), verbose= True
+        )
+        self.data = self.model.createData()
 
     def step_helper_function(self, batch):
         # Get the raw foot output
