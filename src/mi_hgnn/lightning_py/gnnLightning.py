@@ -5,6 +5,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from pathlib import Path
 import names
 from torch.utils.data import Subset
@@ -495,7 +496,8 @@ def train_model(
         hidden_size: int = 10,
         regression: bool = True,
         seed: int = 0,
-        devices: int = 1):
+        devices: int = 1,
+        early_stopping: bool = False):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -652,6 +654,11 @@ def train_model(
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
 
+    # Setup early stopping mechanism to match MorphoSymm-Replication
+    callbacks = [checkpoint_callback, last_model_callback]
+    if early_stopping:
+        callbacks.append(EarlyStopping(monitor=monitor, patience=10, mode='min'))
+
     # Train the model and test
     trainer = L.Trainer(
         default_root_dir=path_to_save,
@@ -666,7 +673,7 @@ def train_model(
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
         logger=wandb_logger,
-        callbacks=[checkpoint_callback, last_model_callback])
+        callbacks=callbacks)
     trainer.fit(lightning_model, trainLoader, valLoader)
     trainer.test(lightning_model, dataloaders=testLoader)
 
