@@ -5,6 +5,7 @@ from pathlib import Path
 from torchvision.datasets.utils import download_file_from_google_drive
 import scipy.io as sio
 import numpy as np
+import urllib.request
 
 class FlexibleDataset(Dataset):
     """
@@ -91,7 +92,8 @@ class FlexibleDataset(Dataset):
             # Protects against users passing a folder path to a different
             # dataset sequence, causing a different dataset to be used than
             # expected.
-            if self.get_google_drive_file_id() != data[1]:
+            file_id, loc = self.get_file_id_and_loc()
+            if file_id != data[1]:
                 raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
 
         # Parse the robot graph from the URDF file
@@ -139,7 +141,7 @@ class FlexibleDataset(Dataset):
         self.normalize = normalize
 
         # Precompute values for variables_to_use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(0)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(0)
         self.variables_to_use_all = self.find_variables_to_use([lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v])
         self.variables_to_use_base = self.find_variables_to_use([lin_acc, ang_vel])
         self.variables_to_use_joint = self.find_variables_to_use([j_p, j_v, j_T])
@@ -185,11 +187,17 @@ class FlexibleDataset(Dataset):
         return [self.get_downloaded_dataset_file_name()]
 
     def download(self):
-        download_file_from_google_drive(self.get_google_drive_file_id(),
-                                        Path(self.root, 'raw'),
-                                        self.get_downloaded_dataset_file_name())
+        file_id, loc = self.get_file_id_and_loc()
+        if loc == "Google":
+            download_file_from_google_drive(file_id,
+                                            Path(self.root, 'raw'),
+                                            self.get_downloaded_dataset_file_name())
+        elif loc == "Dropbox":
+            urllib.request.urlretrieve(file_id, Path(self.root, "raw", self.get_downloaded_dataset_file_name()))
+        else:
+            raise NotImplementedError("Only Google and Dropbox are implemented.")
         
-    def get_google_drive_file_id(self):
+    def get_file_id_and_loc(self):
         """
         Method for child classes to choose which sequence to load;
         used if the dataset is downloaded.
@@ -197,6 +205,10 @@ class FlexibleDataset(Dataset):
         Additionally, used to check already downloaded datasets to
         make sure the user didn't accidentally pass a path to
         a different sequence.
+
+        Returns:
+            file_id (str) - File id (or link) for download
+            location (str) - Either "Google" or "Dropbox"
         """
         raise self.notImplementedError
     
@@ -238,6 +250,17 @@ class FlexibleDataset(Dataset):
         in the dataset array. This allows us to know
         which dataset entries correspond to the which 
         joints in the URDF.
+        """
+        raise self.notImplementedError
+    
+    def pin_model_orders(self):
+        """
+        Returns the mappings from the URDF order to
+        the pinocchio model order.
+
+        Returns:
+            pin_sorted_order_joints (np.array) - An array that maps URDF joint order to Pin joint order, of shape [12]
+            pin_sorted_order_foot (np.array) - And array that maps URDF foot order to Pin foot order, of shape [4]
         """
         raise self.notImplementedError
 
@@ -353,7 +376,6 @@ class FlexibleDataset(Dataset):
         else:
             return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o, timestamps
 
-
     def load_data_at_dataset_seq(self, seq_num: int):
         """
         This helper function opens the txt file at "seq_num"
@@ -413,13 +435,47 @@ class FlexibleDataset(Dataset):
         """
         Gets a dataset entry for the dynamics model. Shifts the idx internally
         by 1 so that we can calculate the derivative of certain variables.
-        """
-        _, _, _, _, _, _, _, _, _, _, timestamps_prev = self.load_data_sorted(idx)
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx + 1)
-        _, _, _, _, _, _, _, _, _, _, timestamps_next = self.load_data_sorted(idx + 2)
 
-        joint_ts = timestamps[:,1]
-        imu_ts = timestamps[:,2]
+        Also, reorders from URDF order to pinnochio model order.
+        
+        Returns:
+            q - The generalized coordinates
+            vel - The generalized velocity
+            acc - The generalized acceleration
+            tau - The generalized torques
+            labels - Ground Truth labels (in pinocchio foot order)
+        """
+        _,  ang_vel_prev,    _, j_v_prev,   _,   _,   _,      _, r_p_prev,   _, ts_prev = self.load_data_sorted(idx)
+        lin_acc, ang_vel,  j_p,      j_v, j_T, f_p, f_v, labels,      r_p, r_o,      ts = self.load_data_sorted(idx + 1)
+        _,  ang_vel_next,    _, j_v_next,   _,   _,   _,      _, r_p_next,   _, ts_next = self.load_data_sorted(idx + 2)
+
+        # load_data_sorted returns data sorted by URDF order.
+        # However, we need it in the pinnocchio model order.
+        pin_sorted_order_joints, pin_sorted_order_labels = self.pin_model_orders()
+        j_p = j_p[:, pin_sorted_order_joints]
+        j_v_prev = j_v_prev[:, pin_sorted_order_joints]
+        j_v = j_v[:, pin_sorted_order_joints]
+        j_v_next = j_v_next[:, pin_sorted_order_joints]     
+        j_T = j_T[:, pin_sorted_order_joints] 
+        labels = labels[pin_sorted_order_labels]
+
+        # Calculate delta_t
+        delta_t_imu = ts_next[:, 2] - ts_prev[:, 2]
+        delta_t_joint = ts_next[:, 1] - ts_prev[:, 1]
+
+        # Calculate linear velocity, angular acceleration, and joint acceleration
+        lin_vel = (r_p_next - r_p_prev) / delta_t_joint
+        ang_acc = (ang_vel_next - ang_vel_prev) / delta_t_imu
+        j_a = (j_v_next - j_v_prev) / delta_t_joint
+
+        # Create the generalized coordinate vectors
+        q = torch.tensor((np.hstack((np.hstack((r_p, r_o)), j_p))[0]), dtype=torch.float64)
+        vel = torch.tensor((np.hstack((np.hstack((lin_vel, ang_vel)), j_v))[0]), dtype=torch.float64)
+        acc = torch.tensor((np.hstack((np.hstack((lin_acc, ang_acc)), j_a))[0]), dtype=torch.float64)
+        tau = torch.tensor((np.hstack((np.zeros([1, 6]), j_T))[0]), dtype=torch.float64)
+        labels = torch.tensor((labels), dtype=torch.float64)
+
+        return q, vel, acc, tau, labels
 
     def get_helper_mlp(self, idx: int):
         """
@@ -430,7 +486,7 @@ class FlexibleDataset(Dataset):
         x = None
 
         # Only add variables that aren't None
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx)
         dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
         final_input = np.array([])
         for y in self.variables_to_use_all:
@@ -479,7 +535,7 @@ class FlexibleDataset(Dataset):
         foot_x = torch.ones((self.hgnn_number_nodes[2], self.foot_width), dtype=torch.float64)
 
         # Load the data for this entry
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx)
 
         # For each joint specified
         joint_data = [j_p, j_v, j_T]

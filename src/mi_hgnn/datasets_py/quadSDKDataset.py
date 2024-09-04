@@ -124,11 +124,17 @@ class QuadSDKDataset(FlexibleDataset):
         # Write a txt file to save the dataset length, first sequence index,
         # and the download id (for ensuring we have the right dataset later)
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(dataset_entries) + " " + self.get_google_drive_file_id())
+            file_id, loc = self.get_file_id_and_loc()
+            f.write(str(dataset_entries) + " " + file_id)
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================    
     def get_urdf_name_to_dataset_array_index(self):
+        # Our URDF order for A1 and Go2 are FR, FL, RR, RL.
+
         return {
+            # Order of joint data can be found here: https://github.com/robomechanics/quad-sdk/wiki/FAQ.
+            # Note: Because they refer to the first joint as the abduction/adduction joint, and the second joint as the hip joint, this means that
+            # our "hip_joint" corresponds to their abduction/adduction joint, and our "thigh_joint" corresponds to what they call the hip joint.
             'floating_base': 0,
             
             'FR_hip_joint': 6,
@@ -144,17 +150,60 @@ class QuadSDKDataset(FlexibleDataset):
             'RL_thigh_joint': 4,
             'RL_calf_joint': 5,
 
+            # Label order is from here: https://github.com/lunarlab-gatech/quad_sdk_fork/blob/devel/quad_simulator/gazebo_scripts/src/contact_state_publisher.cpp,
+            # referring to the URDF to see order of toes. It's the same order as the joint data.
+
             'FR_foot_fixed': 2,
             'FL_foot_fixed': 0,
             'RR_foot_fixed': 3,
             'RL_foot_fixed': 1 }
+    
+    def pin_model_orders(self):
+        """
+        See flexibleDataset.py for definition of this function.
 
-    # ===================== DATASET PROPERTIES =======================
-    def get_expected_urdf_name(self):
-        return "a1"
+        After printing out the pinocchio model, this is the output we got:
+
+        Nb joints = 14 (nq=19,nv=18)
+            Joint 0 universe: parent=0
+            Joint 1 root_joint: parent=0
+            Joint 2 FL_hip_joint: parent=1
+            Joint 3 FL_thigh_joint: parent=2
+            Joint 4 FL_calf_joint: parent=3
+            Joint 5 FR_hip_joint: parent=1
+            Joint 6 FR_thigh_joint: parent=5
+            Joint 7 FR_calf_joint: parent=6
+            Joint 8 RL_hip_joint: parent=1
+            Joint 9 RL_thigh_joint: parent=8
+            Joint 10 RL_calf_joint: parent=9
+            Joint 11 RR_hip_joint: parent=1
+            Joint 12 RR_thigh_joint: parent=11
+            Joint 13 RR_calf_joint: parent=12
+
+        Therefore their order is FL, FR, RL, RR.
+           The Go2 URDF order is FR, FL, RR, RL.
+        """
+
+        # Specifically for the Go2 Robot. 
+        return [3, 4, 5, 0, 1, 2, 9, 10, 11, 6, 7, 8], [1, 0, 3, 2]
     
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        The units of the return values are as follows:
+        - lin_acc (meters/sec^2, represented in robot's body frame)
+        - ang_vel (rad/sec, represented in robot's body frame)
+        - j_p (rad)
+        - j_v (rad/sec)
+        - j_T (Newton-meters)
+        - f_p (meters, represented in robot's body frame) 
+        - f_v (meters/sec, represented in robot's body frame)
+        - z_grfs (Newtons, represented in the world frame)
+        - r_p (meters, represented in the world frame)
+        - r_quat (N/A (Quaternion), represented in the world frame)
+        - timestamps (secs)
+        """
+
         # Outline the indices to extract the just the Z-GRFs
         z_indices = [2, 5, 8, 11]
 
@@ -175,13 +224,25 @@ class QuadSDKDataset(FlexibleDataset):
 # ================================================================
 
 class QuadSDKDataset_A1Speed0_5(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M"
+    def get_file_id_and_loc(self):
+        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M", "Google"
+    def get_expected_urdf_name(self):
+        return "a1"
 
 class QuadSDKDataset_A1Speed1_0(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf"
+    def get_file_id_and_loc(self):
+        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf", "Google"
+    def get_expected_urdf_name(self):
+        return "a1"
 
 class QuadSDKDataset_A1Speed1_5FlippedOver(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT"
+    def get_file_id_and_loc(self):
+        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT", "Google"
+    def get_expected_urdf_name(self):
+        return "a1"
+    
+class QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(QuadSDKDataset):
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/qxsgvg9qhg6fmhkkrpdtp/robot_1_go2_0.5mps_mu50_mu250_trial1_2024-09-02-18-54-26.bag?rlkey=f9rjl7r4cvejupxharda64ctj&st=fy9g8fn2&dl=1", "Dropbox"
+    def get_expected_urdf_name(self):
+        return "go2"

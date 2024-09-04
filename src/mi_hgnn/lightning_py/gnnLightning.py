@@ -15,6 +15,7 @@ import pinocchio as pin
 from .customMetrics import CrossEntropyLossMetric, BinaryF1Score
 from .hgnn import GRF_HGNN
 from torch_geometric.profile import count_parameters
+from ..datasets_py.flexibleDataset import FlexibleDataset
 
 class Base_Lightning(L.LightningModule):
     """
@@ -443,31 +444,70 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
         )
         self.data = self.model.createData()
 
-        # Setup feet frames
+        # Setup feet frames ids in Pinnochio foot order
         self.feet_names = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
         self.feet_ids = [self.model.getFrameId(n) for n in self.feet_names]
-
-        # Setup base frame
-        self.bl_id = self.model.getFrameId("base")
 
         # Get number of contact points
         self.ncontact = len(self.feet_names)
 
     def step_helper_function(self, batch):
+        # Get the data from the batch
+        q, vel, acc, tau, y = batch
+        batch_size = y.shape[0]
 
-        # Get the data from the batch. Note: pinnochio model follows order of URDF, 
-        # so values are already sorted properly.
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = batch
+        # Convert to numpy arrays
+        q = q.cpu().numpy()
+        vel = vel.cpu().numpy()
+        acc = acc.cpu().numpy()
+        tau = tau.cpu().numpy()
 
-        # Get the raw foot output
-        out_raw = self.model(x_dict=batch.x_dict,
-                             edge_index_dict=batch.edge_index_dict)
+        # Set acceleration zero vector for drift calculation
+        a0 = np.zeros(self.model.nv)
 
-        # Get the outputs from the foot nodes
-        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, 4))
+        # Setup array to hold predicted values
+        y_pred = torch.zeros((batch_size, 4), dtype=torch.float64)
 
-        # Get the labels
-        y = torch.reshape(batch.y, (batch.batch_size, 4))
+        # Evaluate on a sequence wise basis
+        for i in range(0, batch_size):
+            # Find Mass matrix
+            M = pin.crba(self.model, self.data, q[i])
+
+            # Compute dynamic drift -- Coriolis, centrifugal, gravity
+            drift = pin.rnea(self.model, self.data, q[i], vel[i], a0)
+
+            # Now, we need to find the contact Jacobians.
+            # These are the Jacobians that relate the joint velocity to the velocity of each feet
+            J_feet = [np.copy(pin.computeFrameJacobian(self.model, self.data, q[i], id, pin.LOCAL)) for id in self.feet_ids]
+            J_feet_first_3_rows = [np.copy(J[:3, :]) for J in J_feet] 
+            J_feet_T = np.zeros([18, 3 * self.ncontact])
+            J_feet_T[:, :] = np.vstack(J_feet_first_3_rows).T
+
+            # Contact forces at local coordinates (at each foot coordinate)
+            contact_forces = np.linalg.pinv(J_feet_T) @ ((M @ acc[i]) + drift - tau[i])
+            contact_forces_split = np.split(contact_forces, self.ncontact)
+
+            # Compute the placement of each frame
+            pin.framesForwardKinematics(self.model, self.data, q[i])
+
+            # Convert Contact forces to World frame
+            index = 0
+            for force, foot_id in zip(contact_forces_split, self.feet_ids):
+                force_transpose = np.array([[force[0]], [force[1]], [force[2]]])
+
+                # Get the Foot to World Transform
+                world_to_foot_SE3 = self.data.oMf[foot_id]
+                foot_to_world_SE3 = world_to_foot_SE3.inverse()
+
+                # Transform the force into the world frame
+                world_frame_force = foot_to_world_SE3.rotation @ force_transpose
+
+                # Save this prediction into the predicted array
+                y_pred[i, index] = torch.tensor(world_frame_force[2], dtype=torch.float64)
+
+                # Increase index
+                index += 1
+
         return y, y_pred
 
 
@@ -486,10 +526,12 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
 
     # Get the model type
     model_type = None
+    dataset_raw: FlexibleDataset = None
     if isinstance(predict_dataset.dataset, torch.utils.data.ConcatDataset):
-        model_type = predict_dataset.dataset.datasets[0].get_data_format()
+        dataset_raw = predict_dataset.dataset.datasets[0]
     elif isinstance(predict_dataset.dataset, torch.utils.data.Dataset):
-        model_type = predict_dataset.dataset.get_data_format()
+        dataset_raw = predict_dataset.dataset
+    model_type = dataset_raw.get_data_format()
 
     # Initialize the model
     model: Base_Lightning = None
@@ -497,6 +539,9 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    elif model_type == 'dynamics':
+        urdf_path: Path = Path(dataset_raw.robotGraph.new_urdf_path)
+        model = Full_Dynamics_Model_Lightning(str(urdf_path), urdf_path.parent.parent)
     else:
         raise ValueError("model_type must be mlp or heterogeneous_gnn.")
 
@@ -506,7 +551,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
     # Predict with the model
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
-    if model_type == 'mlp':
+    if model_type == 'mlp' or model_type == 'dynamics':
         trainer = L.Trainer()
         predictions_result = trainer.predict(model, valLoader)
         for batch_result in predictions_result:

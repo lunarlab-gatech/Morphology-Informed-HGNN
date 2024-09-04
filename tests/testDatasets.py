@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 from mi_hgnn import FlexibleDataset, QuadSDKDataset_A1Speed1_0, QuadSDKDataset, QuadSDKDataset_A1Speed0_5
+from mi_hgnn.datasets_py.quadSDKDataset import *
 from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset, LinTzuYaunDataset_concrete_right_circle
 from torch_geometric.data import Data, HeteroData
 import numpy as np
@@ -19,11 +20,13 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.path_to_a1_urdf = Path(
             Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
         self.path_to_mc_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
+        self.path_to_go2_urdf = Path('urdf_files', 'Go2', 'go2.urdf').absolute()
         
         # Set up the paths to the datasets
         self.path_to_quad_seq = Path(
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
         self.path_to_lin_seq = Path(Path('.').parent, 'datasets', 'LinTzuYaun-CRC').absolute()
+        self.path_to_go2_seq = Path(Path('.').parent, 'datasets', 'QuadSDK-Go2-Flat-0.5-Mu50').absolute()
 
         # Set up the QuadSDK datasets
         self.quad_dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
@@ -62,6 +65,11 @@ class TestFlexibleDatasets(unittest.TestCase):
             self.path_to_lin_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'heterogeneous_gnn', 
             10, normalize=True)
+        
+        # Set up dataset to test 'dynamics' model
+        self.dataset_go2_dynamics = QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(
+            self.path_to_go2_seq, self.path_to_go2_urdf, 'package://go2_description/', 
+            'unitree_ros/robots/go2_description', 'dynamics', 1, normalize=False)
 
     def test__init__(self):
         """
@@ -113,6 +121,11 @@ class TestFlexibleDatasets(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             LinTzuYaunDataset(path_to_lin, self.path_to_mc_urdf, 'package://yobotics_description/',
                 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'heterogeneous_gnn', 1)
+            
+        # ============== Test dynamics model can only be created with history_length = 1 ==============
+        with self.assertRaises(ValueError):
+            QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(self.path_to_go2_seq, self.path_to_go2_urdf, 
+                'package://go2_description/', 'unitree_ros/robots/go2_description', 'dynamics', 5, normalize=False)
         
         
     def test_load_data_sorted(self):
@@ -120,7 +133,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         Test that the sorting function matches the order provided by the child class.
         """
         # ====================== Test QuadSDK dataset ======================
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.quad_dataset_hgnn_1.load_data_sorted(10000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.quad_dataset_hgnn_1.load_data_sorted(10000)
         des_la = [[-0.06452160178213015, -0.366493877667443, 9.715652148737323]]
         des_av = [[-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]]
         des_p = [[0.11254642823264671, 0.5695073200020913, 0.9825683053175158,
@@ -140,6 +153,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         des_gt = [0, 64.74924447333427, 64.98097097053076, 0]
         des_rp = [[-0.9077062285177977, 0.400808137988427, 0.25139755534263925]]
         des_ro = [[0.00807844275531408, 0.006594002480070749, -0.6310441334749343, -0.7756768396057802]]
+        des_ts = [[27.374, 27.375, 27.374]]
         np.testing.assert_array_equal(la, des_la)
         np.testing.assert_array_equal(av, des_av)
         np.testing.assert_array_equal(p, des_p)
@@ -150,9 +164,10 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_equal(gt, des_gt)
         np.testing.assert_array_almost_equal(r_p, des_rp, 16)
         np.testing.assert_array_almost_equal(r_o, des_ro, 16)
+        np.testing.assert_equal(ts, des_ts)
 
         # ===================== Test LinTzuYaun dataset ====================
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.lin_dataset_mlp_1.load_data_sorted(30000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.lin_dataset_mlp_1.load_data_sorted(30000)
         des_la = [[0.146148949861527,	0.0223360173404217,	9.58438873291016]]
         des_av = [[0.00771053740754724,	0.0315540358424187,	0.161459520459175]]
         des_p = [[0.0394830703735352,	-0.420838713645935,	0.846460103988648,	
@@ -175,6 +190,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         des_gt = [1, 0, 0, 1]
         des_rp = None
         des_ro = None
+        des_ts = None
         np.testing.assert_array_almost_equal(la, des_la, 14)
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
@@ -185,6 +201,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(gt, des_gt, 14)
         np.testing.assert_equal(r_p, des_rp)
         np.testing.assert_equal(r_o, des_ro)
+        np.testing.assert_equal(ts, des_ts)
 
     def test_get_helper_mlp(self):
         # ====================== Test QuadSDK dataset ======================
@@ -344,6 +361,46 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(heteroData['joint'].x.numpy(), joint_x, 14)
         np.testing.assert_array_equal(heteroData['foot'].x.numpy(), foot_x)
 
+    def test_get_helper_dynamics(self):
+        q, vel, acc, tau, labels = self.dataset_go2_dynamics.get(0)
+
+        # Set the desired values
+        des_q = np.array([0.11106036, 0.0219779, 0.26230157,
+                          -0.01051185, -0.02242382, 0.0031927, 0.99968819,  
+                           0.00985092,  0.67495145,  1.34233534,
+                          -0.00328921,  0.51851414,  1.03396776,
+                          -0.0077084,   0.48193389,  0.98210022,
+                           0.01678816,  0.64268708,  1.26193817], dtype=np.double)
+        des_vel = np.array([ 0.28714938,  0.09367028, -0.01043991,
+                             -0.18767554,  0.01491843,  0.25352565, 
+                             -0.3197401,  -1.02283784, -0.14568963,
+                             0.34195181,  2.95817075, -0.0123834,
+                             0.85652331,  3.89292041,  0.62152583,
+                             0.00966363, -1.03752528,  0.40627908,  
+                             ], dtype=np.double)
+        des_acc = np.array([-0.13492641,  0.39766349,   10.62749736,
+                             5.59381084, -0.06683834,    0.10924432,
+                              -8.97923037,   5.7985695, 7.36054217,  
+                             0.34615535,  48.76842517, 103.9891471,  
+                              -0.28729473,  44.51742379, 106.12421164,
+                             -8.56842182,   5.97236389,   6.49158482,  
+                             ], dtype=np.double)
+        des_tau = np.array([0, 0, 0,
+                             0, 0, 0,
+                             -5.75678065,-0.93363904, 10.04449209,
+                             -0.34050237, -0.08218517, 0.19674661, 
+                              0.72560437, -0.21097773, 0.15044776,
+                              4.39419366, -0.21540196,11.43988289, 
+                             ], dtype=np.double)
+        des_labels = np.array([63.22432284, 0, 0, 71.78180083], dtype=np.double)
+
+        # Test that the values are correct
+        np.testing.assert_array_almost_equal(q.numpy(), des_q, 8)
+        np.testing.assert_array_almost_equal(vel.numpy(), des_vel, 8)
+        np.testing.assert_array_almost_equal(acc.numpy(), des_acc, 8)
+        np.testing.assert_array_almost_equal(tau.numpy(), des_tau, 8)
+        np.testing.assert_array_almost_equal(labels.numpy(), des_labels, 8)
+
     def test_get(self):
         # Test that the get function reacts properly to dataset bounds.
         with self.assertRaises(IndexError):
@@ -360,6 +417,15 @@ class TestFlexibleDatasets(unittest.TestCase):
 
         data = self.quad_dataset_hgnn_1.get(0)
         self.assertEqual(type(data), HeteroData)
+
+        # Test that the dynamics model has a bound 2 less than the
+        # number of dataset entries
+        with self.assertRaises(IndexError):
+            data = self.dataset_go2_dynamics.get(-1)
+        with self.assertRaises(IndexError):
+            data = self.dataset_go2_dynamics.get(12041)
+        data = self.dataset_go2_dynamics.get(0)
+        data = self.dataset_go2_dynamics.get(12040)
 
     def test_history_length_parameter(self):
         """
@@ -418,7 +484,7 @@ class TestFlexibleDatasets(unittest.TestCase):
             else:
                 raise NotImplementedError
             
-            la, av, p, v, t, fp, fv, gt, r_p, r_o = hgnn_1_datasets[i].load_data_sorted(10000)
+            la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = hgnn_1_datasets[i].load_data_sorted(10000)
             foot_x_des = None
             if fp is None and fv is None:
                 foot_x_des = hData['foot'].x
@@ -443,7 +509,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         properly normalizes the data from the load_data_sorted() method.
         """
         # ====================== Test QuadSDK dataset ======================
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.quad_dataset_hgnn_6_norm.load_data_sorted(10000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.quad_dataset_hgnn_6_norm.load_data_sorted(10000)
 
         des_la = [[-0.5362300252378239, -1.6632797193920590, -1.5898042183134058],
 				  [0.0423700008727095, -0.2257869376580193, -0.3294529164335535],
@@ -490,6 +556,12 @@ class TestFlexibleDatasets(unittest.TestCase):
 				  [1.0870010249865283, 0.8925717448025465, -0.2656824006915559, 0.2639630143328630],
 				  [1.0072053769211737, 0.4087085025436538, -0.8014601785627550, 0.8010978846144309],
 				  [-0.8715801682276921, -1.8476394964022487, -1.3382718185866767, 1.3403904065904897]]
+        des_ts = [[27.374, 27.375, 27.374],
+                    [27.376, 27.377, 27.377],
+                    [27.378, 27.379, 27.378],
+                    [27.38,  27.381, 27.38 ],
+                    [27.382, 27.383, 27.382],
+                    [27.384, 27.385, 27.384]]
         np.testing.assert_array_almost_equal(la, des_la, 13)
         np.testing.assert_array_almost_equal(av, des_av, 13)
         np.testing.assert_array_almost_equal(p, des_p, 13)
@@ -500,9 +572,10 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(gt, des_gt, 13)
         np.testing.assert_array_almost_equal(r_p, des_rp, 11)
         np.testing.assert_array_almost_equal(r_o, des_ro, 12)
+        np.testing.assert_array_almost_equal(ts, des_ts)
 
         # ===================== Test LinTzuYaun dataset ====================
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.lin_dataset_hgnn_10_norm.load_data_sorted(30000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.lin_dataset_hgnn_10_norm.load_data_sorted(30000)
         des_la = [[1.4491376746189437, -1.4491376746189439, -1.4491376746189455],
 				  [1.4491376746189437, -1.4491376746189439, -1.4491376746189455],
 				  [1.4491376746189437, -1.4491376746189439, -1.4491376746189455],
@@ -567,6 +640,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         des_gt = [1, 0, 0, 1] # Not normalized
         des_rp = None
         des_ro = None
+        des_ts = None
         np.testing.assert_array_almost_equal(la, des_la, 13)
         np.testing.assert_array_almost_equal(av, des_av, 13)
         np.testing.assert_array_almost_equal(p, des_p, 12)
@@ -577,6 +651,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(gt, des_gt, 13)
         np.testing.assert_equal(r_p, des_rp)
         np.testing.assert_equal(r_o, des_ro)
+        np.testing.assert_equal(ts, des_ts)
 
 class TestQuadSDKDatasets(unittest.TestCase):
     """
@@ -601,7 +676,7 @@ class TestQuadSDKDatasets(unittest.TestCase):
         Make sure the data is processed and loaded properly from the file.
         """
 
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
         des_la = [[-0.06452160178213015, -0.366493877667443, 9.715652148737323]]
         des_av = [[-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]]
         des_p = [[-0.16056788963386381,  0.6448773402529877, 1.1609664103261004, -0.1931352599922853,
@@ -618,6 +693,7 @@ class TestQuadSDKDatasets(unittest.TestCase):
         des_gt = [64.74924447333427, 0, 0, 64.98097097053076]
         des_rp = [[-0.9077062285177977, 0.400808137988427, 0.25139755534263925]]
         des_ro = [[0.00807844275531408, 0.006594002480070749, -0.6310441334749343, -0.7756768396057802]]
+        des_ts = [[27.374, 27.375, 27.374]]
         np.testing.assert_array_equal(la, des_la)
         np.testing.assert_array_equal(av, des_av)
         np.testing.assert_array_equal(p, des_p)
@@ -628,6 +704,7 @@ class TestQuadSDKDatasets(unittest.TestCase):
         np.testing.assert_array_equal(gt, des_gt)
         np.testing.assert_array_almost_equal(r_p, des_rp, 16)
         np.testing.assert_array_almost_equal(r_o, des_ro, 16)
+        np.testing.assert_equal(ts, des_ts)
 
 class TestLinTzuYaunDatasets(unittest.TestCase):
     """
@@ -651,7 +728,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         Make sure the data is properly processed and loaded from the dataset.
         """
 
-        la, av, p, v, t, fp, fv, gt, r_p, r_o = self.dataset_mlp_1.load_data_at_dataset_seq(30000)
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.dataset_mlp_1.load_data_at_dataset_seq(30000)
         des_la = [[0.146148949861527,	0.0223360173404217,	9.58438873291016]]
         des_av = [[0.00771053740754724,	0.0315540358424187,	0.161459520459175]]
         des_p = [[0.0581750869750977,	-0.498899102210999,	1.01744437217712,	
@@ -674,6 +751,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         des_gt = [1, 0, 0, 1]
         des_rp = None
         des_ro = None
+        des_ts = None
         np.testing.assert_array_almost_equal(la, des_la, 14)
         np.testing.assert_array_almost_equal(av, des_av, 14)
         np.testing.assert_array_almost_equal(p, des_p, 14)
@@ -684,6 +762,7 @@ class TestLinTzuYaunDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(gt, des_gt, 14)
         np.testing.assert_equal(r_p, des_rp)
         np.testing.assert_equal(r_o, des_ro)
+        np.testing.assert_equal(ts, des_ts)
 
 if __name__ == "__main__":
     unittest.main()
