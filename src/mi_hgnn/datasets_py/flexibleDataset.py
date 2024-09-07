@@ -253,14 +253,26 @@ class FlexibleDataset(Dataset):
         """
         raise self.notImplementedError
     
-    def pin_model_orders(self):
+    def urdf_to_pin_order_mapping(self):
         """
         Returns the mappings from the URDF order to
         the pinocchio model order.
 
         Returns:
-            pin_sorted_order_joints (np.array) - An array that maps URDF joint order to Pin joint order, of shape [12]
-            pin_sorted_order_foot (np.array) - And array that maps URDF foot order to Pin foot order, of shape [4]
+            joint_mappings (np.array) - An array that maps URDF joint order to Pin joint order, of shape [12]
+            foot_mappings (np.array) - And array that maps URDF foot order to Pin foot order, of shape [4]
+        """
+        raise self.notImplementedError
+    
+    def pin_to_urdf_order_mapping(self):
+        """
+        Returns the mappings from the pinocchio model 
+        order to the URDF order. Passed to the Dynamics
+        Model so that it can return the outputs in URDF order.
+
+        Returns:
+            joint_mappings (np.array) - An array that maps Pin joint order to URDF joint order, of shape [12]
+            foot_mappings (np.array) - An array that maps Pin foot order to URDF foot order, of shape [4]
         """
         raise self.notImplementedError
 
@@ -436,7 +448,8 @@ class FlexibleDataset(Dataset):
         Gets a dataset entry for the dynamics model. Shifts the idx internally
         by 1 so that we can calculate the derivative of certain variables.
 
-        Also, reorders from URDF order to pinnochio model order.
+        Also, reorders from URDF order to pinnochio model order, including
+        the labels.
         
         Returns:
             q - The generalized coordinates
@@ -451,7 +464,7 @@ class FlexibleDataset(Dataset):
 
         # load_data_sorted returns data sorted by URDF order.
         # However, we need it in the pinnocchio model order.
-        pin_sorted_order_joints, pin_sorted_order_labels = self.pin_model_orders()
+        pin_sorted_order_joints, pin_sorted_order_labels = self.urdf_to_pin_order_mapping()
         j_p = j_p[:, pin_sorted_order_joints]
         j_v_prev = j_v_prev[:, pin_sorted_order_joints]
         j_v = j_v[:, pin_sorted_order_joints]

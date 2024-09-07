@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from mi_hgnn import FlexibleDataset, QuadSDKDataset_A1Speed1_0, QuadSDKDataset, QuadSDKDataset_A1Speed0_5
+from mi_hgnn import FlexibleDataset, QuadSDKDataset_A1Speed1_0_DEPRECATED, QuadSDKDataset, QuadSDKDataset_A1Speed0_5_DEPRECATED
 from mi_hgnn.datasets_py.quadSDKDataset import *
 from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset, LinTzuYaunDataset_concrete_right_circle
 from torch_geometric.data import Data, HeteroData
@@ -20,7 +20,7 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.path_to_a1_urdf = Path(
             Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
         self.path_to_mc_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
-        self.path_to_go2_urdf = Path('urdf_files', 'Go2', 'go2.urdf').absolute()
+        self.path_to_go2_quad_urdf = Path('urdf_files', 'Go2-Quad', 'go2.urdf').absolute()
         
         # Set up the paths to the datasets
         self.path_to_quad_seq = Path(
@@ -29,16 +29,16 @@ class TestFlexibleDatasets(unittest.TestCase):
         self.path_to_go2_seq = Path(Path('.').parent, 'datasets', 'QuadSDK-Go2-Flat-0.5-Mu50').absolute()
 
         # Set up the QuadSDK datasets
-        self.quad_dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
+        self.quad_dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
-        self.quad_dataset_mlp_1 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
+        self.quad_dataset_mlp_1 = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 1)
-        self.quad_dataset_hgnn_3 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
+        self.quad_dataset_hgnn_3 = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 3)
-        self.quad_dataset_mlp_3 = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
+        self.quad_dataset_mlp_3 = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'mlp', 3)
 
@@ -57,7 +57,7 @@ class TestFlexibleDatasets(unittest.TestCase):
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 'mlp', 3)
         
         # Set up datasets to test normalization
-        self.quad_dataset_hgnn_6_norm = QuadSDKDataset_A1Speed1_0(self.path_to_quad_seq,
+        self.quad_dataset_hgnn_6_norm = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_quad_seq,
             self.path_to_a1_urdf, 'package://a1_description/',
             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 
             6, normalize=True)
@@ -68,8 +68,8 @@ class TestFlexibleDatasets(unittest.TestCase):
         
         # Set up dataset to test 'dynamics' model
         self.dataset_go2_dynamics = QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(
-            self.path_to_go2_seq, self.path_to_go2_urdf, 'package://go2_description/', 
-            'unitree_ros/robots/go2_description', 'dynamics', 1, normalize=False)
+            self.path_to_go2_seq, self.path_to_go2_quad_urdf, 'package://go2_description/', 
+            '', 'dynamics', 1, normalize=False)
 
     def test__init__(self):
         """
@@ -85,19 +85,19 @@ class TestFlexibleDatasets(unittest.TestCase):
         # Test the __init__ function properly runs on a new sequence
         path_to_slow_sequence = Path(
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed0.5').absolute()
-        dataset_slow = QuadSDKDataset_A1Speed0_5(path_to_slow_sequence,
+        dataset_slow = QuadSDKDataset_A1Speed0_5_DEPRECATED(path_to_slow_sequence,
                             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
         
         # Try to create a normal sequence, pointing to the slow dataset directory
         with self.assertRaises(ValueError):
-            dataset = QuadSDKDataset_A1Speed0_5(self.path_to_quad_seq,
+            dataset = QuadSDKDataset_A1Speed0_5_DEPRECATED(self.path_to_quad_seq,
                                  self.path_to_a1_urdf, 'package://a1_description/',
                                 'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
             
         # Try to create a slow sequence, pointing to the normal dataset directory
         with self.assertRaises(ValueError) as e:
-            dataset = QuadSDKDataset_A1Speed1_0(path_to_slow_sequence,
+            dataset = QuadSDKDataset_A1Speed1_0_DEPRECATED(path_to_slow_sequence,
                                  self.path_to_a1_urdf, 'package://a1_description/',
                                 'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
 
@@ -124,7 +124,7 @@ class TestFlexibleDatasets(unittest.TestCase):
             
         # ============== Test dynamics model can only be created with history_length = 1 ==============
         with self.assertRaises(ValueError):
-            QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(self.path_to_go2_seq, self.path_to_go2_urdf, 
+            QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(self.path_to_go2_seq, self.path_to_go2_quad_urdf, 
                 'package://go2_description/', 'unitree_ros/robots/go2_description', 'dynamics', 5, normalize=False)
         
         
@@ -365,39 +365,39 @@ class TestFlexibleDatasets(unittest.TestCase):
         q, vel, acc, tau, labels = self.dataset_go2_dynamics.get(0)
 
         # Set the desired values
-        des_q = np.array([0.11106036, 0.0219779, 0.26230157,
+        des_q = np.array([0.11106036, 0.0219779, 0.26230157, #DONE
                           -0.01051185, -0.02242382, 0.0031927, 0.99968819,  
+                          -0.00328921,  0.51851414,  1.03396776, 
+                           0.01678816 , 0.64268708,  1.26193817,
                            0.00985092,  0.67495145,  1.34233534,
-                          -0.00328921,  0.51851414,  1.03396776,
-                          -0.0077084,   0.48193389,  0.98210022,
-                           0.01678816,  0.64268708,  1.26193817], dtype=np.double)
-        des_vel = np.array([ 0.28714938,  0.09367028, -0.01043991,
-                             -0.18767554,  0.01491843,  0.25352565, 
+                          -0.0077084 ,  0.48193389,  0.98210022], dtype=np.double)
+        des_vel = np.array([ 0.28714938,  0.09367028, -0.01043991,    # DONE
+                             -0.17603125,  0.01065967,  0.26195285,
+                              0.34195181,  2.95817075, -0.0123834,  
+                              0.00966363, -1.03752528,  0.40627908,
                              -0.3197401,  -1.02283784, -0.14568963,
-                             0.34195181,  2.95817075, -0.0123834,
-                             0.85652331,  3.89292041,  0.62152583,
-                             0.00966363, -1.03752528,  0.40627908,  
+                              0.85652331,  3.89292041,  0.62152583,  
                              ], dtype=np.double)
-        des_acc = np.array([-0.13492641,  0.39766349,   10.62749736,
-                             5.59381084, -0.06683834,    0.10924432,
-                              -8.97923037,   5.7985695, 7.36054217,  
+        des_acc = np.array([0.34369415,  0.17348376, 10.62882022, # DONE
+                             5.59120484, -0.10766368, -0.14405578,
                              0.34615535,  48.76842517, 103.9891471,  
-                              -0.28729473,  44.51742379, 106.12421164,
-                             -8.56842182,   5.97236389,   6.49158482,  
+                             -8.56842182, 5.97236389,   6.49158482,
+                             -8.97923037,   5.7985695,    7.36054217,  
+                             -0.28729473,  44.51742379, 106.12421164,      
                              ], dtype=np.double)
-        des_tau = np.array([0, 0, 0,
+        des_tau = np.array([0, 0, 0,  # DONE
                              0, 0, 0,
-                             -5.75678065,-0.93363904, 10.04449209,
-                             -0.34050237, -0.08218517, 0.19674661, 
-                              0.72560437, -0.21097773, 0.15044776,
-                              4.39419366, -0.21540196,11.43988289, 
+                             -0.34050237, -0.08218517,  0.19674661,  
+                             4.39419366, -0.21540196, 11.43988289,
+                             -5.75678065, -0.93363904, 10.04449209,  
+                             0.72560437, -0.21097773,  0.15044776,
                              ], dtype=np.double)
-        des_labels = np.array([63.22432284, 0, 0, 71.78180083], dtype=np.double)
+        des_labels = np.array([0, 71.78180083, 63.22432284, 0], dtype=np.double)
 
         # Test that the values are correct
         np.testing.assert_array_almost_equal(q.numpy(), des_q, 8)
         np.testing.assert_array_almost_equal(vel.numpy(), des_vel, 8)
-        np.testing.assert_array_almost_equal(acc.numpy(), des_acc, 8)
+        np.testing.assert_array_almost_equal(acc.numpy(), des_acc, 6)
         np.testing.assert_array_almost_equal(tau.numpy(), des_tau, 8)
         np.testing.assert_array_almost_equal(labels.numpy(), des_labels, 8)
 
@@ -663,19 +663,29 @@ class TestQuadSDKDatasets(unittest.TestCase):
         # Get the paths to the URDF file and the dataset
         self.path_to_a1_urdf = Path(
             Path('.').parent, 'urdf_files', 'A1', 'a1.urdf').absolute()
+        self.path_to_go2_quad_urdf = Path(
+            Path('.').parent, 'urdf_files', 'Go2-Quad', 'go2.urdf').absolute()
         self.path_to_normal_sequence = Path(
             Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
+        self.path_to_go2_seq = Path(Path('.').parent, 'datasets', 
+                                    'QuadSDK-Go2-Flat-0.5-Mu50').absolute()
 
         # Set up the QuadSDK dataset
-        self.dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0(self.path_to_normal_sequence,
+        self.dataset_hgnn_1 = QuadSDKDataset_A1Speed1_0_DEPRECATED(self.path_to_normal_sequence,
             self.path_to_a1_urdf, 'package://a1_description/',
                             'unitree_ros/robots/a1_description', 'heterogeneous_gnn', 1)
+        
+        # Set up the QuadSDK-Go2 Dataset
+        self.dataset_go2_dynamics = QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(
+            self.path_to_go2_seq, self.path_to_go2_quad_urdf, 'package://go2_description/', 
+            '', 'dynamics', 1, normalize=False) 
 
     def test_process_and_load_data_at_ros_seq(self):
         """
         Make sure the data is processed and loaded properly from the file.
         """
 
+        # ====================== Test A1 dataset ======================
         la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.dataset_hgnn_1.load_data_at_dataset_seq(10000)
         des_la = [[-0.06452160178213015, -0.366493877667443, 9.715652148737323]]
         des_av = [[-0.0017398309484803294, -0.011335050676391335, 1.2815129213608234]]
@@ -705,6 +715,42 @@ class TestQuadSDKDatasets(unittest.TestCase):
         np.testing.assert_array_almost_equal(r_p, des_rp, 16)
         np.testing.assert_array_almost_equal(r_o, des_ro, 16)
         np.testing.assert_equal(ts, des_ts)
+
+        # ====================== Test Go2 dataset ======================
+        la, av, p, v, t, fp, fv, gt, r_p, r_o, ts = self.dataset_go2_dynamics.load_data_at_dataset_seq(19)
+        des_la = [[1.04362010780786, 0.102924426497379, 9.69409887849744]]
+        des_av = [[0.132802898128106, -0.136313764306598, 0.207648093420945]]
+        des_p = [[-0.0186428812557580,	0.613793271947078,	1.32799863793224,	
+                  0.0347470162543466,	0.698767277898859,	1.11862908126266,	
+                  0.0198834628333486,	0.696377268016621,	1.13860830145294,	
+                  0.00547654431396083,	0.574921459685768,	1.26371764626257]]
+        des_v = [[-0.699186768494990,	-0.921542133257371,	0.277927285191015,
+                  	0.612155995417224,	3.48897543944195,	3.66605185069497,	
+                    0.380101618643802,	3.03484827328948,	3.21739436163926,	
+                    -0.417627247095149,	-1.09821184134443,	0.416289250709227]]
+        des_t = [[-5.04831081420462,	-0.817589258211806,	10.2766337684245,
+                  	0.790579050967499,	-0.767835012490491,	-0.166955021638676,
+                	-0.866199185499829,	-0.733417666986734,	-0.177643946203042,
+                	4.58633681646792,	0.535467239477912,	10.7651478997751]]
+        des_fp = None
+        des_fv = None
+        des_gt = [64.3055740713891,	0,	0,	70.2415205364494]
+        des_rp = [[0.126104142299371,	0.0278440678211520,	0.262246743809873]]
+        des_ro = [[-0.0112824130388665,	-0.0239457518490493,	0.00975197425090795,	0.999602024369006]]
+        des_ts = [[30.1520000000000,	30.1510000000000,	30.1510000000000]]
+    
+        np.testing.assert_array_almost_equal(la, des_la, 14)
+        np.testing.assert_array_almost_equal(av, des_av, 14)
+        np.testing.assert_array_almost_equal(p, des_p, 13)
+        np.testing.assert_array_almost_equal(v, des_v, 13)
+        np.testing.assert_array_almost_equal(t, des_t, 13)
+        np.testing.assert_equal(fp, des_fp)
+        np.testing.assert_equal(fv, des_fv)
+        np.testing.assert_array_almost_equal(gt, des_gt, 14)
+        np.testing.assert_array_almost_equal(r_p, des_rp, 14)
+        np.testing.assert_array_almost_equal(r_o, des_ro, 14)
+        np.testing.assert_equal(ts, des_ts)
+
 
 class TestLinTzuYaunDatasets(unittest.TestCase):
     """

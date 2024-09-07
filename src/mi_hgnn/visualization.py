@@ -19,7 +19,7 @@ def display_on_axes(axes, estimated, ground_truth, title):
     axes.legend()
     axes.set_title(title)
 
-def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
+def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None, no_show: bool = False):
     """
     Helper method that creates a figure between the predicted
     GRF values and the actual GRF values, and saves it at 
@@ -41,39 +41,8 @@ def visualize_model_outputs_regression(pred, labels, path_to_file: Path = None):
     # Save the figure
     if path_to_file is not None:
         plt.savefig(path_to_file)
-
-
-def visualize_model_outputs_classification(y_pred_per_foot_prob_only_1: torch.Tensor, 
-                                           labels: torch.Tensor, path_to_file: Path = None, 
-                                           fig_width: int = 20):
-    """
-    Helper method that plots the difference between the predicted class
-    and the actual.
-    TODO: Plot the difference between 16 state contact and predicted.
-    TODO: Generate a confusion matrix.
-
-    Parameters:
-        - y_pred_per_foot_prob_only_1 (torch.Tensor): A Tensor of shape 
-            (batch_size, 4) that contains probability values of stable 
-            contact for each foot.
-        - labels (torch.Tensor): A Tensor of shape (batch_size, 4) that 
-            contains contact state for each foot.
-    """
-
-    # Setup four graphs (one for each foot)
-    fig, axes = plt.subplots(4, figsize=[fig_width, 20])
-    fig.suptitle('Foot Predicted Contact States vs. Ground Truth')
-
-    # Display the results
-    titles = [
-        "Foot 0 State", "Foot 1 State",
-        "Foot 2 State", "Foot 3 State"
-    ]
-    for i in range(0, 4):
-        display_on_axes(axes[i], np.rint(y_pred_per_foot_prob_only_1[:, i]), labels[:, i], titles[i])
-
-    if path_to_file is not None:
-        plt.savefig(path_to_file)
+    if not no_show:
+        plt.show()
 
 def visualize_dataset_graph(pytorch_graph: Data,
                     robot_graph: NormalRobotGraph,

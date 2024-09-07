@@ -218,7 +218,11 @@ class Base_Lightning(L.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         """
-        Returns the predicted values from the model given a specific batch.
+        Returns the predicted values from the model given a specific batch. 
+        Currently only implemented for regression.
+
+        Note, the HGNN models (Both regression and classification) directly
+        predict with model, instead of using this built-in method.
 
         Returns:
             y (torch.Tensor) - Ground Truth labels per foot (GRF labels for
@@ -232,6 +236,8 @@ class Base_Lightning(L.LightningModule):
         if self.regression:
             return y, y_pred # GRFs
         else:
+            raise NotImplementedError("This prediction method is not fully tested for classification.")
+        
             y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                     self.classification_calculate_useful_values(y_pred, y_pred.shape[0])
             y_pred_16, y_16 = self.classification_conversion_16_class(y_pred_per_foot_prob_only_1, y)
@@ -333,6 +339,18 @@ class Base_Lightning(L.LightningModule):
             y_pred_new[:,j] = torch.mul(torch.mul(foot_0_prob, foot_1_prob), torch.mul(foot_2_prob, foot_3_prob))
 
         return y_pred_new, y_new
+    
+class Test_Lighting_Model(Base_Lightning):
+    """
+    This lightning model is used for testing purposes.
+    """
+    def __init__(self):
+        super().__init__("adam", 0.001, regression=True)
+
+    def step_helper_function(self, batch):
+        x, y = batch
+        y_pred = y * 3
+        return y, y_pred
 
 
 class MLP_Lightning(Base_Lightning):
@@ -436,7 +454,9 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
     
 class Full_Dynamics_Model_Lightning(Base_Lightning):
 
-    def __init__(self, urdf_model_path: Path, urdf_dir: Path):
+    def __init__(self, urdf_model_path: Path, urdf_dir: Path, 
+                 pin_to_urdf_joint_mapping: np.ndarray,
+                 pin_to_urdf_foot_mapping: np.ndarray):
         """
         Constructor for a Full Dynamics Model using the Equations
         of motion calculated using Lagrangian Mechanics.
@@ -450,26 +470,38 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
             urdf_model_path (Path) - The path to the urdf file that the model
                 will be constructed from.
             urdf_dir (Path) - The path to the urdf file directory
+            pin_to_urdf_joint_mapping (np.ndarray) - An array that maps Pin joint 
+                order to URDF joint order, of shape [12].
+            pin_to_urdf_foot_mapping (np.ndarray) - An array that maps Pin foot 
+                order to URDF foot order, of shape [4].
         """
 
         # Note we set optimizer and lr, but they are unused here
         # as we don't instantiate any underlying model.
         super().__init__("adam", 0.001, regression=True)
         self.regression = True
+        self.joint_mapping = pin_to_urdf_joint_mapping
+        self.foot_mapping = pin_to_urdf_foot_mapping
         self.save_hyperparameters()
 
         # Build the pinnochio model
-        self.model, collision_model, visual_model = pin.buildModelsFromUrdf(
+        self.model, self.collision_model, self.visual_model = pin.buildModelsFromUrdf(
             str(urdf_model_path), str(urdf_dir), pin.JointModelFreeFlyer(), verbose= True
         )
         self.data = self.model.createData()
+        print(self.model)
 
         # Setup feet frames ids in Pinnochio foot order
-        self.feet_names = ["FL_foot", "FR_foot", "RL_foot", "RR_foot"]
+        self.feet_names = ["jtoe2", "jtoe3", "jtoe0", "jtoe1"]
         self.feet_ids = [self.model.getFrameId(n) for n in self.feet_names]
+        print("feet ids: ", self.feet_ids)
 
         # Get number of contact points
         self.ncontact = len(self.feet_names)
+
+        # Setup a viewer to see if everything looks right
+        self.viz = pin.visualize.MeshcatVisualizer(self.model, self.collision_model, self.visual_model)
+        self.viz.initViewer(loadModel=True)
 
     def step_helper_function(self, batch):
         # Get the data from the batch
@@ -509,6 +541,9 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
 
             # Compute the placement of each frame
             pin.framesForwardKinematics(self.model, self.data, q[i])
+            # self.viz.display(q[i])
+            # import time
+            # time.sleep(0.1)
 
             # Convert Contact forces to World frame
             index = 0
@@ -523,18 +558,35 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
                 world_frame_force = foot_to_world_SE3.rotation @ force_transpose
 
                 # Save this prediction into the predicted array
-                y_pred[i, index] = torch.tensor(world_frame_force[2], dtype=torch.float64)
+                y_pred[i, index] = torch.tensor(-world_frame_force[2], dtype=torch.float64)
 
                 # Increase index
                 index += 1
 
+        # Knowing that we can't have negative contact force, set all
+        # negative values to zero.
+        y_pred = torch.clamp(y_pred, min=0.0)
+
+        # Put y_pred back on the correct device
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        y_pred = y_pred.to(device)
+
+        # y and y_pred is in pin foot order, so map back to URDF foot order
+        y = y[self.foot_mapping]
+        y_pred = y_pred[self.foot_mapping]
+
         return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset,
+                   enable_testing_mode: bool = False):
     """
     Runs the provided model on the corresponding dataset,
     and returns the predicted values and the ground truth values.
+
+    Parameters:
+        enable_testing_mode: Only used for test cases, don't enable
+            unless you are writing test cases.
 
     Returns:
         pred - Predicted values
@@ -557,15 +609,19 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
 
     # Initialize the model
     model: Base_Lightning = None
-    if model_type == 'mlp':
+    if enable_testing_mode:
+        model = Test_Lighting_Model()
+    elif model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'dynamics':
         urdf_path: Path = Path(dataset_raw.robotGraph.new_urdf_path)
-        model = Full_Dynamics_Model_Lightning(str(urdf_path), urdf_path.parent.parent)
+        joint_mapping, foot_mapping = dataset_raw.pin_to_urdf_order_mapping()
+        model = Full_Dynamics_Model_Lightning(str(urdf_path), urdf_path.parent.parent,
+                                              joint_mapping, foot_mapping)
     else:
-        raise ValueError("model_type must be mlp or heterogeneous_gnn.")
+        raise ValueError("model_type must be mlp, heterogeneous_gnn, or dynamics.")
     model.eval()
     model.freeze()
 
@@ -575,15 +631,17 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     # Predict with the model
     pred = torch.zeros((0, 4))
     labels = torch.zeros((0, 4))
-    if model_type == 'dynamics':
+    if (model_type == 'dynamics' or model_type == 'mlp') and model.regression:
         trainer = L.Trainer()
         predictions_result = trainer.predict(model, valLoader)
         for batch_result in predictions_result:
             labels = torch.cat((labels, batch_result[0]), dim=0)
             pred = torch.cat((pred, batch_result[1]), dim=0)
-    elif model_type == 'mlp':
-        raise NotImplementedError
-    else:  # for 'heterogeneous_gnn'
+        
+        # Return the results
+        return pred, labels, model.mse_loss, model.rmse_loss, model.l1_loss
+
+    elif model_type == 'heterogeneous_gnn':
         pred = torch.zeros((0))
         labels = torch.zeros((0))
         device = 'cpu'  # 'cuda' if torch.cuda.is_available() else
@@ -600,7 +658,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 model.calculate_losses_step(labels_batch, y_pred)
 
                 # If classification, convert to 16 class predictions and labels
-                if not model.model.regression:
+                if not model.regression:
                     y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                         model.classification_calculate_useful_values(y_pred, y_pred.shape[0])
                     y_pred_16, y_16 = model.classification_conversion_16_class(y_pred_per_foot_prob_only_1, labels_batch)
@@ -619,12 +677,20 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 print("Prediction: ", batch_num, "/", total_batches, "\r", end="")
 
             model.calculate_losses_epoch()
-
-    if not model.regression:
-        legs_avg_f1 = (model.f1_leg0 + model.f1_leg1 + model.f1_leg2 + model.f1_leg3) / 4.0
-        return pred, labels, model.acc, model.f1_leg0, model.f1_leg1, model.f1_leg2, model.f1_leg3, legs_avg_f1
+        
+        # Return the results
+        if not model.regression:
+            legs_avg_f1 = (model.f1_leg0 + model.f1_leg1 + model.f1_leg2 + model.f1_leg3) / 4.0
+            return pred, labels, model.acc, model.f1_leg0, model.f1_leg1, model.f1_leg2, model.f1_leg3, legs_avg_f1
+        else:
+            return pred, labels, model.mse_loss, model.rmse_loss, model.l1_loss 
+    
     else:
-        raise NotImplementedError
+        problem_type = "regression" if model.regression else "classification"
+        raise NotImplementedError("This combination of model_type (" + model_type + \
+                                  ") and problem_type  (" + problem_type + ") is not \
+                                  currently implemented for evaluation.")
+  
 
 def train_model(
         train_dataset: Subset,
