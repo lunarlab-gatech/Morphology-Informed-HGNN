@@ -11,6 +11,7 @@ from torch.utils.data import random_split
 import numpy as np
 import torchmetrics
 from torch_geometric.loader import DataLoader
+import os
 
 class TestGnnLightning(unittest.TestCase):
     """
@@ -151,6 +152,7 @@ class TestGnnLightning(unittest.TestCase):
             for path in models:
                 Path.unlink(path, missing_ok=False)
 
+    @unittest.skipIf(os.environ.get('MIHGNN_UNITTEST_SKIP_GITHUB_ACTION_CRASHERS') == "True", "Skipping tests that crash GitHub Actions")
     def test_evaluate_model(self):
         """
         Test that the evaluation method properly calculates
