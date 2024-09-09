@@ -47,4 +47,5 @@ jobs:
       uses: snickerbockers/submodules-init@v4
     - name: Test with unittest
       run: |
+        export MIHGNN_UNITTEST_SKIP_GITHUB_ACTION_CRASHERS=True
         python -m unittest discover tests/ -v

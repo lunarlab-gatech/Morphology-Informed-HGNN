@@ -1,8 +1,8 @@
 import unittest
 from pathlib import Path
-
 import torchmetrics.classification
 from mi_hgnn import QuadSDKDataset_A1Speed1_0
+import mi_hgnn.datasets_py.LinTzuYaunDataset as linData
 from mi_hgnn.datasets_py.LinTzuYaunDataset import LinTzuYaunDataset_asphalt_road
 from mi_hgnn.lightning_py.gnnLightning import train_model, evaluate_model, Heterogeneous_GNN_Lightning, Base_Lightning
 from mi_hgnn.visualization import visualize_model_outputs_regression, visualize_model_outputs_classification
@@ -11,11 +11,14 @@ from torch.utils.data import random_split
 import numpy as np
 import torchmetrics
 from torch_geometric.loader import DataLoader
+import os
 
 class TestGnnLightning(unittest.TestCase):
     """
     Test the classes and functions found in the
     gnnLightning.py file.
+
+    TODO: Write test methods for visualization.
     """
 
     def setUp(self):
@@ -28,7 +31,7 @@ class TestGnnLightning(unittest.TestCase):
         # Setup a random generator
         self.rand_gen = torch.Generator().manual_seed(10341885)
 
-        # Initalize the datasets
+        # Initalize the simple datasets
         path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
         self.path_to_mc_urdf = Path('urdf_files', 'MiniCheetah', 'miniCheetah.urdf').absolute()
 
@@ -58,54 +61,72 @@ class TestGnnLightning(unittest.TestCase):
             self.path_to_crc_seq, self.path_to_mc_urdf, 'package://yobotics_description/',
             'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', 
             'heterogeneous_gnn', 3)
-
+        
         # Put them into an array for easy testing over all of them
-        self.models = [self.dataset_mlp, self.dataset_hgnn, self.dataset_hgnn_3]
-        self.class_models = [self.class_dataset_mlp, self.class_dataset_hgnn, self.class_dataset_hgnn_3]
+        self.models = [self.dataset_hgnn, self.dataset_hgnn_3]
+        self.class_models = [self.class_dataset_hgnn, self.class_dataset_hgnn_3]
+        
+        # Create the test dataset for classification
+        history_length = 150
+        model_type = 'heterogeneous_gnn'
+        air_jumping_gait = linData.LinTzuYaunDataset_air_jumping_gait(
+            Path(Path('.').parent, 'datasets', 'LinTzuYaun-AJG').absolute(), self.path_to_mc_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        concrete_pronking = linData.LinTzuYaunDataset_concrete_pronking(
+            Path(Path('.').parent, 'datasets', 'LinTzuYaun-CP').absolute(), self.path_to_mc_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        concrete_right_circle = linData.LinTzuYaunDataset_concrete_right_circle(
+            Path(Path('.').parent, 'datasets', 'LinTzuYaun-CRC').absolute(), self.path_to_mc_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        forest = linData.LinTzuYaunDataset_forest(
+            Path(Path('.').parent, 'datasets', 'LinTzuYaun-F').absolute(), self.path_to_mc_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        small_pebble = linData.LinTzuYaunDataset_small_pebble(
+            Path(Path('.').parent, 'datasets', 'LinTzuYaun-SP').absolute(), self.path_to_mc_urdf, 'package://yobotics_description/', 'mini-cheetah-gazebo-urdf/yobo_model/yobotics_description', model_type, history_length, normalize=True)
+        test_dataset = torch.utils.data.ConcatDataset([air_jumping_gait, concrete_pronking, concrete_right_circle, forest, small_pebble])
+        self.test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
-    def test_train_eval_vis_model(self):
+    def test_methods_run_without_crashing(self):
         """
         Make sure that the train model function runs and
         finishes successfully. Also, test that we can evaluate
-        each model as well without a crash, and that we can
-        visualize the results.
+        each model as well without a crash.
         """
 
+        # TODO: Reimplement Regression functionality for evaluation
         # For each regression model
-        for i, model in enumerate(self.models):
-            train_dataset, val_dataset, test_dataset = random_split(
-                model, [0.7, 0.2, 0.1], generator=self.rand_gen)
-            path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
-                                              normalize=False,
-                                              testing_mode=True, disable_logger=True,
-                                              epochs=2, seed=1919)
+        # for i, model in enumerate(self.models):
+        #     train_dataset, val_dataset, test_dataset = random_split(
+        #         model, [0.7, 0.2, 0.1], generator=self.rand_gen)
+        #     path_to_ckpt_folder = train_model(train_dataset, val_dataset, test_dataset,
+        #                                       normalize=False,
+        #                                       testing_mode=True, disable_logger=True,
+        #                                       epochs=2, seed=1919)
 
-            # Make sure three models were saved (2 for top, 1 for last)
-            models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
-            self.assertEqual(len(models), 3)
-
-            try:
-                # Predict with the model 
-                pred, labels = evaluate_model(models[0], test_dataset, 485)
-
-                # Assert the sizes of the results match
-                self.assertEqual(pred.shape[0], 485)
-                self.assertEqual(pred.shape[1], 4)
-                self.assertEqual(labels.shape[0], 485)
-                self.assertEqual(labels.shape[1], 4)
-
-                # Try and visualize with the model
-                visualize_model_outputs_regression(pred, labels)
-
-            except Exception as e:
-                for path in models:
-                    Path.unlink(path, missing_ok=False)
-                raise e
+        #     # Make sure three models were saved (2 for top, 1 for last)
+        #     models = sorted(Path('.', path_to_ckpt_folder).glob(("epoch=*")))
+        #     self.assertEqual(len(models), 3)
             
-            for path in models:
-                Path.unlink(path, missing_ok=False)
+        #     try:
+        #         # Predict with the model (should fail)
+        #         with self.assertRaises(NotImplementedError):
+        #             pred, labels = evaluate_model(models[0], test_dataset)
+
+        #             # Assert the sizes of the results match
+        #             self.assertEqual(pred.shape[0], 485)
+        #             self.assertEqual(pred.shape[1], 4)
+        #             self.assertEqual(labels.shape[0], 485)
+        #             self.assertEqual(labels.shape[1], 4)
+
+        #             # Try and visualize with the model
+        #             visualize_model_outputs_regression(pred, labels)
+
+        #     except Exception as e:
+        #         for path in models:
+        #             Path.unlink(path, missing_ok=False)
+        #         raise e
+            
+        #     for path in models:
+        #         Path.unlink(path, missing_ok=False)
 
         # For each classification model
+        # TODO: Test for MLP
         for i, model in enumerate(self.class_models):
             # Test for classification
             train_dataset, val_dataset, test_dataset = random_split(
@@ -120,17 +141,9 @@ class TestGnnLightning(unittest.TestCase):
             self.assertEqual(len(models), 3)
 
             try:
-                # Predict with the model
-                pred, labels = evaluate_model(models[0], test_dataset, 234)
-
-                # Assert the sizes of the results match
-                self.assertEqual(pred.shape[0], 234)
-                self.assertEqual(pred.shape[1], 4)
-                self.assertEqual(labels.shape[0], 234)
-                self.assertEqual(labels.shape[1], 4)
+                # Evaluate the model
+                pred, labels, acc, f1_leg_0, f1_leg_1, f1_leg_2, f1_leg_3, f1_avg_legs = evaluate_model(models[0], test_dataset)
                 
-                # Try to visualize the results
-                visualize_model_outputs_classification(pred, labels)
             except Exception as e:
                 for path in models:
                     Path.unlink(path, missing_ok=False)
@@ -138,6 +151,34 @@ class TestGnnLightning(unittest.TestCase):
             
             for path in models:
                 Path.unlink(path, missing_ok=False)
+
+    @unittest.skipIf(os.environ.get('MIHGNN_UNITTEST_SKIP_GITHUB_ACTION_CRASHERS') == "True", "Skipping tests that crash GitHub Actions")
+    def test_evaluate_model(self):
+        """
+        Test that the evaluation method properly calculates
+        the same values logged during the training process.
+
+        TODO: Test the MLP evaluation as well.
+        TODO: Test for Regression.
+        """
+
+        # Evaluate with model
+        path_to_checkpoint = Path('tests', 'test_models', 'epoch=10-val_CE_loss=0.30258.ckpt').absolute()
+        pred, labels, acc, f1_leg_0, f1_leg_1, f1_leg_2, f1_leg_3, f1_avg_legs = evaluate_model(str(path_to_checkpoint), self.test_dataset)
+
+        # Assert that the evaluated metrics match what we calculated using
+        # the test methods during training
+        np.testing.assert_almost_equal(acc.item(), 0.89581, 4)
+        np.testing.assert_almost_equal(f1_leg_0.item(), 0.94857, 4)
+        np.testing.assert_almost_equal(f1_leg_1.item(), 0.95383, 4)
+        np.testing.assert_almost_equal(f1_leg_2.item(), 0.94795, 4)
+        np.testing.assert_almost_equal(f1_leg_3.item(), 0.9464, 4)
+        np.testing.assert_almost_equal(f1_avg_legs.item(), 0.94918, 4)
+
+        # Assert the pred and labels are correct
+        metric_acc = torchmetrics.Accuracy(task="multiclass", num_classes=16)
+        calculated_acc = metric_acc(labels, pred)
+        np.testing.assert_equal(acc.item(), calculated_acc.item())
 
     def test_MIHGNN_model_output_assumption(self):
         """

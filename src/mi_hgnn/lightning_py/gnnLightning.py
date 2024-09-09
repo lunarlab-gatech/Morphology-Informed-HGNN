@@ -5,6 +5,7 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.loggers import WandbLogger
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from pathlib import Path
 import names
 from torch.utils.data import Subset
@@ -130,7 +131,8 @@ class Base_Lightning(L.LightningModule):
 
             # Calculate 16 class accuracy
             y_pred_16, y_16 = self.classification_conversion_16_class(y_pred_per_foot_prob_only_1, y)
-            self.acc = self.metric_acc(torch.argmax(y_pred_16, dim=1), y_16.squeeze())
+            y_16 = y_16.squeeze(dim=1)
+            self.acc = self.metric_acc(torch.argmax(y_pred_16, dim=1), y_16)
 
             # Calculate binary class predictions for f1-scores
             y_pred_2 = torch.reshape(torch.argmax(y_pred_per_foot_prob, dim=1), (batch_size, 4))
@@ -206,23 +208,36 @@ class Base_Lightning(L.LightningModule):
         self.log_losses("test", on_step=False)
 
     # ======================= Prediction =======================
+    # NOTE: These methods have not been fully tested. Use at 
+    # your own risk.
+
+    def on_predict_start(self):
+        self.reset_all_metrics()
+
     def predict_step(self, batch, batch_idx):
         """
         Returns the predicted values from the model given a specific batch.
 
         Returns:
-            y (torch.Tensor) - Ground Truth labels per foot (contact labels 
-                for classifiction, GRF labels for regression)
-            y_pred (torch.Tensor) - Predicted outputs per foot (GRF labels 
-                for regression, probability of stable contact for classification)
+            y (torch.Tensor) - Ground Truth labels per foot (GRF labels for
+              regression, 16 class contact labels for classifiction)
+            y_pred (torch.Tensor) - Predicted outputs (GRF labels per foot 
+                for regression, 16 class predictions for classifications)
         """
         y, y_pred = self.step_helper_function(batch)
+        self.calculate_losses_step(y, y_pred)
+
         if self.regression:
-            return y, y_pred
+            return y, y_pred # GRFs
         else:
             y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                     self.classification_calculate_useful_values(y_pred, y_pred.shape[0])
-            return y, y_pred_per_foot_prob_only_1
+            y_pred_16, y_16 = self.classification_conversion_16_class(y_pred_per_foot_prob_only_1, y)
+            y_16 = y_16.squeeze(dim=1)
+            return y_16, torch.argmax(y_pred_16, dim=1) # 16 class
+        
+    def on_predict_end(self):
+        self.calculate_losses_epoch()
 
     # ======================= Optimizer =======================
     def configure_optimizers(self):
@@ -406,14 +421,19 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
                              edge_index_dict=batch.edge_index_dict)
 
         # Get the outputs from the foot nodes
-        y_pred = torch.reshape(out_raw.squeeze(), (batch.batch_size, self.model.out_channels_per_foot * 4))
+        batch_size = None
+        if hasattr(batch, "batch_size"):
+            batch_size = batch.batch_size
+        else:
+            batch_size = 1
+        y_pred = torch.reshape(out_raw.squeeze(), (batch_size, self.model.out_channels_per_foot * 4))
 
         # Get the labels
-        y = torch.reshape(batch.y, (batch.batch_size, 4))
+        y = torch.reshape(batch.y, (batch_size, 4))
         return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entries_to_eval: int = 1000):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     """
     Runs the provided model on the corresponding dataset,
     and returns the predicted values and the ground truth values.
@@ -421,6 +441,8 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
     Returns:
         pred - Predicted values
         labels - Ground Truth values
+        * - Additional arguments that correspond to the metrics tracked
+            during the evaluation.
     """
 
     # Set the dtype to be 64 by default
@@ -441,43 +463,60 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset, num_entrie
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     else:
         raise ValueError("model_type must be mlp or heterogeneous_gnn.")
+    model.eval()
+    model.freeze()
 
     # Create a validation dataloader
     valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, shuffle=False, num_workers=15)
 
     # Predict with the model
-    pred = torch.zeros((0, 4))
-    labels = torch.zeros((0, 4))
+    pred = None
+    labels = None
     if model_type == 'mlp':
-        trainer = L.Trainer()
-        predictions_result = trainer.predict(model, valLoader)
-        for batch_result in predictions_result:
-            labels = torch.cat((labels, batch_result[0]), dim=0)
-            pred = torch.cat((pred, batch_result[1]), dim=0)
-
+        raise NotImplementedError
+    
     else:  # for 'heterogeneous_gnn'
+        pred = torch.zeros((0))
+        labels = torch.zeros((0))
         device = 'cpu'  # 'cuda' if torch.cuda.is_available() else
         model.model = model.model.to(device)
         with torch.no_grad():
+            # Print visual output of prediction step
+            total_batches = len(valLoader)
+            batch_num = 0
+            print("Prediction: ", batch_num, "/", total_batches, "\r", end="")
+
+            # Predict with the model
             for batch in valLoader:
                 labels_batch, y_pred = model.step_helper_function(batch)
+                model.calculate_losses_step(labels_batch, y_pred)
 
-                # If classification, convert probability logits to stable contact probabilities
+                # If classification, convert to 16 class predictions and labels
                 if not model.model.regression:
                     y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                         model.classification_calculate_useful_values(y_pred, y_pred.shape[0])
-                    pred_batch = y_pred_per_foot_prob_only_1
+                    y_pred_16, y_16 = model.classification_conversion_16_class(y_pred_per_foot_prob_only_1, labels_batch)
+                    y_16 = y_16.squeeze(dim=1)
+                    pred_batch = torch.argmax(y_pred_16, dim=1)
+                    labels_batch = y_16
                 else:
                     pred_batch = y_pred
 
                 # Append to the previously collected data
                 pred = torch.cat((pred, pred_batch), dim=0)
                 labels = torch.cat((labels, labels_batch), dim=0)
-                if pred.shape[0] >= num_entries_to_eval:
-                    break
 
-    return pred[0:num_entries_to_eval], labels[0:num_entries_to_eval]
+                # Print current status
+                batch_num += 1
+                print("Prediction: ", batch_num, "/", total_batches, "\r", end="")
 
+            model.calculate_losses_epoch()
+
+    if not model.regression:
+        legs_avg_f1 = (model.f1_leg0 + model.f1_leg1 + model.f1_leg2 + model.f1_leg3) / 4.0
+        return pred, labels, model.acc, model.f1_leg0, model.f1_leg1, model.f1_leg2, model.f1_leg3, legs_avg_f1
+    else:
+        raise NotImplementedError
 
 def train_model(
         train_dataset: Subset,
@@ -491,11 +530,12 @@ def train_model(
         num_layers: int = 8,
         optimizer: str = "adam",
         lr: float = 0.003,
-        epochs: int = 100,
+        epochs: int = 30,
         hidden_size: int = 10,
         regression: bool = True,
         seed: int = 0,
-        devices: int = 1):
+        devices: int = 1,
+        early_stopping: bool = False):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -538,12 +578,14 @@ def train_model(
     limit_train_batches = None
     limit_val_batches = None
     limit_test_batches = None
+    limit_predict_batches = None
     num_workers = 30
     persistent_workers = True
     if testing_mode:
         limit_train_batches = 10
         limit_val_batches = 5
         limit_test_batches = 5
+        limit_predict_batches = limit_test_batches * batch_size
         num_workers = 1
         persistent_workers = False
 
@@ -652,6 +694,11 @@ def train_model(
     # Lower precision of operations for faster training
     torch.set_float32_matmul_precision("medium")
 
+    # Setup early stopping mechanism to match MorphoSymm-Replication
+    callbacks = [checkpoint_callback, last_model_callback]
+    if early_stopping:
+        callbacks.append(EarlyStopping(monitor=monitor, patience=10, mode='min'))
+
     # Train the model and test
     trainer = L.Trainer(
         default_root_dir=path_to_save,
@@ -663,12 +710,13 @@ def train_model(
         limit_train_batches=limit_train_batches,
         limit_val_batches=limit_val_batches,
         limit_test_batches=limit_test_batches,
+        limit_predict_batches=limit_predict_batches,
         check_val_every_n_epoch=1,
         enable_progress_bar=True,
         logger=wandb_logger,
-        callbacks=[checkpoint_callback, last_model_callback])
+        callbacks=callbacks)
     trainer.fit(lightning_model, trainLoader, valLoader)
-    trainer.test(lightning_model, dataloaders=testLoader)
+    trainer.test(lightning_model, dataloaders=testLoader, verbose=True)
 
     # Return the path to the trained checkpoint
     return path_to_save
