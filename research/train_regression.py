@@ -21,21 +21,21 @@ def main():
 
     # Initalize the Train datasets
     bravo = QuadSDKDataset_A1_Bravo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Bravo').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     charlie = QuadSDKDataset_A1_Charlie(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Charlie').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     echo = QuadSDKDataset_A1_Echo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Echo').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     foxtrot = QuadSDKDataset_A1_Foxtrot(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Foxtrot').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     juliett = QuadSDKDataset_A1_Juliett(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Juliett').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     kilo = QuadSDKDataset_A1_Kilo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Kilo').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     mike = QuadSDKDataset_A1_Mike(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Mike').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     november = QuadSDKDataset_A1_November(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-November').absolute(), path_to_urdf, 
-                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     
     # Define train and val sets
     train_datasets = [bravo, charlie, echo, foxtrot, juliett, kilo, november]
@@ -51,6 +51,10 @@ def main():
     for dataset in val_datasets:
          val_subsets.append(torch.utils.data.Subset(dataset, np.arange(0, dataset.__len__() - 1)))
     val_dataset = torch.utils.data.ConcatDataset(val_subsets)
+
+    # Convert them to subsets
+    train_dataset = torch.utils.data.Subset(train_dataset, np.arange(0, train_dataset.__len__()))
+    val_dataset = torch.utils.data.Subset(val_dataset, np.arange(0, val_dataset.__len__()))
     
     # Train the model (evaluate later, so no test set)
     train_model(train_dataset, val_dataset, None, normalize, 

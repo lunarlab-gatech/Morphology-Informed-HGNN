@@ -739,14 +739,18 @@ def train_model(
             0].dataset.get_data_format()
         val_data_format = val_dataset.dataset.datasets[
             0].dataset.get_data_format()
-        test_data_format = test_dataset.dataset.datasets[0].get_data_format()
+        if not disable_test:
+            test_data_format = test_dataset.dataset.datasets[0].get_data_format()
     elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
         train_data_format = train_dataset.dataset.get_data_format()
         val_data_format = val_dataset.dataset.get_data_format()
-        test_data_format = test_dataset.dataset.get_data_format()
+        if not disable_test:
+            test_data_format = test_dataset.dataset.get_data_format()
     else:
         raise ValueError("Unexpected Data format")
-    if train_data_format != val_data_format or val_data_format != test_data_format:
+    
+
+    if train_data_format != val_data_format or ((not disable_test) and (val_data_format != test_data_format)):
         raise ValueError("Data formats of datasets don't match")
 
     # Extract important information from the Subsets
