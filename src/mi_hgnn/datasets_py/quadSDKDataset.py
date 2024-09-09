@@ -5,6 +5,7 @@ import os
 from .flexibleDataset import FlexibleDataset
 import numpy as np
 import scipy.io as sio
+from scipy.spatial.transform import Rotation
 
 class QuadSDKDataset(FlexibleDataset):
     """
@@ -71,7 +72,7 @@ class QuadSDKDataset(FlexibleDataset):
 
             # Add on the GRF data
             grf_vec = grf_data.vectors
-            grf_array = np.array([[grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
+            grf_array = np.array([[ grf_vec[0].x, grf_vec[0].y, grf_vec[0].z,
                                     grf_vec[1].x, grf_vec[1].y, grf_vec[1].z,
                                     grf_vec[2].x, grf_vec[2].y, grf_vec[2].z,
                                     grf_vec[3].x, grf_vec[3].y, grf_vec[3].z]], dtype=np.float64)
@@ -124,11 +125,35 @@ class QuadSDKDataset(FlexibleDataset):
         # Write a txt file to save the dataset length, first sequence index,
         # and the download id (for ensuring we have the right dataset later)
         with open(os.path.join(self.processed_dir, "info.txt"), "w") as f:
-            f.write(str(dataset_entries) + " " + self.get_google_drive_file_id())
+            file_id, loc = self.get_file_id_and_loc()
+            f.write(str(dataset_entries) + " " + file_id)
+    
+# ================================================================
+# ======================== SUBCLASSES ============================
+# ================================================================
 
+class QuadSDKDataset_A1_DEPRECATED(QuadSDKDataset):
+    """
+    Note: This class is deprecated, but is kept around to support 
+    test cases that ensure the FlexibleDataset is working. Don't
+    use this class for any development, as the units/frames of the
+    values aren't verified and the sorting values might not be 
+    correct.
+    """
+
+    # ===================== DATASET PROPERTIES =======================
+    def get_expected_urdf_name(self):
+        return "a1"
+    
     # ============= DATA SORTING ORDER AND MAPPINGS ==================    
     def get_urdf_name_to_dataset_array_index(self):
+        # Our URDF order for A1 robot is FR, FL, RR, RL.
+        
         return {
+            # Order of joint data can be found here: https://github.com/robomechanics/quad-sdk/wiki/FAQ.
+            # Note: Because they refer to the first joint as the abduction/adduction joint, and the second 
+            # joint as the hip joint, this means that our "hip_joint" corresponds to their abduction/adduction 
+            # joint, and our "thigh_joint" corresponds to what they call the hip joint.
             'floating_base': 0,
             
             'FR_hip_joint': 6,
@@ -144,14 +169,14 @@ class QuadSDKDataset(FlexibleDataset):
             'RL_thigh_joint': 4,
             'RL_calf_joint': 5,
 
+            # Label order is from here: https://github.com/lunarlab-gatech/quad_sdk_fork/blob/devel/quad_simulator/gazebo_scripts/src/contact_state_publisher.cpp,
+            # referring to the URDF to see order of toes. It's the same order as the joint data.
+
             'FR_foot_fixed': 2,
             'FL_foot_fixed': 0,
             'RR_foot_fixed': 3,
-            'RL_foot_fixed': 1 }
-
-    # ===================== DATASET PROPERTIES =======================
-    def get_expected_urdf_name(self):
-        return "a1"
+            'RL_foot_fixed': 1 
+        }
     
     # ======================== DATA LOADING ==========================
     def load_data_at_dataset_seq(self, seq_num: int):
@@ -167,35 +192,113 @@ class QuadSDKDataset(FlexibleDataset):
         z_grfs = np.squeeze(np.array(self.mat_data['F'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)[-1,z_indices])
         r_p = np.array(self.mat_data['r_p'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         r_quat = np.array(self.mat_data['r_o'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 4)
-        return lin_acc, ang_vel, j_p, j_v, j_T, None, None, z_grfs, r_p, r_quat
+        timestamps = np.array(self.mat_data['timestamps'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+
+        return lin_acc, ang_vel, j_p, j_v, j_T, None, None, z_grfs, r_p, r_quat, timestamps
+
+class QuadSDKDataset_A1(QuadSDKDataset):
+    # ===================== DATASET PROPERTIES =======================
+    def get_expected_urdf_name(self):
+        return "a1_description"
     
-    def load_data_at_dataset_seq_with_timestamps(self, seq_num: int):
+    # ============= DATA SORTING ORDER AND MAPPINGS ==================    
+    def get_urdf_name_to_dataset_array_index(self):
+        # Our URDF order for the Go2 is FR, FL, RR, RL.
+
+        return {
+            'floating_base': 0,
+            
+            # Joint Order is specified here: https://github.com/robomechanics/quad-sdk/wiki/FAQ .
+            # It goes abd->hip->knee, which in our framing, is hip->thigh->calf, and this matches our URDF order.
+            # Leg order goes FL, RL, FR, RR, which matches our URDF order of FL, RL, FR, RR.
+            # Further proof for this can be found in quad_sdk_fork/quad_simulator/gazebo_scripts/src/estimator_plugin.cpp.
+
+            # FL Leg
+            '8': 0,
+            '0': 1,
+            '1': 2,
+
+            # RL Leg
+            '9': 3,
+            '2': 4,
+            '3': 5,
+
+            # FR Leg
+            '10': 6,
+            '4': 7,
+            '5': 8,
+
+            # RR Leg
+            '11': 9,
+            '6': 10,
+            '7': 11,
+
+            # Feet orders (which matches leg orders)
+            # Manually verified by reviewing scripts in quad_sdk_fork/quad_simulator/gazebo_scripts/src.
+            'jtoe0': 0,
+            'jtoe1': 1,
+            'jtoe2': 2,
+            'jtoe3': 3,
+        }
+
+    
+    def urdf_to_pin_order_mapping(self):
         """
-        Same as load_data_at_dataset_seq(), but extra return argument 
-        on the end
+        See flexibleDataset.py for definition of this function.
 
-        NOTE: even if self.normalize is set, this WON'T return
-        normalized data. Use load_data_sorted() for that.
+        Nb joints = 14 (nq=19,nv=18)
+            Joint 0 universe: parent=0
+            Joint 1 root_joint: parent=0
+            Joint 2 10: parent=1
+            Joint 3 4: parent=2
+            Joint 4 5: parent=3
+            Joint 5 11: parent=1
+            Joint 6 6: parent=5
+            Joint 7 7: parent=6
+            Joint 8 8: parent=1
+            Joint 9 0: parent=8
+            Joint 10 1: parent=9
+            Joint 11 9: parent=1
+            Joint 12 2: parent=11
+            Joint 13 3: parent=12
 
-        Parameters:
-            seq_num (int): The sequence number of the txt file
-                whose data should be loaded.
-
-        Returns:
-            Same arguments as load_data_at_dataset_seq() +
-            timestamps (np.array) - Array containing the timestamps of the data. The rows
-                correspond to the history length and the columns correspond to the specific
-                timestamp per data. Column 0 contains the grf_timestamp (for the GRF labels),
-                Column 1 contains the joint_timestamp (for the joint data, and additionally
-                the robot pose information), and Column 2 contains the imu_timestamp (for the
-                linear acceleration and angular velocity of the IMU). This value is in the 
-                shape of (history_length, 3).
+             Therefore pinnochio order is FR, RR, FL, RL.
+           The A1-Quad URDF order is FL, RL, FR, RR.
+           This gives the URDF->Pin mapping seen below.
         """
+
+        # Specifically for the Go2 Robot. 
+        return [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5], [2, 3, 0, 1]
+    
+    def pin_to_urdf_order_mapping(self):
+        return [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5], [2, 3, 0, 1]
+
+    # ======================== DATA LOADING ==========================
+    def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        The units of the return values are as follows:
+        - lin_acc (meters/sec^2, represented in the world frame (converted from body frame))
+        - ang_vel (rad/sec, represented in the world frame (converted from body frame))
+        - j_p (rad)
+        - j_v (rad/sec)
+        - j_T (Newton-meters)
+        - z_grfs (Newtons, represented in the world frame)
+        - r_p (meters, represented in the world frame)
+        - r_quat (N/A (Quaternion), represented in the world frame) (x, y, z, w)
+        - timestamps (secs)
+
+        This dataset does have the following values available, but doesn't load
+        them because they aren't employed by the Dynamics model, so we don't
+        want them included in the learning model automatically.
+
+        - f_p (meters, represented in robot's body frame) 
+        - f_v (meters/sec, represented in robot's body frame)
+        """
+
         # Outline the indices to extract the just the Z-GRFs
         z_indices = [2, 5, 8, 11]
 
         # Convert them all to numpy arrays
-        timestamps = np.array(self.mat_data['timestamps'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         lin_acc = np.array(self.mat_data['imu_acc'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         ang_vel = np.array(self.mat_data['imu_omega'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         j_p = np.array(self.mat_data['q'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
@@ -204,73 +307,202 @@ class QuadSDKDataset(FlexibleDataset):
         z_grfs = np.squeeze(np.array(self.mat_data['F'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)[-1,z_indices])
         r_p = np.array(self.mat_data['r_p'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
         r_quat = np.array(self.mat_data['r_o'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 4)
+        timestamps = np.array(self.mat_data['timestamps'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+
+        # Convert the lin_acc and ang_vel from body frame to world frame
+        for i in range(0, self.history_length):
+            world_to_body_R = Rotation.from_quat(r_quat[i])
+            body_to_world_R = world_to_body_R.inv().as_matrix()
+            lin_acc_T = np.array([[lin_acc[i][0]], [lin_acc[i][1]], [lin_acc[i][2]]], dtype=np.double)
+            ang_vel_T = np.array([[ang_vel[i][0]], [ang_vel[i][1]], [ang_vel[i][2]]], dtype=np.double)
+            lin_acc[i] = ((body_to_world_R @ lin_acc_T).T)[0]
+            ang_vel[i] = ((body_to_world_R @ ang_vel_T).T)[0]
+
         return lin_acc, ang_vel, j_p, j_v, j_T, None, None, z_grfs, r_p, r_quat, timestamps
+
+
+class QuadSDKDataset_Go2(QuadSDKDataset):
+    # ===================== DATASET PROPERTIES =======================
+    def get_expected_urdf_name(self):
+        return "go2_description"
     
-    def load_data_sorted_with_timestamps(self, seq_num: int):
+    # ============= DATA SORTING ORDER AND MAPPINGS ==================    
+    def get_urdf_name_to_dataset_array_index(self):
+        # Our URDF order for the Go2 is FR, FL, RR, RL.
+
+        return {
+            'floating_base': 0,
+            
+            # Joint Order is specified here: https://github.com/robomechanics/quad-sdk/wiki/FAQ .
+            # It goes abd->hip->knee, which in our framing, is hip->thigh->calf, and this matches
+            # our URDF order.
+            # Leg order goes FL, RL, FR, RR, which matches our URDF order of FL, RL, FR, RR.
+
+            # FL Leg
+            '8': 0,
+            '0': 1,
+            '1': 2,
+
+            # RL Leg
+            '9': 3,
+            '2': 4,
+            '3': 5,
+
+            # FR Leg
+            '10': 6,
+            '4': 7,
+            '5': 8,
+
+            # RR Leg
+            '11': 9,
+            '6': 10,
+            '7': 11,
+
+            # Feet orders (which matches leg orders)
+            'jtoe0': 0,
+            'jtoe1': 1,
+            'jtoe2': 2,
+            'jtoe3': 3,
+        }
+
+    
+    def urdf_to_pin_order_mapping(self):
         """
-        Same as load_data_sorted(), but also returns timestamps.
+        See flexibleDataset.py for definition of this function.
 
-        Returns:
-            Same values as load_data_at_dataset_seq_with_timestamps(), but order of
-            values inside arrays have been sorted (and potentially
-            normalized).
+        Nb joints = 14 (nq=19,nv=18)
+            Joint 0 universe: parent=0
+            Joint 1 root_joint: parent=0
+            Joint 2 10: parent=1
+            Joint 3 4: parent=2
+            Joint 4 5: parent=3
+            Joint 5 11: parent=1
+            Joint 6 6: parent=5
+            Joint 7 7: parent=6
+            Joint 8 8: parent=1
+            Joint 9 0: parent=8
+            Joint 10 1: parent=9
+            Joint 11 9: parent=1
+            Joint 12 2: parent=11
+            Joint 13 3: parent=12
+
+             Therefore their order is FR, RR, FL, RL.
+           The Go2-Quad URDF order is FL, RL, FR, RR.
+           This gives the URDF->Pin mapping seen below.
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_at_dataset_seq_with_timestamps(seq_num)
 
-        # Sort the joint information
-        unsorted_list = [j_p, j_v, j_T]
-        sorted_list = []
-        for unsorted_array in unsorted_list:
-            if unsorted_array is not None:
-                sorted_list.append(unsorted_array[:,self.joint_node_indices_sorted])
-            else:
-                sorted_list.append(None)
+        # Specifically for the Go2 Robot. 
+        return [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5], [2, 3, 0, 1]
+    
+    def pin_to_urdf_order_mapping(self):
+        return [6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5], [2, 3, 0, 1]
 
-        # Sort the foot information
-        unsorted_foot_list = [f_p, f_v]
-        sorted_foot_list = []
-        for unsorted_array in unsorted_foot_list:
-            if unsorted_array is not None:
-                sorted_indices = []
-                for index in self.foot_node_indices_sorted:
-                    for i in range(0, 3):
-                        sorted_indices.append(int(index*3+i))
-                sorted_foot_list.append(unsorted_array[:,sorted_indices])
-            else:
-                sorted_foot_list.append(None)
+    # ======================== DATA LOADING ==========================
+    def load_data_at_dataset_seq(self, seq_num: int):
+        """
+        The units of the return values are as follows:
+        - lin_acc (meters/sec^2, represented in the world frame (converted from body frame))
+        - ang_vel (rad/sec, represented in the world frame (converted from body frame))
+        - j_p (rad)
+        - j_v (rad/sec)
+        - j_T (Newton-meters)
+        - z_grfs (Newtons, represented in the world frame)
+        - r_p (meters, represented in the world frame)
+        - r_quat (N/A (Quaternion), represented in the world frame) (x, y, z, w)
+        - timestamps (secs)
 
-        # Sort the ground truth labels
-        labels_sorted = None
-        if labels is None:
-            raise ValueError("Dataset must provide labels.")
-        else:
-            labels_sorted = labels[self.foot_node_indices_sorted]
+        This dataset does have the following values available, but doesn't load
+        them because they aren't employed by the Dynamics model, so we don't
+        want them included in the learning model automatically.
 
-        # Normalize the data if desired
-        norm_arrs = [None, None, None, None, None, None, None, None, None]
-        if self.normalize:
-            # Normalize all data except the labels
-            to_normalize_array = [lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], r_p, r_o]
-            for i, array in enumerate(to_normalize_array):
-                if (array is not None) and (array.shape[0] > 1):
-                    norm_arrs[i] = np.nan_to_num((array-np.mean(array,axis=0))/np.std(array, axis=0), copy=False, nan=0.0)
+        - f_p (meters, represented in robot's body frame) 
+        - f_v (meters/sec, represented in robot's body frame)
+        """
 
-            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8], timestamps
-        else:
-            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o, timestamps
+        # Outline the indices to extract the just the Z-GRFs
+        z_indices = [2, 5, 8, 11]
+
+        # Convert them all to numpy arrays
+        lin_acc = np.array(self.mat_data['imu_acc'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        ang_vel = np.array(self.mat_data['imu_omega'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        j_p = np.array(self.mat_data['q'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        j_v = np.array(self.mat_data['qd'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        j_T = np.array(self.mat_data['tau'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)
+        z_grfs = np.squeeze(np.array(self.mat_data['F'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 12)[-1,z_indices])
+        r_p = np.array(self.mat_data['r_p'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+        r_quat = np.array(self.mat_data['r_o'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 4)
+        timestamps = np.array(self.mat_data['timestamps'][seq_num:seq_num+self.history_length]).reshape(self.history_length, 3)
+
+        # Convert the lin_acc and ang_vel from body frame to world frame
+        for i in range(0, self.history_length):
+            world_to_body_R = Rotation.from_quat(r_quat[i])
+            body_to_world_R = world_to_body_R.inv().as_matrix()
+            lin_acc_T = np.array([[lin_acc[i][0]], [lin_acc[i][1]], [lin_acc[i][2]]], dtype=np.double)
+            ang_vel_T = np.array([[ang_vel[i][0]], [ang_vel[i][1]], [ang_vel[i][2]]], dtype=np.double)
+            lin_acc[i] = ((body_to_world_R @ lin_acc_T).T)[0]
+            ang_vel[i] = ((body_to_world_R @ ang_vel_T).T)[0]
+
+        return lin_acc, ang_vel, j_p, j_v, j_T, None, None, z_grfs, r_p, r_quat, timestamps
 
 # ================================================================
 # ===================== DATASET SEQUENCES ========================
 # ================================================================
 
-class QuadSDKDataset_A1Speed0_5(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M"
+# A1_DEPRECATED
+class QuadSDKDataset_A1Speed0_5_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
+    def get_file_id_and_loc(self):
+        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M", "Google"
 
-class QuadSDKDataset_A1Speed1_0(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf"
+class QuadSDKDataset_A1Speed1_0_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
+    def get_file_id_and_loc(self):
+        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf", "Google"
 
-class QuadSDKDataset_A1Speed1_5FlippedOver(QuadSDKDataset):
-    def get_google_drive_file_id(self):
-        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT"
+class QuadSDKDataset_A1Speed1_5FlippedOver_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
+    def get_file_id_and_loc(self):
+        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT", "Google"
+    
+# A1
+class QuadSDKDataset_A1_Bravo(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Flat, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/kv8z0khuqrredzjwm13ct/robot_1_a1_0p5mps_flat_mu1_75_mu2_75_trial1_2024-09-07-13-52-28.bag?rlkey=wd4gzwxc7js5vcddmt6muczjn&st=ry19f48p&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Charlie(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Flat, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/tqqrpmeg2405jqodmcpmc/robot_1_a1_0p5mps_flat_mu1_100_mu2_100_trial1_2024-09-07-13-59-07.bag?rlkey=3907a5akv6vcdw0u9rxo3chev&st=6rweswww&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Echo(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Slope, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/4pifdidyxeaiwfh4jhoti/robot_1_a1_0p5mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-14-28.bag?rlkey=vfae02ds7fcsudfqbqggisb5p&st=7j4wtr2h&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Foxtrot(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Slope, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/gthmjhcrktehpwt2mlxub/robot_1_a1_0p5mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-27-37.bag?rlkey=ryyzx04zrr6oba316yuef5ppp&st=j3r4cwgg&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Juliett(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Flat, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/bie6yxlkq9rjmqonjthsd/robot_1_a1_0p75mps_flat_mu1_75_mu2_75_trial1_2024-09-07-14-45-05.bag?rlkey=jxg88klloihnx9kezuhnkxmer&st=xvw3ij2q&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Kilo(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Flat, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/k75t9qxsffqa9mvfqmi5z/robot_1_a1_0p75mps_flat_mu1_100_mu2_100_trial1_2024-09-07-14-33-58.bag?rlkey=ut9tdpv58zhq4zniy9i3cdid2&st=xyqi3smu&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Mike(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Slope, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/2w2549167mescx9r56m8h/robot_1_a1_0p75mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-42-50.bag?rlkey=4aokwtibn21egtbq2zshcg1n1&st=prdslvs8&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_November(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Slope, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/jycttraih00zzjcxprliq/robot_1_a1_0p75mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-35-14.bag?rlkey=21qmqm18n6bf436i3xfj0wrc7&st=xgk0vc6j&dl=1", "Dropbox"
+
+# Go2
+class QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(QuadSDKDataset_Go2):
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/qxsgvg9qhg6fmhkkrpdtp/robot_1_go2_0.5mps_mu50_mu250_trial1_2024-09-02-18-54-26.bag?rlkey=f9rjl7r4cvejupxharda64ctj&st=fy9g8fn2&dl=1", "Dropbox"

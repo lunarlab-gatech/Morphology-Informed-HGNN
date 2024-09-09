@@ -5,6 +5,7 @@ from pathlib import Path
 from torchvision.datasets.utils import download_file_from_google_drive
 import scipy.io as sio
 import numpy as np
+import urllib.request
 
 class FlexibleDataset(Dataset):
     """
@@ -25,9 +26,10 @@ class FlexibleDataset(Dataset):
                  urdf_path: Path,
                  ros_builtin_path: str,
                  urdf_to_desc_path: str,
-                 data_format: str = 'gnn',
+                 data_format: str = 'heterogeneous_gnn',
                  history_length: int = 1,
                  normalize: bool = False,
+                 urdf_path_dynamics: Path = None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -44,7 +46,7 @@ class FlexibleDataset(Dataset):
                 urdf_to_desc_path (str): The relative path from the urdf file to
                     the urdf description directory. This directory typically contains
                     folders like "meshes" and "urdf".
-                data_format (str): Either 'gnn', 'mlp', or 'heterogeneous_gnn'. 
+                data_format (str): Either 'dynamics', 'mlp', or 'heterogeneous_gnn'. 
                     Determines how the get() method returns data.
                 history_length (int): The length of the history of inputs to use
                     for our graph entries.
@@ -53,12 +55,15 @@ class FlexibleDataset(Dataset):
                     time domain, specifically only for the `history_length` considered
                     in the current entry. The normalization is unique per node input, and 
                     unique per specific dataset entry.
+                urdf_path_dynamics (Path): The path to a similar URDF file to 'urdf_path',
+                    but not pruned of non-kinematic joints. This allows pinnochio full
+                    access to the URDF information necessary for dynamics calculations.
         """
         # Check for valid data format
         self.data_format = data_format
-        if self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
+        if self.data_format != 'dynamics' and self.data_format != 'mlp' and self.data_format != 'heterogeneous_gnn':
             raise ValueError(
-                "Parameter 'data_format' must be 'mlp' or 'heterogeneous_gnn'."
+                "Parameter 'data_format' must be 'dynamics', 'mlp', or 'heterogeneous_gnn'."
             )
 
         # Setup the directories for raw and processed data, download it, 
@@ -76,7 +81,12 @@ class FlexibleDataset(Dataset):
             data = f.readline().split(" ")
             
             self.history_length = history_length
+            if self.history_length != 1 and self.data_format == 'dynamics':
+                raise ValueError("Data format of 'dynamics' only supports history length of 1.")
+
             self.length = int(data[0]) - self.history_length + 1
+            if self.data_format == 'dynamics':
+                self.length -= 2 # We can't use the first or last entry, due to the derivative.
             if self.length <= 0:
                 raise ValueError(
                     "Dataset has too few entries for the provided 'history_length'."
@@ -86,12 +96,16 @@ class FlexibleDataset(Dataset):
             # Protects against users passing a folder path to a different
             # dataset sequence, causing a different dataset to be used than
             # expected.
-            if self.get_google_drive_file_id() != data[1]:
+            file_id, loc = self.get_file_id_and_loc()
+            if file_id != data[1]:
                 raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
 
         # Parse the robot graph from the URDF file
         self.robotGraph = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
                                                       urdf_to_desc_path)
+        if urdf_path_dynamics is not None:
+            self.robotGraphFull = HeterogeneousRobotGraph(urdf_path_dynamics, ros_builtin_path,
+                                                        urdf_to_desc_path)
  
         # Make sure the URDF file we were given properly matches
         # what we are expecting
@@ -134,15 +148,13 @@ class FlexibleDataset(Dataset):
         self.normalize = normalize
 
         # Precompute values for variables_to_use
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(0)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(0)
         self.variables_to_use_all = self.find_variables_to_use([lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v])
         self.variables_to_use_base = self.find_variables_to_use([lin_acc, ang_vel])
         self.variables_to_use_joint = self.find_variables_to_use([j_p, j_v, j_T])
         self.variables_to_use_foot = self.find_variables_to_use([f_p, f_v])
 
         # Check we have necessary variables for some models
-        if len(self.variables_to_use_joint) == 0 and self.data_format == 'gnn':
-            raise ValueError("Dataset must provide at least one joint input for GNN models.")
         if len(self.variables_to_use_base) + len(self.variables_to_use_joint) + len(self.variables_to_use_foot) == 0:
             raise ValueError("Dataset must provide at least one input.")
 
@@ -182,11 +194,17 @@ class FlexibleDataset(Dataset):
         return [self.get_downloaded_dataset_file_name()]
 
     def download(self):
-        download_file_from_google_drive(self.get_google_drive_file_id(),
-                                        Path(self.root, 'raw'),
-                                        self.get_downloaded_dataset_file_name())
+        file_id, loc = self.get_file_id_and_loc()
+        if loc == "Google":
+            download_file_from_google_drive(file_id,
+                                            Path(self.root, 'raw'),
+                                            self.get_downloaded_dataset_file_name())
+        elif loc == "Dropbox":
+            urllib.request.urlretrieve(file_id, Path(self.root, "raw", self.get_downloaded_dataset_file_name()))
+        else:
+            raise NotImplementedError("Only Google and Dropbox are implemented.")
         
-    def get_google_drive_file_id(self):
+    def get_file_id_and_loc(self):
         """
         Method for child classes to choose which sequence to load;
         used if the dataset is downloaded.
@@ -194,6 +212,10 @@ class FlexibleDataset(Dataset):
         Additionally, used to check already downloaded datasets to
         make sure the user didn't accidentally pass a path to
         a different sequence.
+
+        Returns:
+            file_id (str) - File id (or link) for download
+            location (str) - Either "Google" or "Dropbox"
         """
         raise self.notImplementedError
     
@@ -214,16 +236,13 @@ class FlexibleDataset(Dataset):
         Make the list of all the processed 
         files we are expecting.
         """
-        return ["info.txt"]
+        return ["data.mat", "info.txt"]
 
     def process(self):
         """
         Called when we don't have all of the processed
         files we are expecting, so we process the data
         to generate those files.
-
-        Data must be saved into text files, in the order
-        returned by load_data_at_dataset_seq().
         """
         raise self.notImplementedError
     
@@ -238,6 +257,29 @@ class FlexibleDataset(Dataset):
         in the dataset array. This allows us to know
         which dataset entries correspond to the which 
         joints in the URDF.
+        """
+        raise self.notImplementedError
+    
+    def urdf_to_pin_order_mapping(self):
+        """
+        Returns the mappings from the URDF order to
+        the pinocchio model order.
+
+        Returns:
+            joint_mappings (np.array) - An array that maps URDF joint order to Pin joint order, of shape [12]
+            foot_mappings (np.array) - And array that maps URDF foot order to Pin foot order, of shape [4]
+        """
+        raise self.notImplementedError
+    
+    def pin_to_urdf_order_mapping(self):
+        """
+        Returns the mappings from the pinocchio model 
+        order to the URDF order. Passed to the Dynamics
+        Model so that it can return the outputs in URDF order.
+
+        Returns:
+            joint_mappings (np.array) - An array that maps Pin joint order to URDF joint order, of shape [12]
+            foot_mappings (np.array) - An array that maps Pin foot order to URDF foot order, of shape [4]
         """
         raise self.notImplementedError
 
@@ -308,7 +350,7 @@ class FlexibleDataset(Dataset):
             values inside arrays have been sorted (and potentially
             normalized).
         """
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_at_dataset_seq(seq_num)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_at_dataset_seq(seq_num)
 
         # Sort the joint information
         unsorted_list = [j_p, j_v, j_T]
@@ -349,10 +391,9 @@ class FlexibleDataset(Dataset):
                     array_tensor = torch.from_numpy(array)
                     norm_arrs[i] = np.nan_to_num((array_tensor-torch.mean(array_tensor,axis=0))/torch.std(array_tensor, axis=0, correction=1).numpy(), copy=False, nan=0.0)
 
-            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8]
+            return norm_arrs[0], norm_arrs[1], norm_arrs[2], norm_arrs[3], norm_arrs[4], norm_arrs[5], norm_arrs[6], labels_sorted, norm_arrs[7], norm_arrs[8], timestamps
         else:
-            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o
-
+            return lin_acc, ang_vel, sorted_list[0], sorted_list[1], sorted_list[2], sorted_foot_list[0], sorted_foot_list[1], labels_sorted, r_p, r_o, timestamps
 
     def load_data_at_dataset_seq(self, seq_num: int):
         """
@@ -378,6 +419,13 @@ class FlexibleDataset(Dataset):
                 Only the latest entry in the time window is used as the labels.
             r_p (np.array) - Robot position (GT), in the order (x, y, z), of shape [history_length, 3]
             r_o (np.array) - Robot orientation (GT) as a quaternion, in the order (x, y, z, w), of shape [history_length, 4]
+            timestamps (np.array) - Array containing the timestamps of the data. The rows
+                correspond to the history length and the columns correspond to the specific
+                timestamp per data. Column 0 contains the grf_timestamp (for the GRF labels),
+                Column 1 contains the joint_timestamp (for the joint data, and additionally
+                the robot pose information), and Column 2 contains the imu_timestamp (for the
+                linear acceleration and angular velocity of the IMU). This value is in the 
+                shape of (history_length, 3).
 
             NOTE: If the dataset doesn't have a certain value, or we aren't currently
             using it, the parameter will be filled with a value of None.
@@ -395,11 +443,60 @@ class FlexibleDataset(Dataset):
             raise IndexError("Index value out of Dataset bounds.")
 
         # Return data in the proper format
+        if self.data_format == 'dynamics':
+            return self.get_helper_dynamics(idx)
         if self.data_format == 'mlp':
             return self.get_helper_mlp(idx)
         elif self.data_format == 'heterogeneous_gnn':
             return self.get_helper_heterogeneous_gnn(idx)
         
+    def get_helper_dynamics(self, idx: int):
+        """
+        Gets a dataset entry for the dynamics model. Shifts the idx internally
+        by 1 so that we can calculate the derivative of certain variables.
+
+        Also, reorders from URDF order to pinnochio model order, including
+        the labels.
+        
+        Returns:
+            q - The generalized coordinates
+            vel - The generalized velocity
+            acc - The generalized acceleration
+            tau - The generalized torques
+            labels - Ground Truth labels (in pinocchio foot order)
+        """
+        _,  ang_vel_prev,    _, j_v_prev,   _,   _,   _,      _, r_p_prev,   _, ts_prev = self.load_data_sorted(idx)
+        lin_acc, ang_vel,  j_p,      j_v, j_T, f_p, f_v, labels,      r_p, r_o,      ts = self.load_data_sorted(idx + 1)
+        _,  ang_vel_next,    _, j_v_next,   _,   _,   _,      _, r_p_next,   _, ts_next = self.load_data_sorted(idx + 2)
+
+        # load_data_sorted returns data sorted by URDF order.
+        # However, we need it in the pinnocchio model order.
+        pin_sorted_order_joints, pin_sorted_order_labels = self.urdf_to_pin_order_mapping()
+        j_p = j_p[:, pin_sorted_order_joints]
+        j_v_prev = j_v_prev[:, pin_sorted_order_joints]
+        j_v = j_v[:, pin_sorted_order_joints]
+        j_v_next = j_v_next[:, pin_sorted_order_joints]     
+        j_T = j_T[:, pin_sorted_order_joints] 
+        labels = labels[pin_sorted_order_labels]
+
+        # Calculate delta_t
+        delta_t_imu = ts_next[:, 2] - ts_prev[:, 2]
+        delta_t_joint = ts_next[:, 1] - ts_prev[:, 1]
+
+        # Calculate linear velocity, angular acceleration, and joint acceleration
+        lin_vel = (r_p_next - r_p_prev) / delta_t_joint
+        ang_acc = (ang_vel_next - ang_vel_prev) / delta_t_imu
+        j_a = (j_v_next - j_v_prev) / delta_t_joint
+
+        # Create the generalized coordinate vectors
+        q = torch.tensor((np.hstack((np.hstack((r_p, r_o)), j_p))[0]), dtype=torch.float64)
+        vel = torch.tensor((np.hstack((np.hstack((lin_vel, ang_vel)), j_v))[0]), dtype=torch.float64)
+        acc = torch.tensor((np.hstack((np.hstack((lin_acc, ang_acc)), j_a))[0]), dtype=torch.float64)
+        tau = torch.tensor((np.hstack((np.zeros([1, 6]), j_T))[0]), dtype=torch.float64)
+        labels = torch.tensor((labels), dtype=torch.float64)
+
+        return q, vel, acc, tau, labels
+
     def get_helper_mlp(self, idx: int):
         """
         Gets a Dataset entry if we are using an MLP model.
@@ -409,7 +506,7 @@ class FlexibleDataset(Dataset):
         x = None
 
         # Only add variables that aren't None
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx)
         dataset_inputs = [lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v]
         final_input = np.array([])
         for y in self.variables_to_use_all:
@@ -458,7 +555,7 @@ class FlexibleDataset(Dataset):
         foot_x = torch.ones((self.hgnn_number_nodes[2], self.foot_width), dtype=torch.float64)
 
         # Load the data for this entry
-        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o = self.load_data_sorted(idx)
+        lin_acc, ang_vel, j_p, j_v, j_T, f_p, f_v, labels, r_p, r_o, timestamps = self.load_data_sorted(idx)
 
         # For each joint specified
         joint_data = [j_p, j_v, j_T]
