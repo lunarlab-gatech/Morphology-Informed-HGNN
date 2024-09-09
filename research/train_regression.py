@@ -6,7 +6,7 @@ from mi_hgnn.visualization import visualize_model_outputs_regression
 
 def main():
     # ================================= CHANGE THESE ===================================
-    model_type = 'heterogeneous_gnn'
+    model_type = 'mlp'
     # ==================================================================================
 
     # Define model information

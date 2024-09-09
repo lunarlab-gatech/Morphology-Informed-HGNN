@@ -14,11 +14,9 @@ def main():
     normalize = False
 
     # Initalize the datasets
-    path_to_A1_1_0 = Path(Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0_DELETEME').absolute()
-    a1_speed_1_0 = QuadSDKDataset_A1Speed1_0(path_to_A1_1_0, path_to_urdf, 'package://a1_description/', '', 
-                                                        model_type, history_length , normalize, 
-                                                        urdf_path_dynamics=path_to_urdf_dynamics)
-    test_dataset = torch.utils.data.Subset(a1_speed_1_0, np.arange(0, a1_speed_1_0.__len__()))
+    bravo = QuadSDKDataset_A1_Bravo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Bravo').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    test_dataset = torch.utils.data.Subset(bravo, np.arange(0, bravo.__len__()))
 
     # Evaluate the model
     pred, labels, mse, rmse, l1 = evaluate_model(None, test_dataset)
