@@ -29,6 +29,7 @@ class FlexibleDataset(Dataset):
                  data_format: str = 'heterogeneous_gnn',
                  history_length: int = 1,
                  normalize: bool = False,
+                 urdf_path_dynamics: Path = None,
                  transform=None,
                  pre_transform=None,
                  pre_filter=None):
@@ -54,6 +55,9 @@ class FlexibleDataset(Dataset):
                     time domain, specifically only for the `history_length` considered
                     in the current entry. The normalization is unique per node input, and 
                     unique per specific dataset entry.
+                urdf_path_dynamics (Path): The path to a similar URDF file to 'urdf_path',
+                    but not pruned of non-kinematic joints. This allows pinnochio full
+                    access to the URDF information necessary for dynamics calculations.
         """
         # Check for valid data format
         self.data_format = data_format
@@ -99,6 +103,9 @@ class FlexibleDataset(Dataset):
         # Parse the robot graph from the URDF file
         self.robotGraph = HeterogeneousRobotGraph(urdf_path, ros_builtin_path,
                                                       urdf_to_desc_path)
+        if urdf_path_dynamics is not None:
+            self.robotGraphFull = HeterogeneousRobotGraph(urdf_path_dynamics, ros_builtin_path,
+                                                        urdf_to_desc_path)
  
         # Make sure the URDF file we were given properly matches
         # what we are expecting

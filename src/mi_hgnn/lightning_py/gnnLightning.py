@@ -486,15 +486,13 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
 
         # Build the pinnochio model
         self.model, self.collision_model, self.visual_model = pin.buildModelsFromUrdf(
-            str(urdf_model_path), str(urdf_dir), pin.JointModelFreeFlyer(), verbose= True
+            str(urdf_model_path), str(urdf_dir), pin.JointModelFreeFlyer(), verbose=True
         )
         self.data = self.model.createData()
-        print(self.model)
 
         # Setup feet frames ids in Pinnochio foot order
         self.feet_names = ["jtoe2", "jtoe3", "jtoe0", "jtoe1"]
         self.feet_ids = [self.model.getFrameId(n) for n in self.feet_names]
-        print("feet ids: ", self.feet_ids)
 
         # Get number of contact points
         self.ncontact = len(self.feet_names)
@@ -523,6 +521,9 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
         # Evaluate on a sequence wise basis
         for i in range(0, batch_size):
             # Find Mass matrix
+            # Why upper triangular?
+            # In local or world frame? 
+            # Documentation seems to imply world by default.
             M = pin.crba(self.model, self.data, q[i])
 
             # Compute dynamic drift -- Coriolis, centrifugal, gravity
@@ -530,12 +531,16 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
 
             # Now, we need to find the contact Jacobians.
             # These are the Jacobians that relate the joint velocity to the velocity of each feet
+            # Computed in the local coordinate system
             J_feet = [np.copy(pin.computeFrameJacobian(self.model, self.data, q[i], id, pin.LOCAL)) for id in self.feet_ids]
+
+            # Extract the first three rows, probably to remove
+            # the parts that connect joint velocity to foot angular velocity and just consider foot linear velocity
             J_feet_first_3_rows = [np.copy(J[:3, :]) for J in J_feet] 
             J_feet_T = np.zeros([18, 3 * self.ncontact])
             J_feet_T[:, :] = np.vstack(J_feet_first_3_rows).T
 
-            # Contact forces at local coordinates (at each foot coordinate)
+            # Contact forces at local coordinates (at each foot coordinate, thus Local Frame)
             contact_forces = np.linalg.pinv(J_feet_T) @ ((M @ acc[i]) + drift - tau[i])
             contact_forces_split = np.split(contact_forces, self.ncontact)
 
@@ -572,8 +577,8 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
         y_pred = y_pred.to(device)
 
         # y and y_pred is in pin foot order, so map back to URDF foot order
-        y = y[self.foot_mapping]
-        y_pred = y_pred[self.foot_mapping]
+        y = y[:, self.foot_mapping]
+        y_pred = y_pred[:, self.foot_mapping]
 
         return y, y_pred
 
@@ -616,10 +621,15 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset,
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'dynamics':
-        urdf_path: Path = Path(dataset_raw.robotGraph.new_urdf_path)
+        urdf_path = None
+        try:
+            urdf_path = Path(dataset_raw.robotGraphFull.new_urdf_path)
+        except:
+            raise ValueError("urdf_path_dynamics needs to be passed to FlexibleDataset in order to use Dynamics model.")
         joint_mapping, foot_mapping = dataset_raw.pin_to_urdf_order_mapping()
         model = Full_Dynamics_Model_Lightning(str(urdf_path), urdf_path.parent.parent,
-                                              joint_mapping, foot_mapping)
+                                            joint_mapping, foot_mapping)
+                                                
     else:
         raise ValueError("model_type must be mlp, heterogeneous_gnn, or dynamics.")
     model.eval()
