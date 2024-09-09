@@ -719,7 +719,8 @@ def train_model(
         regression: bool = True,
         seed: int = 0,
         devices: int = 1,
-        early_stopping: bool = False):
+        early_stopping: bool = False,
+        disable_test: bool = False):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -787,10 +788,12 @@ def train_model(
                                        shuffle=False,
                                        num_workers=num_workers,
                                        persistent_workers=persistent_workers)
-    testLoader: DataLoader = DataLoader(test_dataset,
-                                        batch_size=batch_size,
-                                        shuffle=False,
-                                        num_workers=num_workers)
+    testLoader = None
+    if not disable_test:
+        testLoader: DataLoader = DataLoader(test_dataset,
+                                            batch_size=batch_size,
+                                            shuffle=False,
+                                            num_workers=num_workers)
     
     # Set a random seed (need to be before we get dummy_batch)
     seed_everything(seed, workers=True)
@@ -900,7 +903,8 @@ def train_model(
         logger=wandb_logger,
         callbacks=callbacks)
     trainer.fit(lightning_model, trainLoader, valLoader)
-    trainer.test(lightning_model, dataloaders=testLoader, verbose=True)
+    if not disable_test:
+        trainer.test(lightning_model, dataloaders=testLoader, verbose=True)
 
     # Return the path to the trained checkpoint
     return path_to_save

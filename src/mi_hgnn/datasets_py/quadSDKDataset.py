@@ -462,9 +462,45 @@ class QuadSDKDataset_A1Speed1_5FlippedOver_DEPRECATED(QuadSDKDataset_A1_DEPRECAT
         return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT", "Google"
     
 # A1
-class QuadSDKDataset_A1Speed1_0(QuadSDKDataset_A1):
+class QuadSDKDataset_A1_Bravo(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Flat, Mu: 75
     def get_file_id_and_loc(self):
-        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf", "Google"
+        return "https://www.dropbox.com/scl/fi/kv8z0khuqrredzjwm13ct/robot_1_a1_0p5mps_flat_mu1_75_mu2_75_trial1_2024-09-07-13-52-28.bag?rlkey=wd4gzwxc7js5vcddmt6muczjn&st=ry19f48p&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Charlie(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Flat, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/tqqrpmeg2405jqodmcpmc/robot_1_a1_0p5mps_flat_mu1_100_mu2_100_trial1_2024-09-07-13-59-07.bag?rlkey=3907a5akv6vcdw0u9rxo3chev&st=6rweswww&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Echo(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Slope, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/4pifdidyxeaiwfh4jhoti/robot_1_a1_0p5mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-14-28.bag?rlkey=vfae02ds7fcsudfqbqggisb5p&st=7j4wtr2h&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Foxtrot(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Slope, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/gthmjhcrktehpwt2mlxub/robot_1_a1_0p5mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-27-37.bag?rlkey=ryyzx04zrr6oba316yuef5ppp&st=j3r4cwgg&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Juliett(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Flat, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/bie6yxlkq9rjmqonjthsd/robot_1_a1_0p75mps_flat_mu1_75_mu2_75_trial1_2024-09-07-14-45-05.bag?rlkey=jxg88klloihnx9kezuhnkxmer&st=xvw3ij2q&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Kilo(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Flat, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/k75t9qxsffqa9mvfqmi5z/robot_1_a1_0p75mps_flat_mu1_100_mu2_100_trial1_2024-09-07-14-33-58.bag?rlkey=ut9tdpv58zhq4zniy9i3cdid2&st=xyqi3smu&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Mike(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Slope, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/2w2549167mescx9r56m8h/robot_1_a1_0p75mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-42-50.bag?rlkey=4aokwtibn21egtbq2zshcg1n1&st=prdslvs8&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_November(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Slope, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/jycttraih00zzjcxprliq/robot_1_a1_0p75mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-35-14.bag?rlkey=21qmqm18n6bf436i3xfj0wrc7&st=xgk0vc6j&dl=1", "Dropbox"
 
 # Go2
 class QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(QuadSDKDataset_Go2):

@@ -10,22 +10,53 @@ def main():
     # ==================================================================================
 
     # Define model information
-    history_length = 1
+    history_length = 150
     normalize = False
     num_layers = 8
     hidden_size = 128
 
-    # Initalize the datasets
-    path_to_urdf = Path('urdf_files', 'Go2-Quad', 'go2.urdf').absolute()
-    dataset_flat_0_5_50 = QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(Path(Path('.').parent, 'datasets', 'QuadSDK-Go2-Flat-0.5-Mu50').absolute(), 
-            path_to_urdf, 'package://go2_description/', '', model_type, history_length, normalize=normalize)
-    train_and_test_dataset = torch.utils.data.Subset(dataset_flat_0_5_50, np.arange(0, dataset_flat_0_5_50.__len__()))
+    # Set up the urdf paths
+    path_to_urdf = Path('urdf_files', 'A1-Quad', 'a1_pruned.urdf').absolute()
+    path_to_urdf_dynamics = Path('urdf_files', 'A1-Quad', 'a1.urdf').absolute()
 
-    # Train the model
-    train_model(train_and_test_dataset, train_and_test_dataset, train_and_test_dataset, normalize, 
-                num_layers=num_layers, hidden_size=hidden_size, logger_project_name="delete_me", 
+    # Initalize the Train datasets
+    bravo = QuadSDKDataset_A1_Bravo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Bravo').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    charlie = QuadSDKDataset_A1_Charlie(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Charlie').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    echo = QuadSDKDataset_A1_Echo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Echo').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    foxtrot = QuadSDKDataset_A1_Foxtrot(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Foxtrot').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    juliett = QuadSDKDataset_A1_Juliett(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Juliett').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    kilo = QuadSDKDataset_A1_Kilo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Kilo').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    mike = QuadSDKDataset_A1_Mike(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Mike').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    november = QuadSDKDataset_A1_November(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-November').absolute(), path_to_urdf, 
+                'package://go2_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    
+    # Define train and val sets
+    train_datasets = [bravo, charlie, echo, foxtrot, juliett, kilo, november]
+    val_datasets = [mike]
+    
+    # Remove the last entries, as dynamics models can't use last entry due to derivative calculation
+    train_subsets = []
+    for dataset in train_datasets:
+         train_subsets.append(torch.utils.data.Subset(dataset, np.arange(0, dataset.__len__() - 1)))
+    train_dataset = torch.utils.data.ConcatDataset(train_subsets)
+
+    val_subsets = []
+    for dataset in val_datasets:
+         val_subsets.append(torch.utils.data.Subset(dataset, np.arange(0, dataset.__len__() - 1)))
+    val_dataset = torch.utils.data.ConcatDataset(val_subsets)
+    
+    # Train the model (evaluate later, so no test set)
+    train_model(train_dataset, val_dataset, None, normalize, 
+                num_layers=num_layers, hidden_size=hidden_size, logger_project_name="regression_experiment", 
                 batch_size=30, regression=True, lr=0.0001, epochs=49, seed=0, devices=1, early_stopping=True,
-                testing_mode=True)
+                disable_test=True)
 
 if __name__ == '__main__':
      main()
