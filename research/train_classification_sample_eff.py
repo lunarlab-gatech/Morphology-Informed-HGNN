@@ -18,7 +18,7 @@ def main():
     model_type = 'heterogeneous_gnn'
     num_layers = 8
     hidden_size = 128
-    train_percentage = 0.2125
+    train_percentage = 0.85
     val_percentage = 0.15
     # ==================================================================================
 
@@ -78,13 +78,13 @@ def main():
     val_dataset = torch.utils.data.Subset(val_dataset, np.arange(0, val_dataset.__len__()))
     test_dataset = torch.utils.data.Subset(test_dataset, np.arange(0, test_dataset.__len__()))
 
-	# Test cases to make sure this matches MorphoSymm can be found in the corresponding MorphoSymm-Replication
-    # release for this sample efficiency experiment.
+	# Test cases to make sure this matches MorphoSymm-Replication can be found in the corresponding 
+    # MorphoSymm-Replication release for this sample efficiency experiment.
 
     # Train the model
     train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
-                logger_project_name="mi_hgnn_class_early_stopping", batch_size=30, regression=False, lr=0.0001, epochs=49, 
-                seed=0, devices=1, early_stopping=True)
+                logger_project_name="mi_hgnn_class_sample_eff", batch_size=30, regression=False, lr=0.0001, epochs=49, 
+                seed=0, devices=1, early_stopping=True, train_percentage_to_log=train_percentage)
     
 if __name__ == "__main__":
     main()

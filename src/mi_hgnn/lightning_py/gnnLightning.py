@@ -720,7 +720,8 @@ def train_model(
         seed: int = 0,
         devices: int = 1,
         early_stopping: bool = False,
-        disable_test: bool = False):
+        disable_test: bool = False,
+        train_percentage_to_log = None):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -858,6 +859,8 @@ def train_model(
         wandb_logger.experiment.config["normalize"] = normalize
         wandb_logger.experiment.config["num_parameters"] = model_parameters
         wandb_logger.experiment.config["seed"] = seed
+        if train_percentage_to_log is not None:
+            wandb_logger.experiment.config["train_percentage"] = train_percentage_to_log
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
         path_to_save = str(
