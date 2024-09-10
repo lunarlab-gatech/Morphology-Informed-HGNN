@@ -462,45 +462,110 @@ class QuadSDKDataset_A1Speed1_5FlippedOver_DEPRECATED(QuadSDKDataset_A1_DEPRECAT
         return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT", "Google"
     
 # A1
+class QuadSDKDataset_A1_Alpha(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Flat, Mu: 50
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/w2b7uk3sm3u42uxxnzm0o/robot_1_a1_0p5mps_flat_mu1_50_mu2_50_trial1_2024-09-09-14-22-23.bag?rlkey=435hyxui9wc2qt93sr1lq58az&st=yn0n3aol&dl=1", "Dropbox"
+
 class QuadSDKDataset_A1_Bravo(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Flat, Mu: 75
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/kv8z0khuqrredzjwm13ct/robot_1_a1_0p5mps_flat_mu1_75_mu2_75_trial1_2024-09-07-13-52-28.bag?rlkey=wd4gzwxc7js5vcddmt6muczjn&st=ry19f48p&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/j7y2ukxjv99c6ge357g39/robot_1_a1_0p5mps_flat_mu1_75_mu2_75_trial1_2024-09-09-14-37-30.bag?rlkey=osklprqilkxoxixes7xlflqgq&st=u3tyw691&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1_Charlie(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Flat, Mu: 100
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/tqqrpmeg2405jqodmcpmc/robot_1_a1_0p5mps_flat_mu1_100_mu2_100_trial1_2024-09-07-13-59-07.bag?rlkey=3907a5akv6vcdw0u9rxo3chev&st=6rweswww&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/3swmvf4zmqhqjtdi37e0i/robot_1_a1_0p5mps_flat_mu1_100_mu2_100_trial1_2024-09-09-15-04-36.bag?rlkey=pekugjjnexobbpb772qtoolky&st=tzxksa3k&dl=1", "Dropbox"
     
+class QuadSDKDataset_A1_Delta(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Slope, Mu: 50
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/4syqkizbm9qthg7e35soh/robot_1_a1_0p5mps_slope_mu1_50_mu2_50_trial1_2024-09-09-15-29-14.bag?rlkey=rpztfeh8sufxmryb67rqgkzbx&st=0q0vsf76&dl=1", "Dropbox"
+
 class QuadSDKDataset_A1_Echo(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Slope, Mu: 75
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/4pifdidyxeaiwfh4jhoti/robot_1_a1_0p5mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-14-28.bag?rlkey=vfae02ds7fcsudfqbqggisb5p&st=7j4wtr2h&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/bkgasvttt5v7szcpjm350/robot_1_a1_0p5mps_slope_mu1_75_mu2_75_trial1_2024-09-09-15-46-45.bag?rlkey=eg33dr3brs03uvvsgmkkj0tn1&st=3n9ugtpc&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1_Foxtrot(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Slope, Mu: 100
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/gthmjhcrktehpwt2mlxub/robot_1_a1_0p5mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-27-37.bag?rlkey=ryyzx04zrr6oba316yuef5ppp&st=j3r4cwgg&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/i2rik324b5byqpedloaew/robot_1_a1_0p5mps_slope_mu1_100_mu2_100_trial1_2024-09-09-19-02-56.bag?rlkey=pm3z8wm2rxw7ubvtx88z1g827&st=022deyoe&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Golf(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Rough, Mu: 75
+    def get_file_id_and_loc(self):
+        return "", "Dropbox"
+    
+class QuadSDKDataset_A1_Hotel(QuadSDKDataset_A1):
+    # Speed: 0.5 mps, Terrain: Rough, Mu: 100
+    def get_file_id_and_loc(self):
+        return "", "Dropbox"
+
+class QuadSDKDataset_A1_India(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Flat, Mu: 50
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/f615giqzrgrt6rt8rxwn8/robot_1_a1_0p75mps_flat_mu1_50_mu2_50_trial1_2024-09-09-14-30-18.bag?rlkey=q4e35770xjjrm4c9p8dx85j5u&st=2ikap4wu&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1_Juliett(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Flat, Mu: 75
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/bie6yxlkq9rjmqonjthsd/robot_1_a1_0p75mps_flat_mu1_75_mu2_75_trial1_2024-09-07-14-45-05.bag?rlkey=jxg88klloihnx9kezuhnkxmer&st=xvw3ij2q&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/u2hlxjbb9dgg9ttq9kwl2/robot_1_a1_0p75mps_flat_mu1_75_mu2_75_trial1_2024-09-09-14-45-02.bag?rlkey=nyevs573wf273zefbvyvwvkq4&st=vlcau1i3&dl=1", "Dropbox"
     
 class QuadSDKDataset_A1_Kilo(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Flat, Mu: 100
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/k75t9qxsffqa9mvfqmi5z/robot_1_a1_0p75mps_flat_mu1_100_mu2_100_trial1_2024-09-07-14-33-58.bag?rlkey=ut9tdpv58zhq4zniy9i3cdid2&st=xyqi3smu&dl=1", "Dropbox"
-    
+        return "https://www.dropbox.com/scl/fi/sp90ohnu0y2hrwv5hykol/robot_1_a1_0p75mps_flat_mu1_100_mu2_100_trial1_2024-09-09-15-11-33.bag?rlkey=y11sftmemzpymwfy2syijvt7y&st=kvu4ut66&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Lima(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Slope, Mu: 50
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/zbf9sxb5c6192xgtubb42/robot_1_a1_0p75mps_slope_mu1_50_mu2_50_trial1_2024-09-09-15-39-03.bag?rlkey=949w060ptq7dajgphly58ebou&st=o5eijrf5&dl=1", "Dropbox"    
+
 class QuadSDKDataset_A1_Mike(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Slope, Mu: 75
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/2w2549167mescx9r56m8h/robot_1_a1_0p75mps_slope_mu1_75_mu2_75_trial1_2024-09-08-14-42-50.bag?rlkey=4aokwtibn21egtbq2zshcg1n1&st=prdslvs8&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/7qwiwicd1x9h051rxyla0/robot_1_a1_0p75mps_slope_mu1_75_mu2_75_trial1_2024-09-09-16-11-33.bag?rlkey=7lmasurdpzlleojqltmikkin4&st=tj4hmxcx&dl=1", "Dropbox"
     
 class QuadSDKDataset_A1_November(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Slope, Mu: 100
     def get_file_id_and_loc(self):
-        return "https://www.dropbox.com/scl/fi/jycttraih00zzjcxprliq/robot_1_a1_0p75mps_slope_mu1_100_mu2_100_trial1_2024-09-08-14-35-14.bag?rlkey=21qmqm18n6bf436i3xfj0wrc7&st=xgk0vc6j&dl=1", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/50rwpce47tushv8gb0oew/robot_1_a1_0p75mps_slope_mu1_100_mu2_100_trial1_2024-09-09-19-10-33.bag?rlkey=ajgb069ku2pp2uua49nv54c9q&st=rrd9u414&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Oscar(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Rough, Mu: 75
+    def get_file_id_and_loc(self):
+        return "", "Dropbox"
+    
+class QuadSDKDataset_A1_Papa(QuadSDKDataset_A1):
+    # Speed: 0.75 mps, Terrain: Rough, Mu: 100
+    def get_file_id_and_loc(self):
+        return "", "Dropbox"
+    
+class QuadSDKDataset_A1_Quebec(QuadSDKDataset_A1):
+    # Speed: 1.00 mps, Terrain: Flat, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/1lv5jxavljoep4dvlfwlb/robot_1_a1_1p0mps_flat_mu1_75_mu2_75_trial1_2024-09-09-14-57-16.bag?rlkey=9jryyynd345ad8lf4cmhdj247&st=7pm05bgq&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Romeo(QuadSDKDataset_A1):
+    # Speed: 1.00 mps, Terrain: Flat, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/sds8jnzftbk6f0vreyl0n/robot_1_a1_1p0mps_flat_mu1_100_mu2_100_trial1_2024-09-09-15-21-52.bag?rlkey=wxfyc8npy2jg0u7ws66ekece8&st=ipnftg46&dl=1", "Dropbox"
+
+class QuadSDKDataset_A1_Sierra(QuadSDKDataset_A1):
+    # Speed: 1.00 mps, Terrain: Slope, Mu: 75
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/hbx5gsdkp845c060uor6z/robot_1_a1_1p0mps_slope_mu1_75_mu2_75_trial1_2024-09-09-18-54-59.bag?rlkey=xtuooopimk4cq27nxqjz4wdlw&st=3jkrpqdr&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Tango(QuadSDKDataset_A1):
+    # Speed: 1.00 mps, Terrain: Slope, Mu: 100
+    def get_file_id_and_loc(self):
+        return "https://www.dropbox.com/scl/fi/84lv882akicv37hmab0d7/robot_1_a1_1p0mps_slope_mu1_100_mu2_100_trial1_2024-09-09-19-24-12.bag?rlkey=761zudvru1ctdsde51ipx1onn&st=esumu7ot&dl=1", "Dropbox"
+    
+class QuadSDKDataset_A1_Uniform(QuadSDKDataset_A1):
+    # Speed: 1.00 mps, Terrain: Rough, Mu: 50
+    def get_file_id_and_loc(self):
+        return "", "Dropbox"
 
 # Go2
 class QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(QuadSDKDataset_Go2):

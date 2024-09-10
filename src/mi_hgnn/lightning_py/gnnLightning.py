@@ -520,10 +520,7 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
 
         # Evaluate on a sequence wise basis
         for i in range(0, batch_size):
-            # Find Mass matrix
-            # Why upper triangular?
-            # In local or world frame? 
-            # Documentation seems to imply world by default.
+            # Find Mass matrix (in local frame)
             M = pin.crba(self.model, self.data, q[i])
 
             # Compute dynamic drift -- Coriolis, centrifugal, gravity
@@ -563,6 +560,7 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
                 world_frame_force = foot_to_world_SE3.rotation @ force_transpose
 
                 # Save this prediction into the predicted array
+                # Look into coordinate frame definition (TODO)
                 y_pred[i, index] = torch.tensor(-world_frame_force[2], dtype=torch.float64)
 
                 # Increase index
@@ -736,10 +734,8 @@ def train_model(
     # is all the same type.
     train_data_format, val_data_format, test_data_format = None, None, None
     if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-        train_data_format = train_dataset.dataset.datasets[
-            0].dataset.get_data_format()
-        val_data_format = val_dataset.dataset.datasets[
-            0].dataset.get_data_format()
+        train_data_format = train_dataset.dataset.datasets[0].dataset.get_data_format()
+        val_data_format = val_dataset.dataset.datasets[0].dataset.get_data_format()
         if not disable_test:
             test_data_format = test_dataset.dataset.datasets[0].get_data_format()
     elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
