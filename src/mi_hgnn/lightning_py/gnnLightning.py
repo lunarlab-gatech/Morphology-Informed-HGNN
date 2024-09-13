@@ -498,8 +498,8 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
         self.ncontact = len(self.feet_names)
 
         # Setup a viewer to see if everything looks right
-        self.viz = pin.visualize.MeshcatVisualizer(self.model, self.collision_model, self.visual_model)
-        self.viz.initViewer(loadModel=True)
+        # self.viz = pin.visualize.MeshcatVisualizer(self.model, self.collision_model, self.visual_model)
+        # self.viz.initViewer(loadModel=True)
 
     def step_helper_function(self, batch):
         # Get the data from the batch
@@ -543,32 +543,34 @@ class Full_Dynamics_Model_Lightning(Base_Lightning):
 
             # Compute the placement of each frame
             pin.framesForwardKinematics(self.model, self.data, q[i])
-            # self.viz.display(q[i])
-            # import time
-            # time.sleep(0.1)
 
             # Convert Contact forces to World frame
             index = 0
             for force, foot_id in zip(contact_forces_split, self.feet_ids):
-                force_transpose = np.array([[force[0]], [force[1]], [force[2]]])
-
-                # Get the Foot to World Transform
-                world_to_foot_SE3 = self.data.oMf[foot_id]
-                foot_to_world_SE3 = world_to_foot_SE3.inverse()
-
-                # Transform the force into the world frame
-                world_frame_force = foot_to_world_SE3.rotation @ force_transpose
+                force = pin.Force(force, np.zeros(3))
+                world_frame_force = self.data.oMf[foot_id].act(force)
 
                 # Save this prediction into the predicted array
-                # Look into coordinate frame definition (TODO)
-                y_pred[i, index] = torch.tensor(-world_frame_force[2], dtype=torch.float64)
+                y_pred[i, index] = torch.tensor(world_frame_force.vector[2], dtype=torch.float64)
 
                 # Increase index
                 index += 1
+            
+            # === For easy visualization, uncomment ===
+            # self.viz.display(q[i])
+            # import time
+            # time.sleep(0.001)
 
         # Knowing that we can't have negative contact force, set all
         # negative values to zero.
         y_pred = torch.clamp(y_pred, min=0.0)
+
+        # Assume that we know the flight phase, therefore if label is zero,
+        # then our model prediction will also be zero.
+        for i in range(y.shape[0]):
+            for j in range(y.shape[1]):
+                if y[i,j] == 0:
+                    y_pred[i,j] = 0
 
         # Put y_pred back on the correct device
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -605,7 +607,10 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset,
     model_type = None
     dataset_raw: FlexibleDataset = None
     if isinstance(predict_dataset.dataset, torch.utils.data.ConcatDataset):
-        dataset_raw = predict_dataset.dataset.datasets[0]
+        if isinstance(predict_dataset.dataset.datasets[0], torch.utils.data.Subset):
+            dataset_raw = predict_dataset.dataset.datasets[0].dataset
+        else:
+            dataset_raw = predict_dataset.dataset.datasets[0]
     elif isinstance(predict_dataset.dataset, torch.utils.data.Dataset):
         dataset_raw = predict_dataset.dataset
     model_type = dataset_raw.get_data_format()

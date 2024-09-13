@@ -495,12 +495,12 @@ class QuadSDKDataset_A1_Foxtrot(QuadSDKDataset_A1):
 class QuadSDKDataset_A1_Golf(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Rough, Mu: 75
     def get_file_id_and_loc(self):
-        return "", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/2k2v2bydphna2qx00e4oz/robot_1_a1_0p5mps_rough_mu1_75_mu2_75_trial1_2024-09-10-15-57-56.bag?rlkey=lc4e7826ro0qo4z9ri6dnokox&st=5j01yfle&dl=1", "Dropbox"
     
 class QuadSDKDataset_A1_Hotel(QuadSDKDataset_A1):
     # Speed: 0.5 mps, Terrain: Rough, Mu: 100
     def get_file_id_and_loc(self):
-        return "", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/luyqyl11x2nj3p52k0ddc/robot_1_a1_0p5mps_rough_mu1_100_mu2_100_trial1_2024-09-10-16-37-10.bag?rlkey=1j4hiy8f5qbfrf5ojwdyxvo81&st=woilhuqo&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1_India(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Flat, Mu: 50
@@ -535,12 +535,12 @@ class QuadSDKDataset_A1_November(QuadSDKDataset_A1):
 class QuadSDKDataset_A1_Oscar(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Rough, Mu: 75
     def get_file_id_and_loc(self):
-        return "", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/l2c5w2lccaaut1k77nm3i/robot_1_a1_0p75mps_rough_mu1_75_mu2_75_trial1_2024-09-10-16-11-05.bag?rlkey=m5j3ya1yuc9hjrx2axfjcw47d&st=hpf2lg6p&dl=1", "Dropbox"
     
 class QuadSDKDataset_A1_Papa(QuadSDKDataset_A1):
     # Speed: 0.75 mps, Terrain: Rough, Mu: 100
     def get_file_id_and_loc(self):
-        return "", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/wz9gn4zps1781eyrt8huz/robot_1_a1_0p75mps_rough_mu1_100_mu2_100_trial1_2024-09-10-16-49-42.bag?rlkey=vcebsg42ggxeemaagodgsb1yr&st=openvcsi&dl=1", "Dropbox"
     
 class QuadSDKDataset_A1_Quebec(QuadSDKDataset_A1):
     # Speed: 1.00 mps, Terrain: Flat, Mu: 75
@@ -565,7 +565,7 @@ class QuadSDKDataset_A1_Tango(QuadSDKDataset_A1):
 class QuadSDKDataset_A1_Uniform(QuadSDKDataset_A1):
     # Speed: 1.00 mps, Terrain: Rough, Mu: 50
     def get_file_id_and_loc(self):
-        return "", "Dropbox"
+        return "https://www.dropbox.com/scl/fi/fswpwmltqgwxa8pwb1rif/robot_1_a1_1p0mps_rough_mu1_50_mu2_50_trial1_2024-09-10-17-19-24.bag?rlkey=gqjn6458dt5rbmhv1klymm6xl&st=f9obhple&dl=1", "Dropbox"
 
 # Go2
 class QuadSDKDataset_Go2_Flat_Speed0_5_Mu_50(QuadSDKDataset_Go2):

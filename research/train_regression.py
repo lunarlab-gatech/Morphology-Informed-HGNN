@@ -59,7 +59,7 @@ def main():
     # Train the model (evaluate later, so no test set)
     train_model(train_dataset, val_dataset, None, normalize, 
                 num_layers=num_layers, hidden_size=hidden_size, logger_project_name="regression_experiment", 
-                batch_size=30, regression=True, lr=0.0001, epochs=30, seed=0, devices=1, early_stopping=True,
+                batch_size=30, regression=True, lr=0.0001, epochs=30, seed=7, devices=1, early_stopping=True,
                 disable_test=True)
 
 if __name__ == '__main__':
