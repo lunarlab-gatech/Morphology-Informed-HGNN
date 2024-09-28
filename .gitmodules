@@ -11,3 +11,9 @@
 [submodule "urdf_files/MiniCheetah/mini-cheetah-gazebo-urdf"]
 	path = urdf_files/MiniCheetah/mini-cheetah-gazebo-urdf
 	url = https://github.com/chvmp/mini-cheetah-gazebo-urdf.git
+[submodule "urdf_files/pinocchio"]
+	path = urdf_files/pinocchio
+	url = https://github.com/stack-of-tasks/pinocchio.git
+[submodule "urdf_files/Go2/unitree_ros"]
+	path = urdf_files/Go2/unitree_ros
+	url = https://github.com/unitreerobotics/unitree_ros.git

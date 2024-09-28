@@ -1,41 +1,67 @@
 from pathlib import Path
-from mi_hgnn.lightning_py.gnnLightning import train_model
+from mi_hgnn.lightning_py.gnnLightning import train_model, evaluate_model
 import torch
-from mi_hgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
-from torch.utils.data import Subset
+from mi_hgnn.datasets_py.quadSDKDataset import *
+from mi_hgnn.visualization import visualize_model_outputs_regression
 
 def main():
-    # TODO: Do we need to use the same A1 URDF file from QuadSDK?
-    path_to_urdf = Path('urdf_files', 'A1', 'a1.urdf').absolute()
-    path_to_quad_sdk_05 = Path(
-            Path('.').parent, 'datasets', 'QuadSDK-A1Speed0.5').absolute()
-    path_to_quad_sdk_1 = Path(
-            Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.0').absolute()
-    path_to_quad_sdk_15Flipped = Path(
-            Path('.').parent, 'datasets', 'QuadSDK-A1Speed1.5FlippedOver').absolute()
+    # ================================= CHANGE THESE ===================================
+    model_type = 'heterogeneous_gnn' # `mlp`
+    seed = 0
+    # ==================================================================================
 
-    # Define model type
-    model_type = 'heterogeneous_gnn'
+    # Define model information
+    history_length = 150
+    normalize = False
+    num_layers = 8
+    hidden_size = 128
 
-    # Initalize the datasets
-    dataset_05 = QuadSDKDataset_A1Speed0_5(
-        path_to_quad_sdk_05, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type, 5)
-    dataset_1 = QuadSDKDataset_A1Speed1_0(
-        path_to_quad_sdk_1, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type, 5)
-    dataset_15Flipped = QuadSDKDataset_A1Speed1_5FlippedOver(
-        path_to_quad_sdk_15Flipped, path_to_urdf, 'package://a1_description/',
-        'unitree_ros/robots/a1_description', model_type, 5)
+    # Set up the urdf paths
+    path_to_urdf = Path('urdf_files', 'A1-Quad', 'a1_pruned.urdf').absolute()
+    path_to_urdf_dynamics = Path('urdf_files', 'A1-Quad', 'a1.urdf').absolute()
 
+    # Initalize the Train datasets
+    bravo = QuadSDKDataset_A1_Bravo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Bravo').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    charlie = QuadSDKDataset_A1_Charlie(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Charlie').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    echo = QuadSDKDataset_A1_Echo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Echo').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    foxtrot = QuadSDKDataset_A1_Foxtrot(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Foxtrot').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    juliett = QuadSDKDataset_A1_Juliett(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Juliett').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    kilo = QuadSDKDataset_A1_Kilo(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Kilo').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    mike = QuadSDKDataset_A1_Mike(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-Mike').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    november = QuadSDKDataset_A1_November(Path(Path('.').parent, 'datasets', 'QuadSDK-A1-November').absolute(), path_to_urdf, 
+                'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
+    
+    # Define train and val sets
+    train_val_datasets = [bravo, charlie, echo, foxtrot, juliett, kilo, mike, november]
 
-    # Split the data into training, validation, and testing sets
-    rand_gen = torch.Generator().manual_seed(10341885)
-    train_dataset, val_dataset, test_dataset = torch.utils.data.random_split(
-        dataset_1, [0.8, 0.1, 0.1], generator=rand_gen)
-
-    # Train the model
-    train_model(train_dataset, val_dataset, test_dataset, num_layers=9, hidden_size=32, disable_logger=True)
+    # Take first 85% for training, and last 15% for validation
+    # Also remove the last entries, as dynamics models can't use last entry due to derivative calculation
+    train_subsets = []
+    val_subsets = []
+    for dataset in train_val_datasets:
+        data_len_minus_1 = dataset.__len__() - 1
+        split_index = int(np.round(data_len_minus_1 * 0.85)) # When value has .5, round to nearest-even
+        train_subsets.append(torch.utils.data.Subset(dataset, np.arange(0, split_index)))
+        val_subsets.append(torch.utils.data.Subset(dataset, np.arange(split_index, data_len_minus_1)))
+    train_dataset = torch.utils.data.ConcatDataset(train_subsets)
+    val_dataset = torch.utils.data.ConcatDataset(val_subsets)
+    
+    # Convert them to subsets
+    train_dataset = torch.utils.data.Subset(train_dataset, np.arange(0, train_dataset.__len__()))
+    val_dataset = torch.utils.data.Subset(val_dataset, np.arange(0, val_dataset.__len__()))
+    
+    # Train the model (evaluate later, so no test set)
+    train_model(train_dataset, val_dataset, None, normalize, 
+                num_layers=num_layers, hidden_size=hidden_size, logger_project_name="regression", 
+                batch_size=30, regression=True, lr=0.0001, epochs=30, seed=seed, devices=1, early_stopping=True,
+                disable_test=True)
 
 if __name__ == '__main__':
      main()

@@ -12,9 +12,11 @@ from torch.utils.data import Subset
 import numpy as np
 import torchmetrics
 import torchmetrics.classification
+import pinocchio as pin
 from .customMetrics import CrossEntropyLossMetric, BinaryF1Score
 from .hgnn import GRF_HGNN
 from torch_geometric.profile import count_parameters
+from ..datasets_py.flexibleDataset import FlexibleDataset
 
 class Base_Lightning(L.LightningModule):
     """
@@ -216,7 +218,11 @@ class Base_Lightning(L.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         """
-        Returns the predicted values from the model given a specific batch.
+        Returns the predicted values from the model given a specific batch. 
+        Currently only implemented for regression.
+
+        Note, the HGNN models (Both regression and classification) directly
+        predict with model, instead of using this built-in method.
 
         Returns:
             y (torch.Tensor) - Ground Truth labels per foot (GRF labels for
@@ -230,6 +236,8 @@ class Base_Lightning(L.LightningModule):
         if self.regression:
             return y, y_pred # GRFs
         else:
+            raise NotImplementedError("This prediction method is not fully tested for classification.")
+        
             y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                     self.classification_calculate_useful_values(y_pred, y_pred.shape[0])
             y_pred_16, y_16 = self.classification_conversion_16_class(y_pred_per_foot_prob_only_1, y)
@@ -331,6 +339,18 @@ class Base_Lightning(L.LightningModule):
             y_pred_new[:,j] = torch.mul(torch.mul(foot_0_prob, foot_1_prob), torch.mul(foot_2_prob, foot_3_prob))
 
         return y_pred_new, y_new
+    
+class Test_Lighting_Model(Base_Lightning):
+    """
+    This lightning model is used for testing purposes.
+    """
+    def __init__(self):
+        super().__init__("adam", 0.001, regression=True)
+
+    def step_helper_function(self, batch):
+        x, y = batch
+        y_pred = y * 3
+        return y, y_pred
 
 
 class MLP_Lightning(Base_Lightning):
@@ -431,12 +451,147 @@ class Heterogeneous_GNN_Lightning(Base_Lightning):
         # Get the labels
         y = torch.reshape(batch.y, (batch_size, 4))
         return y, y_pred
+    
+class Full_Dynamics_Model_Lightning(Base_Lightning):
+
+    def __init__(self, urdf_model_path: Path, urdf_dir: Path, 
+                 pin_to_urdf_joint_mapping: np.ndarray,
+                 pin_to_urdf_foot_mapping: np.ndarray):
+        """
+        Constructor for a Full Dynamics Model using the Equations
+        of motion calculated using Lagrangian Mechanics.
+
+        There is not any learned parameters here. This wrapper simply
+        lets us reuse the same metric calculations.
+
+        Only supports regression problems.
+
+        Parameters:
+            urdf_model_path (Path) - The path to the urdf file that the model
+                will be constructed from.
+            urdf_dir (Path) - The path to the urdf file directory
+            pin_to_urdf_joint_mapping (np.ndarray) - An array that maps Pin joint 
+                order to URDF joint order, of shape [12].
+            pin_to_urdf_foot_mapping (np.ndarray) - An array that maps Pin foot 
+                order to URDF foot order, of shape [4].
+        """
+
+        # Note we set optimizer and lr, but they are unused here
+        # as we don't instantiate any underlying model.
+        super().__init__("adam", 0.001, regression=True)
+        self.regression = True
+        self.joint_mapping = pin_to_urdf_joint_mapping
+        self.foot_mapping = pin_to_urdf_foot_mapping
+        self.save_hyperparameters()
+
+        # Build the pinnochio model
+        self.model, self.collision_model, self.visual_model = pin.buildModelsFromUrdf(
+            str(urdf_model_path), str(urdf_dir), pin.JointModelFreeFlyer(), verbose=True
+        )
+        self.data = self.model.createData()
+
+        # Setup feet frames ids in Pinnochio foot order
+        self.feet_names = ["jtoe2", "jtoe3", "jtoe0", "jtoe1"]
+        self.feet_ids = [self.model.getFrameId(n) for n in self.feet_names]
+
+        # Get number of contact points
+        self.ncontact = len(self.feet_names)
+
+        # Setup a viewer to see if everything looks right
+        # self.viz = pin.visualize.MeshcatVisualizer(self.model, self.collision_model, self.visual_model)
+        # self.viz.initViewer(loadModel=True)
+
+    def step_helper_function(self, batch):
+        # Get the data from the batch
+        q, vel, acc, tau, y = batch
+        batch_size = y.shape[0]
+
+        # Convert to numpy arrays
+        q = q.cpu().numpy()
+        vel = vel.cpu().numpy()
+        acc = acc.cpu().numpy()
+        tau = tau.cpu().numpy()
+
+        # Set acceleration zero vector for drift calculation
+        a0 = np.zeros(self.model.nv)
+
+        # Setup array to hold predicted values
+        y_pred = torch.zeros((batch_size, 4), dtype=torch.float64)
+
+        # Evaluate on a sequence wise basis
+        for i in range(0, batch_size):
+            # Find Mass matrix (in local frame)
+            M = pin.crba(self.model, self.data, q[i])
+
+            # Compute dynamic drift -- Coriolis, centrifugal, gravity
+            drift = pin.rnea(self.model, self.data, q[i], vel[i], a0)
+
+            # Now, we need to find the contact Jacobians.
+            # These are the Jacobians that relate the joint velocity to the velocity of each feet
+            # Computed in the local coordinate system
+            J_feet = [np.copy(pin.computeFrameJacobian(self.model, self.data, q[i], id, pin.LOCAL)) for id in self.feet_ids]
+
+            # Extract the first three rows, probably to remove
+            # the parts that connect joint velocity to foot angular velocity and just consider foot linear velocity
+            J_feet_first_3_rows = [np.copy(J[:3, :]) for J in J_feet] 
+            J_feet_T = np.zeros([18, 3 * self.ncontact])
+            J_feet_T[:, :] = np.vstack(J_feet_first_3_rows).T
+
+            # Contact forces at local coordinates (at each foot coordinate, thus Local Frame)
+            contact_forces = np.linalg.pinv(J_feet_T) @ ((M @ acc[i]) + drift - tau[i])
+            contact_forces_split = np.split(contact_forces, self.ncontact)
+
+            # Compute the placement of each frame
+            pin.framesForwardKinematics(self.model, self.data, q[i])
+
+            # Convert Contact forces to World frame
+            index = 0
+            for force, foot_id in zip(contact_forces_split, self.feet_ids):
+                force = pin.Force(force, np.zeros(3))
+                world_frame_force = self.data.oMf[foot_id].act(force)
+
+                # Save this prediction into the predicted array
+                y_pred[i, index] = torch.tensor(world_frame_force.vector[2], dtype=torch.float64)
+
+                # Increase index
+                index += 1
+            
+            # === For easy visualization, uncomment ===
+            # self.viz.display(q[i])
+            # import time
+            # time.sleep(0.001)
+
+        # Knowing that we can't have negative contact force, set all
+        # negative values to zero.
+        y_pred = torch.clamp(y_pred, min=0.0)
+
+        # Assume that we know the flight phase, therefore if label is zero,
+        # then our model prediction will also be zero.
+        for i in range(y.shape[0]):
+            for j in range(y.shape[1]):
+                if y[i,j] == 0:
+                    y_pred[i,j] = 0
+
+        # Put y_pred back on the correct device
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        y_pred = y_pred.to(device)
+
+        # y and y_pred is in pin foot order, so map back to URDF foot order
+        y = y[:, self.foot_mapping]
+        y_pred = y_pred[:, self.foot_mapping]
+
+        return y, y_pred
 
 
-def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
+def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset,
+                   enable_testing_mode: bool = False):
     """
     Runs the provided model on the corresponding dataset,
     and returns the predicted values and the ground truth values.
+
+    Parameters:
+        enable_testing_mode: Only used for test cases, don't enable
+            unless you are writing test cases.
 
     Returns:
         pred - Predicted values
@@ -450,19 +605,36 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
 
     # Get the model type
     model_type = None
+    dataset_raw: FlexibleDataset = None
     if isinstance(predict_dataset.dataset, torch.utils.data.ConcatDataset):
-        model_type = predict_dataset.dataset.datasets[0].get_data_format()
+        if isinstance(predict_dataset.dataset.datasets[0], torch.utils.data.Subset):
+            dataset_raw = predict_dataset.dataset.datasets[0].dataset
+        else:
+            dataset_raw = predict_dataset.dataset.datasets[0]
     elif isinstance(predict_dataset.dataset, torch.utils.data.Dataset):
-        model_type = predict_dataset.dataset.get_data_format()
+        dataset_raw = predict_dataset.dataset
+    model_type = dataset_raw.get_data_format()
 
     # Initialize the model
     model: Base_Lightning = None
-    if model_type == 'mlp':
+    if enable_testing_mode:
+        model = Test_Lighting_Model()
+    elif model_type == 'mlp':
         model = MLP_Lightning.load_from_checkpoint(str(path_to_checkpoint))
     elif model_type == 'heterogeneous_gnn':
         model = Heterogeneous_GNN_Lightning.load_from_checkpoint(str(path_to_checkpoint))
+    elif model_type == 'dynamics':
+        urdf_path = None
+        try:
+            urdf_path = Path(dataset_raw.robotGraphFull.new_urdf_path)
+        except:
+            raise ValueError("urdf_path_dynamics needs to be passed to FlexibleDataset in order to use Dynamics model.")
+        joint_mapping, foot_mapping = dataset_raw.pin_to_urdf_order_mapping()
+        model = Full_Dynamics_Model_Lightning(str(urdf_path), urdf_path.parent.parent,
+                                            joint_mapping, foot_mapping)
+                                                
     else:
-        raise ValueError("model_type must be mlp or heterogeneous_gnn.")
+        raise ValueError("model_type must be mlp, heterogeneous_gnn, or dynamics.")
     model.eval()
     model.freeze()
 
@@ -470,12 +642,19 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
     valLoader: DataLoader = DataLoader(predict_dataset, batch_size=100, shuffle=False, num_workers=15)
 
     # Predict with the model
-    pred = None
-    labels = None
-    if model_type == 'mlp':
-        raise NotImplementedError
-    
-    else:  # for 'heterogeneous_gnn'
+    pred = torch.zeros((0, 4))
+    labels = torch.zeros((0, 4))
+    if (model_type == 'dynamics' or model_type == 'mlp') and model.regression:
+        trainer = L.Trainer()
+        predictions_result = trainer.predict(model, valLoader)
+        for batch_result in predictions_result:
+            labels = torch.cat((labels, batch_result[0]), dim=0)
+            pred = torch.cat((pred, batch_result[1]), dim=0)
+        
+        # Return the results
+        return pred, labels, model.mse_loss, model.rmse_loss, model.l1_loss
+
+    elif model_type == 'heterogeneous_gnn':
         pred = torch.zeros((0))
         labels = torch.zeros((0))
         device = 'cpu'  # 'cuda' if torch.cuda.is_available() else
@@ -492,7 +671,7 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 model.calculate_losses_step(labels_batch, y_pred)
 
                 # If classification, convert to 16 class predictions and labels
-                if not model.model.regression:
+                if not model.regression:
                     y_pred_per_foot, y_pred_per_foot_prob, y_pred_per_foot_prob_only_1 = \
                         model.classification_calculate_useful_values(y_pred, y_pred.shape[0])
                     y_pred_16, y_16 = model.classification_conversion_16_class(y_pred_per_foot_prob_only_1, labels_batch)
@@ -511,12 +690,20 @@ def evaluate_model(path_to_checkpoint: Path, predict_dataset: Subset):
                 print("Prediction: ", batch_num, "/", total_batches, "\r", end="")
 
             model.calculate_losses_epoch()
-
-    if not model.regression:
-        legs_avg_f1 = (model.f1_leg0 + model.f1_leg1 + model.f1_leg2 + model.f1_leg3) / 4.0
-        return pred, labels, model.acc, model.f1_leg0, model.f1_leg1, model.f1_leg2, model.f1_leg3, legs_avg_f1
+        
+        # Return the results
+        if not model.regression:
+            legs_avg_f1 = (model.f1_leg0 + model.f1_leg1 + model.f1_leg2 + model.f1_leg3) / 4.0
+            return pred, labels, model.acc, model.f1_leg0, model.f1_leg1, model.f1_leg2, model.f1_leg3, legs_avg_f1
+        else:
+            return pred, labels, model.mse_loss, model.rmse_loss, model.l1_loss 
+    
     else:
-        raise NotImplementedError
+        problem_type = "regression" if model.regression else "classification"
+        raise NotImplementedError("This combination of model_type (" + model_type + \
+                                  ") and problem_type  (" + problem_type + ") is not \
+                                  currently implemented for evaluation.")
+  
 
 def train_model(
         train_dataset: Subset,
@@ -535,7 +722,9 @@ def train_model(
         regression: bool = True,
         seed: int = 0,
         devices: int = 1,
-        early_stopping: bool = False):
+        early_stopping: bool = False,
+        disable_test: bool = False,
+        train_percentage_to_log = None):
     """
     Train a learning model with the input datasets. If 
     'testing_mode' is enabled, limit the batches and epoch size
@@ -550,18 +739,20 @@ def train_model(
     # is all the same type.
     train_data_format, val_data_format, test_data_format = None, None, None
     if isinstance(train_dataset.dataset, torch.utils.data.ConcatDataset):
-        train_data_format = train_dataset.dataset.datasets[
-            0].dataset.get_data_format()
-        val_data_format = val_dataset.dataset.datasets[
-            0].dataset.get_data_format()
-        test_data_format = test_dataset.dataset.datasets[0].get_data_format()
+        train_data_format = train_dataset.dataset.datasets[0].dataset.get_data_format()
+        val_data_format = val_dataset.dataset.datasets[0].dataset.get_data_format()
+        if not disable_test:
+            test_data_format = test_dataset.dataset.datasets[0].get_data_format()
     elif isinstance(train_dataset.dataset, torch.utils.data.Dataset):
         train_data_format = train_dataset.dataset.get_data_format()
         val_data_format = val_dataset.dataset.get_data_format()
-        test_data_format = test_dataset.dataset.get_data_format()
+        if not disable_test:
+            test_data_format = test_dataset.dataset.get_data_format()
     else:
         raise ValueError("Unexpected Data format")
-    if train_data_format != val_data_format or val_data_format != test_data_format:
+    
+
+    if train_data_format != val_data_format or ((not disable_test) and (val_data_format != test_data_format)):
         raise ValueError("Data formats of datasets don't match")
 
     # Extract important information from the Subsets
@@ -603,10 +794,12 @@ def train_model(
                                        shuffle=False,
                                        num_workers=num_workers,
                                        persistent_workers=persistent_workers)
-    testLoader: DataLoader = DataLoader(test_dataset,
-                                        batch_size=batch_size,
-                                        shuffle=False,
-                                        num_workers=num_workers)
+    testLoader = None
+    if not disable_test:
+        testLoader: DataLoader = DataLoader(test_dataset,
+                                            batch_size=batch_size,
+                                            shuffle=False,
+                                            num_workers=num_workers)
     
     # Set a random seed (need to be before we get dummy_batch)
     seed_everything(seed, workers=True)
@@ -667,6 +860,8 @@ def train_model(
         wandb_logger.experiment.config["normalize"] = normalize
         wandb_logger.experiment.config["num_parameters"] = model_parameters
         wandb_logger.experiment.config["seed"] = seed
+        if train_percentage_to_log is not None:
+            wandb_logger.experiment.config["train_percentage"] = train_percentage_to_log
         path_to_save = str(Path("models", wandb_logger.experiment.name))
     else:
         path_to_save = str(
@@ -716,7 +911,8 @@ def train_model(
         logger=wandb_logger,
         callbacks=callbacks)
     trainer.fit(lightning_model, trainLoader, valLoader)
-    trainer.test(lightning_model, dataloaders=testLoader, verbose=True)
+    if not disable_test:
+        trainer.test(lightning_model, dataloaders=testLoader, verbose=True)
 
     # Return the path to the trained checkpoint
     return path_to_save

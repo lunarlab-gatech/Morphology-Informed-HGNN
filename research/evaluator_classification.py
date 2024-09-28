@@ -1,20 +1,13 @@
 from pathlib import Path
 from mi_hgnn.lightning_py.gnnLightning import evaluate_model
-from mi_hgnn import QuadSDKDataset_A1Speed0_5, QuadSDKDataset_A1Speed1_0, QuadSDKDataset_A1Speed1_5FlippedOver
-from mi_hgnn.visualization import visualize_model_outputs_classification
-from mi_hgnn.lightning_py.gnnLightning import Base_Lightning
 import torch
-from torch.utils.data import Subset
 import mi_hgnn.datasets_py.LinTzuYaunDataset as linData
 import numpy as np
-import torchmetrics
 
 
 def main():
-    # ================================= CHANGE THESE ===================================
-    path_to_checkpoint = None
-    starting_index_for_chart = 10000
-    num_to_visualize_in_chart = 1000
+    # ================================= CHANGE THIS ====================================
+    path_to_checkpoint = None # Path to specific checkpoint file
     # ==================================================================================
 
     # Check that the user filled in the necessary parameters
