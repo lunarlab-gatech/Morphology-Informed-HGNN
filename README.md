@@ -1,5 +1,5 @@
 # MI-HGNN for contact estimation/classification
-This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot.
+This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)".
 
 ## Installation
 To get started, setup a Conda Python environment with Python=3.11:
@@ -22,44 +22,34 @@ git submodule init
 git submodule update
 ```
 
-## Training models
+## Replicating Paper Experiments
 
-Follow the commands below given to train your model below for your specific scenario. Note that you may need to put in
-a WandB key in order to log results to Weights & Biases. You can disable this logging by enabling `disable_logger`
-in the `train_model` function.
+To replicate the experiments referenced in our paper or access our trained model weights, see `paper/README.md`.
 
-The model weights will be saved in the following folder, based on the model 
-type and the randomly chosen model name (which is output in the terminal when training begins):
-```
-<repository base directory>/models/<model_name>/
-```
-There will be the six models saved, one with the final model weights, and five with the best validation losses during training.
+## Editing and Contributing
 
-### Contact Detection (Classification) Experiment
+Although in our paper, we only applied the MI-HGNN on quadruped robots for contact perception, it can also be applied to other multi-body dynamical systems and on other tasks/datasets. New URDF files can be added by following the instructions in `urdf_files/README.md`. Datasets can be found in the `src/mi_hgnn/datasets_py` directory, and model definitions and training code can be found in the `src/mi_hgnn/lightning_py` directory. We encourage you to extend the library for your own applications. Please reference [#Replicating-Paper-Experiments](#replicating-paper-experiments) for examples on how to train and evaluate models with our repository.
 
-To train a model from the dataset from [MorphoSymm-Replication]([https://arxiv.org/abs/2106.15713](https://github.com/lunarlab-gatech/MorphoSymm-Replication/releases/tag/RepBugFixes)), run the following command within your Conda environment. Feel free to edit the model parameters within the file itself:
+After making changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
+broken critical functionality, run the test cases found in the `tests` directory.
 
-```
-python research/train_classification.py
-```
+If you'd like to contribute to the repository, write sufficient and necessary test cases for your additions in the `tests` directory, and then open a pull request.
 
-To evaluate a model, edit `evaluator_classification.py` to specify which model to evaluate. Then, run the following command:
+## Citation
+
+If you find our repository or our work useful, please cite the relevant publication:
 
 ```
-python research/evaluator_classification.py
+@article{butterfield2024mi,
+  title={MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception},
+  author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
+  journal={arXiv preprint arXiv:2409.11146},
+  year={2024},
+  eprint={2409.11146},
+  url={https://arxiv.org/abs/2409.11146},
+}
 ```
 
-### GRF (Regression) Model
+## Contact / Issues
 
-Not Yet Implemented.
-
-### Your Own Custom Model
-
-Tutorial not yet written.
-
-## Editing this repository
-If you want to make changes to the source files, feel free to edit them in the `src/mi_hgnn/' folder, and then 
-rebuild the library following the instructions in [#Installation](#installation).
-
-## Paper Replication
-To replicate our paper results with the model weights we trained, see `paper/README.md`.
+For any issues with this repository, feel free to open an issue on GitHub. For other inquiries, please contact Daniel Butterfield (dbutterfield3@gatech.edu) or the Lunar Lab (https://sites.gatech.edu/lunarlab/).

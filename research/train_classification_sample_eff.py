@@ -15,11 +15,12 @@ def main():
     """
 
     # ================================= CHANGE THESE ===================================
-    model_type = 'heterogeneous_gnn'
+    model_type = 'heterogeneous_gnn' # `mlp`
     num_layers = 8
     hidden_size = 128
     train_percentage = 0.85
     val_percentage = 0.15
+    seed = 0
     # ==================================================================================
 
     # Set model parameters (so they all match)
@@ -83,8 +84,8 @@ def main():
 
     # Train the model
     train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
-                logger_project_name="mi_hgnn_class_sample_eff", batch_size=30, regression=False, lr=0.0001, epochs=49, 
-                seed=1, devices=1, early_stopping=True, train_percentage_to_log=train_percentage)
+                logger_project_name="class_sample_eff", batch_size=30, regression=False, lr=0.0001, epochs=49, 
+                seed=seed, devices=1, early_stopping=True, train_percentage_to_log=train_percentage)
     
 if __name__ == "__main__":
     main()

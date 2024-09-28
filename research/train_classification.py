@@ -647,9 +647,10 @@ def main():
     """
 
     # ================================= CHANGE THESE ===================================
-    model_type = 'heterogeneous_gnn'
+    model_type = 'heterogeneous_gnn' # or `mlp`
     num_layers = 8
     hidden_size = 128
+    seed = 0
     # ==================================================================================
 
     # Set model parameters (so they all match)
@@ -712,8 +713,8 @@ def main():
 
     # Train the model
     train_model(train_dataset, val_dataset, test_dataset, normalize, num_layers=num_layers, hidden_size=hidden_size, 
-                logger_project_name="mi_hgnn_class_early_stopping", batch_size=30, regression=False, lr=0.0001, epochs=49, 
-                seed=0, devices=1, early_stopping=True)
+                logger_project_name="class", batch_size=30, regression=False, lr=0.0001, epochs=49, 
+                seed=seed, devices=1, early_stopping=True)
     
 if __name__ == "__main__":
     main()

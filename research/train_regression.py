@@ -6,7 +6,8 @@ from mi_hgnn.visualization import visualize_model_outputs_regression
 
 def main():
     # ================================= CHANGE THESE ===================================
-    model_type = 'heterogeneous_gnn'
+    model_type = 'heterogeneous_gnn' # `mlp`
+    seed = 0
     # ==================================================================================
 
     # Define model information
@@ -58,8 +59,8 @@ def main():
     
     # Train the model (evaluate later, so no test set)
     train_model(train_dataset, val_dataset, None, normalize, 
-                num_layers=num_layers, hidden_size=hidden_size, logger_project_name="regression_experiment", 
-                batch_size=30, regression=True, lr=0.0001, epochs=30, seed=7, devices=1, early_stopping=True,
+                num_layers=num_layers, hidden_size=hidden_size, logger_project_name="regression", 
+                batch_size=30, regression=True, lr=0.0001, epochs=30, seed=seed, devices=1, early_stopping=True,
                 disable_test=True)
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ import pandas
 
 def main():
     # ================================= CHANGE THESE ===================================
-    path_to_save_csv = "/home/dbutterfield3/Research/state-estimation-gnn/paper/regression_results_dynamics.csv"
+    path_to_save_csv = None # csv save location and file name
     # ==================================================================================
 
     path_to_urdf = Path('urdf_files', 'A1-Quad', 'a1_pruned.urdf').absolute()
@@ -66,6 +66,7 @@ def main():
                 'package://a1_description/', '', model_type, history_length, normalize, path_to_urdf_dynamics)
     unseen_all_dataset = torch.utils.data.ConcatDataset([torch.utils.data.Subset(uniform, np.arange(148, uniform.__len__()))])
 
+
     # Combine into one test set
     test_dataset = [alpha, delta, golf, hotel,
                     india, lima, oscar, papa,
@@ -89,7 +90,6 @@ def main():
         columns.append(name + "-RMSE")
         columns.append(name + "-L1")
     df = pandas.DataFrame(None, columns=columns)
-
 
     # Evaluate and save to Dataframe
     results = ["Dynamics"]

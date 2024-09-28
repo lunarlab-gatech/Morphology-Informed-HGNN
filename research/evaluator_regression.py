@@ -8,10 +8,14 @@ import os
 
 def main():
     # ================================= CHANGE THESE ===================================
-    path_to_save_csv = "/home/dbutterfield3/Research/state-estimation-gnn/paper/regression_results_hgnns.csv"
-    path_to_models = "/home/dbutterfield3/Research/state-estimation-gnn/models_regression/hgnns/"
-    model_type = 'heterogeneous_gnn'
+    path_to_save_csv = None # csv save location and file name
+    path_to_models = None # Folder with all models of same type (like the hgnns folder on Dropbox)
+    model_type = None # 'heterogeneous_gnn' or 'mlp'
     # ==================================================================================
+
+    # Check that the user filled in the necessary parameters
+    if path_to_models is None or model_type is None:
+        raise ValueError("Please provide necessary parameters by editing this file!")
 
     # Set up the urdf paths
     path_to_urdf = Path('urdf_files', 'A1-Quad', 'a1_pruned.urdf').absolute()

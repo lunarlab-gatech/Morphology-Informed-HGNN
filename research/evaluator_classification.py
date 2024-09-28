@@ -7,7 +7,7 @@ import numpy as np
 
 def main():
     # ================================= CHANGE THIS ====================================
-    path_to_checkpoint = None
+    path_to_checkpoint = None # Path to specific checkpoint file
     # ==================================================================================
 
     # Check that the user filled in the necessary parameters
