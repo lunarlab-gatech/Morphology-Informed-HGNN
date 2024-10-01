@@ -197,30 +197,32 @@
         <h1 class="title">
           What are the benefits of MI-HGNN?
         </h1>
-        <!-- Your image here -->
-         <p class="subtitle">
+      </div>
       
+      <div class="container-side-by-side">
+        <div class="text has-text-centered">
+          <p class="subtitle">
+            <strong>Performance:</strong> From the results, our model outperforms the three baselines on all metrics by a significant margin. In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the second best model (i.e., ECNN with 78.8% mean accuracy). by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
          </p>
+        </div>
+        <div class="image image-consistent">
+          <img src="static/images/figure3a.png">
+        </div>
       </div>
 
       <div class="container-side-by-side">
-        <div class="text">
+        <div class="text has-text-centered">
           <p class="subtitle">
-            <strong>Performance:</strong> 
-            <br><br>
-            <strong>Generalization:</strong> For the real-world Contact Detection task, the test set includes recordings on unseen ground types and gait types; and for the simulated GRF Estimation task, the test set includes unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
+            <strong>Generalization:</strong> The test sets for our experiments includes real-world recordings on unseen ground types and gait types and simulated recordings with unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
          </p>
         </div>
-        <div class="image">
-          <img src="static/images/figure3a.png">
-        </div>
-        <div class="image">
+        <div class="image image-consistent">
           <img src="static/images/Table3.png">
         </div>
       </div>
 
       <div class="container-side-by-side">
-        <div class="image">
+        <div class="image image-consistent">
           <img src="static/images/Table1&2.png">
         </div>
         <div class="text">
@@ -237,7 +239,7 @@
           be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
          </p>
         </div>
-        <div class="image">
+        <div class="image image-consistent">
           <img src="static/images/figure3b.png">
         </div>
       </div>
@@ -246,29 +248,12 @@
 </section>
 
 
-
-<section class="hero is-small"></section>
-  <div class="hero-body">
-    <div class="container">
-      <div class="item">
-        <img src="static/images/figure3.png" alt="Figure 3; Contact detection results on the real-world Mini-Cheetah contact dataset."/>
-        <h2 class="subtitle has-text-centered">
-          Contact detection results on the real-world Mini-Cheetah contact dataset: (a) classification performance of four models on the unseen test set, trained with the entire training set. The mean and standard deviation across 8 runs are reported. (b) sample efficiency evaluation for all models.
-          <br> <br>
-          In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the
-          second best model (i.e., ECNN with 78.8% mean accuracy) by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
-        </h2>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section class="hero is-small">
   <div class="hero-body">
     <div class="container">
       <div class="item">
         <!-- Your image here -->
-        <img src="static/images/figure5.png" alt="Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task."/>
+        <img src="static/images/figure5.png" alt="Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task." width="500"/>
         <h2 class="subtitle has-text-centered">
           Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task, which includes an unseen friction coefficient ( ˙x = 0.5), unseen speed (v = 1.0), and unseen terrain (rough).
         </h2>
