@@ -172,21 +172,60 @@
 </section>
 
 
-<section class="hero is-small is-light">
+<section class="hero is-small">
   <div class="hero-body">
     <div class="container">
       <div class="item">
         <h1 class="title has-text-centered">
-
+          How does MI-HGNN work?
         </h1>
         <!-- Your image here -->
+         <h2 class="subtitle has-text-centered">
+          <strong>A data correlation aspect:</strong> MI-HGNN constrains the learning problem based on the robot's morphology and explicitly captures the correlation and causality between inputs. This configuration mirrors the flow of information in a robotic system, as represented by a kinematic tree. Message passing between nodes is influenced by intermediate nodes, resembling the physical laws of the robot's system, thereby embedding causality into the message-passing process. As a result, our neural network achieves comparable performance to other methods with fewer parameters, as it does not need to learn the implicit relationships between data.
+          <br><br>
+          <strong>A symmetry aspect:</strong> As the Message-Passing layer M varies only according to the edge types R, the learned weights W are identical between all morphologically-identical limbs of the robotic platform. In addition to reducing the complexity of the search space and lowering model sizes, these constraints help us learn a model that is shared by the four legs for quadruped robots. Although this overconstrains the learning problem, empirically we find that this weight sharing allows the model to quickly learn a more generalizable function when compared to completely unconstrained learning models, leading to better performance.
+         </h2>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div class="item">
+        <h1 class="title has-text-centered">
+          What are the benefits of MI-HGNN?
+        </h1>
+        <!-- Your image here -->
+         <h2 class="subtitle has-text-centered">
+          <strong>Performance:</strong> 
+          <br><br>
+          <strong>Generalization:</strong> For the real-world Contact Detection task, the test set includes recordings on unseen ground types and gait types; and for the simulated GRF Estimation task, the test set includes unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
+          <br><br>
+          <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%, when compared with the ECNN accuracy from Fig. 3 (a).
+          <br><br>
+          <strong>Sample Efficiency:</strong>  Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
+          be achieved by our model using only <strong>2.5%</strong>of the training set, i.e., 15863 training samples.
+         </h2>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<section class="hero is-small"></section>
+  <div class="hero-body">
+    <div class="container">
+      <div class="item">
         <img src="static/images/figure3.png" alt="Figure 3; Contact detection results on the real-world Mini-Cheetah contact dataset."/>
         <h2 class="subtitle has-text-centered">
           Contact detection results on the real-world Mini-Cheetah contact dataset: (a) classification performance of four models on the unseen test set, trained with the entire training set. The mean and standard deviation across 8 runs are reported. (b) sample efficiency evaluation for all models.
           <br> <br>
           In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the
           second best model (i.e., ECNN with 78.8% mean accuracy) by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
-       </h2>
+        </h2>
       </div>
     </div>
   </div>
