@@ -52,7 +52,7 @@
       <div class="container is-max-desktop">
         <div class="columns is-centered">
           <div class="column has-text-centered">
-            <h1 class="title is-1 publication-title">Academic Project Page</h1>
+            <h1 class="title is-1 publication-title">MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception</h1>
             <div class="is-size-5 publication-authors">
               <!-- Paper authors -->
               <span class="author-block">
@@ -60,7 +60,7 @@
                 <span class="author-block">
                   <a href="https://scholar.google.com/citations?hl=en&user=Sdbn4VYAAAAJ&view_op=list_works&sortby=pubdate" target="_blank">Sandilya Sai Garimella</a>,</span>
                   <span class="author-block">
-                    Nai-Jen Cheng
+                    <a href="https://sciprofiles.com/profile/3891456" target="_blank">Nai-Jen Cheng</a>,</span>
                   </span>
                   <span class="author-block"></span>
                     <a href="https://ganlumomo.github.io/" target="_blank">Lu Gan</a>
@@ -68,7 +68,7 @@
                   </div>
 
                   <div class="is-size-5 publication-authors">
-                    <span class="author-block">Georgia Institute of Technology<br>Submitted to ICRA, 2025</span>
+                    <span class="author-block">Georgia Institute of Technology<br>Submitted to ICRA 2025</span>
                     <!-- <span class="eql-cntrb"><small><br><sup>*</sup>Indicates Equal Contribution</small></span> -->
                   </div>
 
@@ -129,14 +129,11 @@
 <!-- Teaser video-->
 <section class="hero teaser">
   <div class="container is-max-desktop">
-    <div class="hero-body">
-      <video poster="" id="tree" autoplay controls muted loop height="100%">
-        <!-- Your video here -->
-        <source src="static/videos/banner_video.mp4"
-        type="video/mp4">
-      </video>
+    <div class="item">
+      <!-- Your image here -->
+      <img src="static/images/figure1.jpg" alt="MY ALT TEXT"/>
       <h2 class="subtitle has-text-centered">
-        Aliquam vitae elit ullamcorper tellus egestas pellentesque. Ut lacus tellus, maximus vel lectus at, placerat pretium mi. Maecenas dignissim tincidunt vestibulum. Sed consequat hendrerit nisl ut maximus. 
+        Visualization of our MI-HGNN for the Mini-Cheetah robot as an example. The structure and connectivity of our graph is constructed from the robot morphology. Local sensor measurements are embedded into the corresponding node to predict contact information at the foot node.
       </h2>
     </div>
   </div>
@@ -151,7 +148,7 @@
         <h2 class="title is-3">Abstract</h2>
         <div class="content has-text-justified">
           <p>
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin ullamcorper tellus sed ante aliquam tempus. Etiam porttitor urna feugiat nibh elementum, et tempor dolor mattis. Donec accumsan enim augue, a vulputate nisi sodales sit amet. Proin bibendum ex eget mauris cursus euismod nec et nibh. Maecenas ac gravida ante, nec cursus dui. Vivamus purus nibh, placerat ac purus eget, sagittis vestibulum metus. Sed vestibulum bibendum lectus gravida commodo. Pellentesque auctor leo vitae sagittis suscipit.
+            We present a Morphology-Informed Heterogeneous Graph Neural Network (MI-HGNN) for learning-based contact perception. The architecture and connectivity of the MI-HGNN are constructed from the robot morphology, in which nodes and edges are robot joints and links, respectively. By incorporating the morphology-informed constraints into a neural network, we improve a learning-based approach using model-based knowledge. We apply the proposed MI-HGNN to two contact perception problems, and conduct extensive experiments using both real-world and simulated data collected using two quadruped robots. Our experiments demonstrate the superiority of our method in terms of effectiveness, generalization ability, model efficiency, and sample efficiency. Our MI-HGNN improved the performance of a state-of-the-art model that leverages robot morphological symmetry by 8.4% with only 0.21% of its parameters. Although MI-HGNN is applied to contact perception problems for legged robots in this work, it can be seamlessly applied to other types of multi-body dynamical systems and has the potential to improve other robot learning frameworks. Our code is made publicly available at <a href="https://github.com/lunarlab-gatech/Morphology-Informed-HGNN" target="_blank">https://github.com/lunarlab-gatech/Morphology-Informed-HGNN</a>.
           </p>
         </div>
       </div>
@@ -166,32 +163,25 @@
   <div class="hero-body">
     <div class="container">
       <div id="results-carousel" class="carousel results-carousel">
-       <div class="item">
+      <div class="item">
         <!-- Your image here -->
-        <img src="static/images/carousel1.jpg" alt="MY ALT TEXT"/>
+        <img src="static/images/figure2.jpg" alt="MY ALT TEXT"/>
         <h2 class="subtitle has-text-centered">
-          First image description.
+          Overview of the proposed MI-HGNN for legged robot contact perception problems. Our MI-HGNN is constructed from a robot kinematic structure where nodes are joints and edges are links. Proprioceptive sensor measurements acquired at each local frame are embedded into the corresponding node through a heterogeneous encoder, and fused via several layers of Message Passing. A foot decoder attached to the foot node exacts the contact information during inference.
         </h2>
       </div>
       <div class="item">
         <!-- Your image here -->
-        <img src="static/images/carousel2.jpg" alt="MY ALT TEXT"/>
+        <img src="static/images/figure3.jpg" alt="MY ALT TEXT"/>
         <h2 class="subtitle has-text-centered">
-          Second image description.
-        </h2>
-      </div>
-      <div class="item">
-        <!-- Your image here -->
-        <img src="static/images/carousel3.jpg" alt="MY ALT TEXT"/>
-        <h2 class="subtitle has-text-centered">
-         Third image description.
+          Contact detection results on the real-world Mini- Cheetah contact dataset [8]: (a) classification performance of four models on the unseen test set, trained with the entire training set. The mean and standard deviation across 8 runs are reported. (b) sample efficiency evaluation for all models.
        </h2>
      </div>
      <div class="item">
       <!-- Your image here -->
-      <img src="static/images/carousel4.jpg" alt="MY ALT TEXT"/>
+      <img src="static/images/figure5.jpg" alt="MY ALT TEXT"/>
       <h2 class="subtitle has-text-centered">
-        Fourth image description.
+        Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task, which includes an unseen friction coefficient ( ˙x = 0.5), unseen speed (v = 1.0), and unseen terrain (rough).
       </h2>
     </div>
   </div>
@@ -225,28 +215,28 @@
 
 
 <!-- Video carousel -->
-<section class="hero is-small">
+<!-- <section class="hero is-small">
   <div class="hero-body">
     <div class="container">
       <h2 class="title is-3">Another Carousel</h2>
       <div id="results-carousel" class="carousel results-carousel">
         <div class="item item-video1">
           <video poster="" id="video1" autoplay controls muted loop height="100%">
-            <!-- Your video file here -->
+            Your video file here 
             <source src="static/videos/carousel1.mp4"
             type="video/mp4">
           </video>
         </div>
         <div class="item item-video2">
           <video poster="" id="video2" autoplay controls muted loop height="100%">
-            <!-- Your video file here -->
+            Your video file here 
             <source src="static/videos/carousel2.mp4"
             type="video/mp4">
           </video>
         </div>
         <div class="item item-video3">
           <video poster="" id="video3" autoplay controls muted loop height="100%">\
-            <!-- Your video file here -->
+             Your video file here 
             <source src="static/videos/carousel3.mp4"
             type="video/mp4">
           </video>
@@ -254,16 +244,12 @@
       </div>
     </div>
   </div>
-</section>
+</section> -->
 <!-- End video carousel -->
 
 
-
-
-
-
 <!-- Paper poster -->
-<section class="hero is-small is-light">
+<!-- <section class="hero is-small is-light">
   <div class="hero-body">
     <div class="container">
       <h2 class="title">Poster</h2>
@@ -273,7 +259,7 @@
         
       </div>
     </div>
-  </section>
+  </section> -->
 <!--End paper poster -->
 
 
@@ -281,11 +267,17 @@
   <section class="section" id="BibTeX">
     <div class="container is-max-desktop content">
       <h2 class="title">BibTeX</h2>
-      <pre><code>BibTex Code Here</code></pre>
+      <pre><code>@article{butterfield2024mi,
+        title={MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception},
+        author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
+        journal={arXiv preprint arXiv:2409.11146},
+        year={2024},
+        eprint={2409.11146},
+        url={https://arxiv.org/abs/2409.11146},
+      }</code></pre>
     </div>
 </section>
 <!--End BibTex citation -->
-
 
   <footer class="footer">
   <div class="container">
@@ -294,9 +286,10 @@
         <div class="content">
 
           <p>
-            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
-            You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
-            Commons Attribution-ShareAlike 4.0 International License</a>.
+            This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+            <br>
+            This page was built upon the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+            You are free to borrow the source code of this website, but must link back to these pages and the license.
           </p>
 
         </div>
