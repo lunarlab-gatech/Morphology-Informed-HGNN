@@ -199,15 +199,24 @@
         </h1>
         <!-- Your image here -->
          <p class="subtitle">
-          <strong>Performance:</strong> 
-          <br><br>
-          <strong>Generalization:</strong> For the real-world Contact Detection task, the test set includes recordings on unseen ground types and gait types; and for the simulated GRF Estimation task, the test set includes unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
-          <br><br>
-          <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%.
-          <br><br>
-          <strong>Sample Efficiency:</strong> Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
-          be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
+      
          </p>
+      </div>
+
+      <div class="container-side-by-side">
+        <div class="text">
+          <p class="subtitle">
+            <strong>Performance:</strong> 
+            <br><br>
+            <strong>Generalization:</strong> For the real-world Contact Detection task, the test set includes recordings on unseen ground types and gait types; and for the simulated GRF Estimation task, the test set includes unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
+         </p>
+        </div>
+        <div class="image">
+          <img src="static/images/figure3a.png">
+        </div>
+        <div class="image">
+          <img src="static/images/Table3.png">
+        </div>
       </div>
 
       <div class="container-side-by-side">
@@ -216,9 +225,20 @@
         </div>
         <div class="text">
           <p class="subtitle">
+            <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%.
+         </p>
+        </div>
+      </div>
+
+      <div class="container-side-by-side">
+        <div class="text">
+          <p class="subtitle">
           <strong>Sample Efficiency:</strong> Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
           be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
          </p>
+        </div>
+        <div class="image">
+          <img src="static/images/figure3b.png">
         </div>
       </div>
     </div>
@@ -257,8 +277,6 @@
   </div>
 </section>
 
-
-
 <!-- Youtube video -->
 <section class="hero is-small is-light">
   <div class="hero-body">
@@ -279,56 +297,6 @@
 </section>
 <!-- End youtube video -->
 
-
-<!-- Video carousel -->
-<!-- <section class="hero is-small">
-  <div class="hero-body">
-    <div class="container">
-      <h2 class="title is-3">Another Carousel</h2>
-      <div id="results-carousel" class="carousel results-carousel">
-        <div class="item item-video1">
-          <video poster="" id="video1" autoplay controls muted loop height="100%">
-            Your video file here 
-            <source src="static/videos/carousel1.mp4"
-            type="video/mp4">
-          </video>
-        </div>
-        <div class="item item-video2">
-          <video poster="" id="video2" autoplay controls muted loop height="100%">
-            Your video file here 
-            <source src="static/videos/carousel2.mp4"
-            type="video/mp4">
-          </video>
-        </div>
-        <div class="item item-video3">
-          <video poster="" id="video3" autoplay controls muted loop height="100%">\
-             Your video file here 
-            <source src="static/videos/carousel3.mp4"
-            type="video/mp4">
-          </video>
-        </div>
-      </div>
-    </div>
-  </div>
-</section> -->
-<!-- End video carousel -->
-
-
-<!-- Paper poster -->
-<!-- <section class="hero is-small is-light">
-  <div class="hero-body">
-    <div class="container">
-      <h2 class="title">Poster</h2>
-
-      <iframe  src="static/pdfs/sample.pdf" width="100%" height="550">
-          </iframe>
-        
-      </div>
-    </div>
-  </section> -->
-<!--End paper poster -->
-
-
 <!--BibTex citation -->
   <section class="section" id="BibTeX">
     <div class="container is-max-desktop content">
@@ -345,19 +313,17 @@
 </section>
 <!--End BibTex citation -->
 
-  <footer class="footer">
+<footer class="footer">
   <div class="container">
     <div class="columns is-centered">
       <div class="column is-8">
         <div class="content">
-
           <p>
             This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
-            <br>
+            <br><br>
             This page was built upon the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
             You are free to borrow the source code of this website, but must link back to these pages and the license.
           </p>
-
         </div>
       </div>
     </div>
