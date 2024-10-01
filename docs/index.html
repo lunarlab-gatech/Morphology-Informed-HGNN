@@ -131,7 +131,7 @@
   <div class="container is-max-desktop">
     <div class="hero-body is-centered">
       <!-- Your image here -->
-      <img src="static/images/figure1.png" alt="Figure 1; Visualization of our MI-HGNN for the Mini-Cheetah robot as an example." width="500"/>
+      <img src="static/images/figure1.png" alt="Figure 1; Visualization of our MI-HGNN for the Mini-Cheetah robot as an example." width="500" class="center"/>
       <h2 class="subtitle has-text-centered">
         Visualization of our MI-HGNN for the Mini-Cheetah robot as an example. The structure and connectivity of our graph is constructed from the robot morphology. Local sensor measurements are embedded into the corresponding node to predict contact information at the foot node.
       </h2>
@@ -181,9 +181,9 @@
         </h1>
         <br>
          <p class="subtitle">
-          <strong>A data correlation aspect:</strong> MI-HGNN constrains the learning problem based on the robot's morphology and explicitly captures the correlation and causality between inputs. This configuration mirrors the flow of information in a robotic system, as represented by a kinematic tree. Message passing between nodes is influenced by intermediate nodes, resembling the physical laws of the robot's system, thereby embedding causality into the message-passing process. As a result, our neural network achieves comparable performance to other methods with fewer parameters, as it does not need to learn the implicit relationships between data.
+          <strong>A data correlation aspect:</strong> MI-HGNN constrains the learning problem based on the robot's morphology and explicitly captures the correlation and causality between inputs. This configuration mirrors the flow of information in a robotic system, as represented by a kinematic tree. Message passing between nodes is influenced by intermediate nodes, resembling the physical laws of the robot's system, thereby embedding causality into the message-passing process.
           <br><br>
-          <strong>A symmetry aspect:</strong> As the Message-Passing layer M varies only according to the edge types R, the learned weights W are identical between all morphologically-identical limbs of the robotic platform. In addition to reducing the complexity of the search space and lowering model sizes, these constraints help us learn a model that is shared by the four legs for quadruped robots. Although this overconstrains the learning problem, empirically we find that this weight sharing allows the model to quickly learn a more generalizable function when compared to completely unconstrained learning models, leading to better performance.
+          <strong>A symmetry aspect:</strong> Learned weights are identical between all morphologically-identical limbs of the robotic platform. In addition to reducing the complexity of the search space and lowering model sizes, it allows the model to quickly learn a more generalizable function when compared to completely unconstrained learning models.
          </p>
       </div>
     </div>
@@ -205,8 +205,8 @@
             <strong>Performance:</strong> From the results, our model outperforms the three baselines on all metrics by a significant margin. In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the second best model (i.e., ECNN with 78.8% mean accuracy). by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
          </p>
         </div>
-        <div class="image image-consistent">
-          <img src="static/images/figure3a.png">
+        <div class="image">
+          <img src="static/images/figure3a.png" width="300">
         </div>
       </div>
 
@@ -216,14 +216,14 @@
             <strong>Generalization:</strong> The test sets for our experiments includes real-world recordings on unseen ground types and gait types and simulated recordings with unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
          </p>
         </div>
-        <div class="image image-consistent">
-          <img src="static/images/Table3.png">
+        <div class="image">
+          <img src="static/images/Table3.png" width="300">
         </div>
       </div>
 
       <div class="container-side-by-side">
-        <div class="image image-consistent">
-          <img src="static/images/Table1&2.png">
+        <div class="image">
+          <img src="static/images/Table1&2.png" width="300">
         </div>
         <div class="text">
           <p class="subtitle">
@@ -239,8 +239,8 @@
           be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
          </p>
         </div>
-        <div class="image image-consistent">
-          <img src="static/images/figure3b.png">
+        <div class="image">
+          <img src="static/images/figure3b.png" width="300">
         </div>
       </div>
     </div>
@@ -253,7 +253,7 @@
     <div class="container">
       <div class="item">
         <!-- Your image here -->
-        <img src="static/images/figure5.png" alt="Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task." width="500"/>
+        <img src="static/images/figure5.png" alt="Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task." width="500" class="center"/>
         <h2 class="subtitle has-text-centered">
           Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task, which includes an unseen friction coefficient ( ˙x = 0.5), unseen speed (v = 1.0), and unseen terrain (rough).
         </h2>
