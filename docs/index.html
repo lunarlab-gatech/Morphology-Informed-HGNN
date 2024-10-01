@@ -129,7 +129,7 @@
 <!-- Teaser video-->
 <section class="hero teaser">
   <div class="container is-max-desktop">
-    <div class="item is-centered">
+    <div class="hero-body">
       <!-- Your image here -->
       <img src="static/images/figure1.png" alt="Figure 1; Visualization of our MI-HGNN for the Mini-Cheetah robot as an example." width="500"/>
       <h2 class="subtitle has-text-centered">
@@ -180,6 +180,9 @@
         <img src="static/images/figure3.png" alt="Figure 3; Contact detection results on the real-world Mini-Cheetah contact dataset."/>
         <h2 class="subtitle has-text-centered">
           Contact detection results on the real-world Mini-Cheetah contact dataset: (a) classification performance of four models on the unseen test set, trained with the entire training set. The mean and standard deviation across 8 runs are reported. (b) sample efficiency evaluation for all models.
+
+          In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the
+          second best model (i.e., ECNN with 78.8% mean accuracy) by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
        </h2>
       </div>
     </div>
@@ -277,13 +280,13 @@
     <div class="container is-max-desktop content">
       <h2 class="title">BibTeX</h2>
       <pre><code>@article{butterfield2024mi,
-        title={MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception},
-        author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
-        journal={arXiv preprint arXiv:2409.11146},
-        year={2024},
-        eprint={2409.11146},
-        url={https://arxiv.org/abs/2409.11146},
-      }</code></pre>
+  title={MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception},
+  author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
+  journal={arXiv preprint arXiv:2409.11146},
+  year={2024},
+  eprint={2409.11146},
+  url={https://arxiv.org/abs/2409.11146},
+}</code></pre>
     </div>
 </section>
 <!--End BibTex citation -->
