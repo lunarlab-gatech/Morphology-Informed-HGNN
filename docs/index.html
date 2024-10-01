@@ -179,7 +179,7 @@
         <h1 class="title">
           How does MI-HGNN work?
         </h1>
-        <!-- Your image here -->
+        <br>
          <p class="subtitle">
           <strong>A data correlation aspect:</strong> MI-HGNN constrains the learning problem based on the robot's morphology and explicitly captures the correlation and causality between inputs. This configuration mirrors the flow of information in a robotic system, as represented by a kinematic tree. Message passing between nodes is influenced by intermediate nodes, resembling the physical laws of the robot's system, thereby embedding causality into the message-passing process. As a result, our neural network achieves comparable performance to other methods with fewer parameters, as it does not need to learn the implicit relationships between data.
           <br><br>
@@ -203,11 +203,23 @@
           <br><br>
           <strong>Generalization:</strong> For the real-world Contact Detection task, the test set includes recordings on unseen ground types and gait types; and for the simulated GRF Estimation task, the test set includes unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
           <br><br>
-          <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%, when compared with the ECNN accuracy from Fig. 3 (a).
+          <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%.
           <br><br>
-          <strong>Sample Efficiency:</strong>  Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
-          be achieved by our model using only <strong>2.5%</strong>of the training set, i.e., 15863 training samples.
+          <strong>Sample Efficiency:</strong> Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
+          be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
          </p>
+      </div>
+
+      <div class="container-side-by-side">
+        <div class="image">
+          <img src="static/images/Table1&2.png">
+        </div>
+        <div class="text">
+          <p class="subtitle">
+          <strong>Sample Efficiency:</strong> Overall, we find that the performance of our model does not drop significantly until the number of training samples is reduced to <strong>10%</strong> of the entire training set. In addition, competitive results can still
+          be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
+         </p>
+        </div>
       </div>
     </div>
   </div>

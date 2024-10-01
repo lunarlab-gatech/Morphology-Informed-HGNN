@@ -137,3 +137,8 @@ body {
   margin-top: 20px;
 }
 
+.container-side-by-side {
+  display: flex;
+  align-items: center;
+  justify-content: center
+}
