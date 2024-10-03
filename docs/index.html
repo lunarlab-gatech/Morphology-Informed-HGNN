@@ -167,7 +167,7 @@
         </h1>
         <img src="static/images/figure2.png" alt="Figure 2; Overview of the proposed MI-HGNN for legged robot contact perception problems."/>
         <h2 class="subtitle has-text-centered top-margin">
-          Overview of the proposed MI-HGNN for legged robot contact perception problems. Our MI-HGNN is constructed from a robot kinematic structure where nodes are joints and edges are links. Proprioceptive sensor measurements acquired at each local frame are embedded into the corresponding node through a heterogeneous encoder, and fused via several layers of Message Passing. A foot decoder attached to the foot node exacts the contact information during inference.
+          Our MI-HGNN is constructed from a robot kinematic structure where nodes are joints and edges are links. Proprioceptive sensor measurements acquired at each local frame are embedded into the corresponding node through a heterogeneous encoder, and fused via several layers of Message Passing. A foot decoder attached to the foot node exacts the contact information during inference.
         </h2>
       </div>
     </div>
@@ -208,8 +208,8 @@
             <strong>Performance:</strong> From the results, our model outperforms the three baselines on all metrics by a significant margin. In terms of contact state accuracy, our MI-HGNN achieves a mean accuracy of 87.7% across 8 runs, improving the performance of the second best model (i.e., ECNN with 78.8% mean accuracy). by 11.3%. Compared with the morphology-agnostic CNN model (with 71.8% mean accuracy), our model outperforms it by 22.1%. 
          </p>
         </div>
-        <div class="image">
-          <img src="static/images/figure3a.png" width="300">
+        <div class="item">
+          <img src="static/images/figure3a.png" width="2000">
         </div>
       </div>
 
@@ -219,19 +219,19 @@
             <strong>Generalization:</strong> The test sets for our experiments includes real-world recordings on unseen ground types and gait types and simulated recordings with unseen friction, speed, and terrain parameters. Therefore, our improved performance also demonstrates the generalization ability of our model on out-of-distribution data. 
          </p>
         </div>
-        <div class="image">
-          <img src="static/images/Table3.png" width="300">
+        <div class="item">
+          <img src="static/images/Table3.png" width="1500">
         </div>
       </div>
 
       <div class="container-side-by-side">
-        <div class="image">
-          <img src="static/images/Table1&2.png" width="300">
-        </div>
         <div class="text">
           <p class="subtitle">
             <strong>Model Efficiency:</strong> Our MI-HGNN is not sensitive to the hyperparameters. Using our smallest MI-HGNN model, we reduce the model parameters from ECNN by a factor of <strong>482</strong> and still improve its performance by 8.4%.
          </p>
+        </div>
+        <div class="item">
+          <img src="static/images/Table2.png" width="950">
         </div>
       </div>
 
@@ -242,8 +242,8 @@
           be achieved by our model using only <strong>2.5%</strong> of the training set, i.e., 15863 training samples.
          </p>
         </div>
-        <div class="image">
-          <img src="static/images/figure3b.png" width="300">
+        <div class="item">
+          <img src="static/images/figure3b.png" width="1400">
         </div>
       </div>
     </div>
@@ -251,11 +251,11 @@
 </section>
 
 
-<section class="hero is-small">
+<!-- <section class="hero is-small">
   <div class="hero-body">
     <div class="container">
       <div class="item">
-        <!-- Your image here -->
+        Your image here
         <img src="static/images/figure5.png" alt="Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task." width="700" class="center"/>
         <h2 class="subtitle has-text-centered">
           Evaluation of all model types on a sub sequence of the “Unseen All” test sequence for the GRF estimation task, which includes an unseen friction coefficient ( ˙x = 0.5), unseen speed (v = 1.0), and unseen terrain (rough).
@@ -263,7 +263,7 @@
       </div>
     </div>
   </div>
-</section>
+</section> -->
 
 <!-- Youtube video -->
 <section class="hero is-small is-light">
