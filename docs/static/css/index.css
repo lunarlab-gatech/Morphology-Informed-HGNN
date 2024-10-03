@@ -140,7 +140,7 @@ body {
 .container-side-by-side {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   margin-top: 15px;
 }
 
