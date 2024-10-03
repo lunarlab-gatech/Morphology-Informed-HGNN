@@ -146,6 +146,8 @@ body {
 
 .container-side-by-side-abstract {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   margin-top: 15px;
   width: 100%;
   justify-content: center;
