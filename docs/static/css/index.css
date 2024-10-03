@@ -144,6 +144,14 @@ body {
   margin-top: 15px;
 }
 
+.container-side-by-side-abstract {
+  display: flex;
+  margin-top: 15px;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+}
+
 .image-consistent {
   width: 300px
 }
