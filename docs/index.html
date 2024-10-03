@@ -143,14 +143,14 @@
 <!-- Paper abstract -->
 <section class="section center hero is-light">
 <div class="container-side-by-side-abstract">
-  <div class="container" style="max-width: 550px;">
+  <div class="container" style="max-width: 550px; margin-left: 15%; min-width: 300px;">
     <!-- Your image here -->
-    <img src="static/images/figure1.png" alt="Figure 1; Visualization of our MI-HGNN for the Mini-Cheetah robot as an example." style="margin-left: 50px; margin-right: 50px; flex-shrink: 1;"/>
+    <img src="static/images/figure1.png" alt="Figure 1; Visualization of our MI-HGNN for the Mini-Cheetah robot as an example."/>
     <!-- <h2 class="subtitle has-text-centered top-margin">
       Visualization of our MI-HGNN for the Mini-Cheetah robot as an example. The structure and connectivity of our graph is constructed from the robot morphology. Local sensor measurements are embedded into the corresponding node to predict contact information at the foot node.
     </h2> -->
   </div>
-  <div class="has-text-justified center" style="display:flex; flex-direction: column; max-width: 600px; margin-left: 100px; margin-right: 200px; flex-shrink: 1;">
+  <div class="container has-text-justified center" style="display:flex; flex-direction: column; max-width: 600px; margin-left: 5%; margin-right: 15%; flex-shrink: 1;">
     <h2 class="title is-3 center">Abstract</h2>
     <p>
       We present a Morphology-Informed Heterogeneous Graph Neural Network (MI-HGNN) for learning-based contact perception. The architecture and connectivity of the MI-HGNN are constructed from the robot morphology, in which nodes and edges are robot joints and links, respectively. By incorporating the morphology-informed constraints into a neural network, we improve a learning-based approach using model-based knowledge. We apply the proposed MI-HGNN to two contact perception problems, and conduct extensive experiments using both real-world and simulated data collected using two quadruped robots. Our experiments demonstrate the superiority of our method in terms of effectiveness, generalization ability, model efficiency, and sample efficiency. Our MI-HGNN improved the performance of a state-of-the-art model that leverages robot morphological symmetry by 8.4% with only 0.21% of its parameters. Although MI-HGNN is applied to contact perception problems for legged robots in this work, it can be seamlessly applied to other types of multi-body dynamical systems and has the potential to improve other robot learning frameworks. Our code is made publicly available at <a href="https://github.com/lunarlab-gatech/Morphology-Informed-HGNN" target="_blank">https://github.com/lunarlab-gatech/Morphology-Informed-HGNN</a>.
@@ -170,7 +170,7 @@
         </h1>
         <br>
         <img src="static/images/figure2.png" alt="Figure 2; Overview of the proposed MI-HGNN for legged robot contact perception problems."  class="center" width="1200"/>
-        <p class="subtitle has-text-centered top-margin">
+        <p class="subtitle top-margin">
           Our MI-HGNN is constructed from a robot kinematic structure where nodes are joints and edges are links. Proprioceptive sensor measurements acquired at each local frame are embedded into the corresponding node through a heterogeneous encoder, and fused via several layers of Message Passing. A foot decoder attached to the foot node exacts the contact information during inference.
         </p>
       </div>
