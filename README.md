@@ -1,7 +1,7 @@
 # MI-HGNN for contact estimation/classification
 This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)".
 
-![Figure 2](paper/mihgnn_model_figure.png)
+![Figure 2](paper/website_images/banner_image.png)
 
 ## Installation
 To get started, setup a Conda Python environment with Python=3.11:
