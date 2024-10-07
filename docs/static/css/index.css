@@ -147,9 +147,10 @@ body {
 .container-side-by-side-abstract {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-top: 15px;
   width: 100%;
+  gap: 10px;
   justify-content: center;
   align-items: center;
 }
