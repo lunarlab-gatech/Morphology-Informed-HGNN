@@ -1,5 +1,5 @@
 # MI-HGNN for contact estimation/classification
-This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)".
+This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our [project page](https://lunarlab-gatech.github.io/Morphology-Informed-HGNN/) and [paper](https://arxiv.org/abs/2409.11146).
 
 ![Figure 2](paper/website_images/banner_image.png)
 
