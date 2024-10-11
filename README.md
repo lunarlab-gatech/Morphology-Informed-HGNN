@@ -1,7 +1,12 @@
-# MI-HGNN for contact estimation/classification
-This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our [project page](https://lunarlab-gatech.github.io/Morphology-Informed-HGNN/) and [paper](https://arxiv.org/abs/2409.11146).
+# MI-HGNN for contact estimation/classification on various robots
+This repository implements a Morphology-Informed Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot.
+
+Additionally, by providing a compatible URDF file, this software can convert a variety of robot structures to graph format for learning with the MI-HGNN. See [#Applying-MI-HGNN-to-your-own-robot
+](#applying-mi-hgnn-to-your-own-robot) for more information.
 
 ![Figure 2](paper/website_images/banner_image.png)
+
+For information on our method, see our [project page](https://lunarlab-gatech.github.io/Morphology-Informed-HGNN/) and [paper](https://arxiv.org/abs/2409.11146).
 
 ## Installation
 To get started, setup a Conda Python environment with Python=3.11:
@@ -28,9 +33,13 @@ git submodule update
 
 To replicate the experiments referenced in our paper or access our trained model weights, see `paper/README.md`.
 
+## Applying MI-HGNN to your own robot
+
+Although in our paper, we only applied the MI-HGNN on quadruped robots for contact perception, it can also be applied to other multi-body dynamical systems. New URDF files can be added by following the instructions in `urdf_files/README.md`, and our software will automatically convert the URDF into a graph compatible for learning with the MI-HGNN. 
+
 ## Editing and Contributing
 
-Although in our paper, we only applied the MI-HGNN on quadruped robots for contact perception, it can also be applied to other multi-body dynamical systems and on other tasks/datasets. New URDF files can be added by following the instructions in `urdf_files/README.md`. Datasets can be found in the `src/mi_hgnn/datasets_py` directory, and model definitions and training code can be found in the `src/mi_hgnn/lightning_py` directory. We encourage you to extend the library for your own applications. Please reference [#Replicating-Paper-Experiments](#replicating-paper-experiments) for examples on how to train and evaluate models with our repository.
+Datasets can be found in the `src/mi_hgnn/datasets_py` directory, and model definitions and training code can be found in the `src/mi_hgnn/lightning_py` directory. We encourage you to extend the library for your own applications. Please reference [#Replicating-Paper-Experiments](#replicating-paper-experiments) for examples on how to train and evaluate models with our repository.
 
 After making changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
 broken critical functionality, run the test cases found in the `tests` directory.
