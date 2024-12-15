@@ -451,15 +451,15 @@ class QuadSDKDataset_Go2(QuadSDKDataset):
 # A1_DEPRECATED
 class QuadSDKDataset_A1Speed0_5_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
     def get_file_id_and_loc(self):
-        return "17tvm0bmipTpueehUNQ-hJ8w5arc79q0M", "Google"
+        return "https://www.dropbox.com/scl/fi/q8t67zc6yeyb78nqngqu2/QuadSDK-A1Speed0.5-OnlyForTestCases.bag?rlkey=38ihtx8mxkvh4cspxsm8xrudj&st=ftw2k75k&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1Speed1_0_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
     def get_file_id_and_loc(self):
-        return "1qSdm8Rm6UazwhzCV5DfMHF0AoyKNrthf", "Google"
+        return "https://www.dropbox.com/scl/fi/8o8mkw5079yers8i0rhhs/QuadSDK-A1Speed1.0-OnlyForTestCases.bag?rlkey=mkigp3t3253py9ih5tskl3w8c&st=m7o3n6yg&dl=1", "Dropbox"
 
 class QuadSDKDataset_A1Speed1_5FlippedOver_DEPRECATED(QuadSDKDataset_A1_DEPRECATED):
     def get_file_id_and_loc(self):
-        return "1h5CN-IIJlLnMvWp0sk5Ho-hiJq2NMqCT", "Google"
+        return "https://www.dropbox.com/scl/fi/irxyiafwpn4rflrtfrb1g/QuadSDK-A1Speed1.5FlippedOver-OnlyForTestCases.bag?rlkey=0ldqimfn2jogwax6tdkq6vvqu&st=xrni7lp8&dl=1", "Dropbox"
     
 # A1
 class QuadSDKDataset_A1_Alpha(QuadSDKDataset_A1):

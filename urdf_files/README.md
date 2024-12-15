@@ -1,6 +1,6 @@
 # URDF files
 
-Each robot URDF file with its corresponding repository can be found in a folder with its name.
+Each robot URDF file with its corresponding repository can be found in a folder with its name. As robots can have multiple URDF files (for example, with different naming conventions, frame definitions, etc), double check any URDF in this directory before you use it to make sure it has the data you expect. For example, "A1" refers to the URDF file from [unitreerobotics](https://github.com/unitreerobotics/unitree_ros/tree/master/robots/a1_description), whereas "A1-Quad" refers to the URDF file from our fork of [quad-sdk](https://github.com/lunarlab-gatech/quad_sdk_fork/tree/a1). 
 
 Note, the ```urdfParser.py``` file will take the ```*.urdf``` file and generate a ```*_updated.urdf``` file in the same directory, which contains updated paths based on your current system. For this reason, these files are not commited to the GitHub repo, as they should vary per device.
 
