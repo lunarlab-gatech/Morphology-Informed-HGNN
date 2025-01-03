@@ -32,16 +32,21 @@ git submodule update
 
 ### Replicating Paper Experiments
 
-To replicate the experiments referenced in our paper (like the "GRF Estimation" experiment shown below) or to access our trained model weights, see `paper/README.md`.
+We provide code for replicating the exact experiments in our paper and provide full model weights for every model referenced in our paper. See `paper/README.md` for more information.
 
 <img src="paper/website_images/figure5.png" alt="Parameter sizes and Ablation study" width="600">
 
 ### Applying to your Robot/Dataset
 
-Although in our paper, we only applied the MI-HGNN on quadruped robots for contact perception, it can also be applied to other multi-body dynamical systems and on other tasks/datasets. New URDF files can be added by following the instructions in `urdf_files/README.md`. Datasets can be found in the `src/mi_hgnn/datasets_py` directory, and model definitions and training code can be found in the `src/mi_hgnn/lightning_py` directory. We encourage you to extend the library for your own applications. Please reference [#Replicating-Paper-Experiments](#replicating-paper-experiments) for examples on how to train and evaluate models with our repository.
+Although our paper's scope was limited to application of MI-HGNN on quadruped robots for contact perception, it can easily be applied to other multi-body dynamical systems and on other tasks/datasets, following the steps below:
 
-After making changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
-broken critical functionality, run the test cases found in the `tests` directory.
+1. Add new URDF files for your robots by following the instructions in `urdf_files/README.md`. 
+2. Incorporate your custom dataset using our `FlexibleDataset` class and starter `CustomDatasetTemplate.py` file by following the instructions at `src/mi_hgnn/datasets_py/README.md`.
+3. After making your changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
+broken critical functionality, run the test cases with the command `python -m unittest discover tests/ -v`.
+4. Using the files in the `research` directory as an example, call our `train_model` and `evaluate_model` functions provided in `src/mi_hgnn/lightning_py/gnnLightning.py` with defined train, validation, and test sequences. 
+
+We've designed the library to be easily applicable to a variety of datasets and robots, and have provided a variety of customization options in training, dataset creation, and logging. We're excited to see everything you can do with the MI-HGNN!
 
 ### Simulated A1 Dataset
 
@@ -59,7 +64,7 @@ If you'd like to use this dataset, the recorded sequences can be found on [Dropb
 ---
 ### Contributing
 
-If you'd like to contribute to the repository, write sufficient and necessary test cases for your additions in the `tests` directory, and then open a pull request.
+We encourage you to extend the library for your own applications. If you'd like to contribute to the repository, write sufficient and necessary test cases for your additions in the `tests` directory, and then open a pull request. Reach out to us if you have any questions.
 
 ### Citation
 
