@@ -1,5 +1,7 @@
-# MI-HGNN for contact estimation/classification
-This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)". Additionally, it can be applied to a variety of robot structures and datasets!
+# MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network
+This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)" and our [project page](https://lunarlab-gatech.github.io/Morphology-Informed-HGNN/). 
+
+Additionally, it can be applied to a variety of robot structures and datasets, as our software can convert compatible robot URDF files to graph format and provides a template for implementing custom datasets. See [#Applying-MI-HGNN-to-your-own-robot](#applying-mi-hgnn-to-your-own-robot) for more information.
 
 ![Figure 2](paper/website_images/banner_image.png)
 
@@ -42,7 +44,7 @@ Although our paper's scope was limited to application of MI-HGNN on quadruped ro
 
 <img src="paper/website_images/MI-HGNN Potential Applications.png" alt="MI-HGNN Potential Applications" width="800">
 
-1. Add new URDF files for your robots by following the instructions in `urdf_files/README.md`. 
+1. Add new URDF files for your robots by following the instructions in `urdf_files/README.md`. Our software will automatically convert the URDF into a graph compatible for learning with the MI-HGNN. 
 2. Incorporate your custom dataset using our `FlexibleDataset` class and starter `CustomDatasetTemplate.py` file by following the instructions at `src/mi_hgnn/datasets_py/README.md`.
 3. After making your changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
 broken critical functionality, run the test cases with the command `python -m unittest discover tests/ -v`.
