@@ -70,8 +70,7 @@ class RobotGraph():
         Constructor for RobotGraph class.
 
         Args:
-            urdf_path (Path): The absolute path from this file (graphParser.py)
-                to the desired urdf file to load.
+            urdf_path (Path): The absolute path to the desired urdf file to load.
             ros_builtin_path (str): The path ROS uses in the urdf file to navigate
                 to the urdf description directory. An example looks like this:
                 "package://a1_description/". You can find this by manually looking
