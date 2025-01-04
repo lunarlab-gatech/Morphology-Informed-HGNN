@@ -1,5 +1,5 @@
 # MI-HGNN for contact estimation/classification
-This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)".
+This repository implements a Morphology-Inspired Heterogeneous Graph Neural Network (MI-HGNN) for estimating contact information on the feet of a quadruped robot. For more details, see our publication "[MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146)". Additionally, it can be applied to a variety of robot structures and datasets!
 
 ![Figure 2](paper/website_images/banner_image.png)
 
@@ -40,6 +40,8 @@ We provide code for replicating the exact experiments in our paper and provide f
 
 Although our paper's scope was limited to application of MI-HGNN on quadruped robots for contact perception, it can easily be applied to other multi-body dynamical systems and on other tasks/datasets, following the steps below:
 
+<img src="paper/website_images/MI-HGNN Potential Applications.png" alt="MI-HGNN Potential Applications" width="800">
+
 1. Add new URDF files for your robots by following the instructions in `urdf_files/README.md`. 
 2. Incorporate your custom dataset using our `FlexibleDataset` class and starter `CustomDatasetTemplate.py` file by following the instructions at `src/mi_hgnn/datasets_py/README.md`.
 3. After making your changes, rebuild the library following the instructions in [#Installation](#installation). To make sure that your changes haven't
@@ -47,6 +49,7 @@ broken critical functionality, run the test cases with the command `python -m un
 4. Using the files in the `research` directory as an example, call our `train_model` and `evaluate_model` functions provided in `src/mi_hgnn/lightning_py/gnnLightning.py` with defined train, validation, and test sequences. 
 
 We've designed the library to be easily applicable to a variety of datasets and robots, and have provided a variety of customization options in training, dataset creation, and logging. We're excited to see everything you can do with the MI-HGNN!
+
 
 ### Simulated A1 Dataset
 

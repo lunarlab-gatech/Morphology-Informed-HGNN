@@ -36,14 +36,14 @@ Next, scroll down to the bottom of the file where it says `DATASET SEQUENCES`. A
 
 This is a clean way for data loading, as it allows the user to later combine different sequences as they'd like with the `torch.utils.data.ConcatDataset` function (see `research/train_classification_sample_eff.py` for an example). Defining these classes also means that training an MI-HGNN model on a different computer doesn't require the user to manually download any datasets, as `FlexibleDataset` will do it for you.
 
-Also, when the files are downloaded, they will be renamed to the value provided by `get_downloaded_dataset_file_name()`. Overwrite this function so that the file extension is correct `.mat` for a Matlab file, `.bag` for a ROSbag file, etc.
+Also, when the files are downloaded, they will be renamed to the value provided by `get_downloaded_dataset_file_name()`. Overwrite this function so that the file extension is correct (`.mat` for a Matlab file, `.bag` for a ROSbag file, etc).
 
 ### Implementing Data Processing
 Now that you can load your dataset files, you need to implement processing. This step should be implemented in `process()`, and should convert the file from whatever format it is currently in into a `.mat` file for fast training speeds. You'll also need to provide code for extracting the number of dataset entries in this sequence, which will be saved into a .txt file for future use.
 
 Implement this function. You can see `quadSDKDataset.py` for an example of converting a ROSbag file into a .mat file.
 
-### Loading data for use with FlexibleDataset
+### Implementing Data Loading
 Now that data is loaded and processed, you can now implement the function for opening the .mat file and extracting the relevant dataset sequence.
 This should be done in `load_data_at_dataset_seq()`. The .mat file you saved in the last step will now be available at `self.mat_data` for easy access.
 Note that this function will also need to use the `self.history_length` parameter to support training with a history of measurements. See `CustomDatasetTemplate.py` for details, and see `LinTzuYaunDataset.py` for a proper implementation of this function.
@@ -58,6 +58,6 @@ Since its easy for the user to provide the wrong URDF file for a dataset sequenc
 This name should be pasted into `get_expected_urdf_name()`.
 
 ### Facilitating Data Sorting
-Finally, the last step is to tell `FlexibleDataset` what order your dataset data is in. For example, which index in the joint position array corresponds to a specific joint in the URDF file? To do this, you'll implement `get_urdf_name_to_dataset_array_index()`.
+Finally, the last step is to tell `FlexibleDataset` what order your dataset data is in. For example, which index in the joint position array corresponds to a specific joint in the URDF file? To do this, you'll implement `get_urdf_name_to_dataset_array_index()`. See `CustomDatasetTemplate.py` for more details.
 
-After doing this, your dataset will work with our current codebase for training MLP and MI-HGNN models! You can now instantiate your dataset and use it in a similar manner to the datasets in the `research` directory. Happy Training!
+After doing this, your dataset will work with our current codebase for training MLP and MI-HGNN models! You can now instantiate your dataset and use it like in the examples in the `research` directory. Happy Training!

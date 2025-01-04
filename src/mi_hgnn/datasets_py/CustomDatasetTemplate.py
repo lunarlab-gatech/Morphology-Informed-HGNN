@@ -101,7 +101,7 @@ class CustomDataset_sequence1(CustomDataset):
     '/file/d/' and '/view?usp=sharing'. Take this string, and paste it as the first return argument below.
     """
     def get_file_id_and_loc(self):
-        return "17h4kMUKMymG_GzTZTMHPgj-ImDKZMg3R", "Google"
+        return "<Your_String_Here>", "Google"
     
 class CustomDataset_sequence2(CustomDataset):
     """
