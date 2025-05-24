@@ -47,6 +47,36 @@
 </head>
 <body>
 
+  <nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+      <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </a>
+    </div>
+    <div class="navbar-menu">
+      <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+        <a class="navbar-item" href="https://sites.gatech.edu/lunarlab/">
+        <span class="icon">
+            <i class="fas fa-home"></i>
+        </span>
+        </a>
+  
+        <div class="navbar-item has-dropdown is-hoverable">
+          <a class="navbar-link">
+            Related Research
+          </a>
+          <div class="navbar-dropdown">
+            <a class="navbar-item" href="https://lunarlab-gatech.github.io/MorphSym-HGNN/">
+              MS-HGNN (L4DC 2025)
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
 
   <section class="hero">
     <div class="hero-body">
@@ -68,9 +98,13 @@
                   </span>
                   </div>
 
-                  <div class="is-size-5 publication-authors">
-                    <span class="author-block">Georgia Institute of Technology<br>Accepted to ICRA 2025</span>
-                    <!-- <span class="eql-cntrb"><small><br><sup>*</sup>Indicates Equal Contribution</small></span> -->
+                  <div class="is-size-5 publication-authors" style="color: #666;">
+                    <div class="institution-row" style="display: flex; justify-content: center; align-items: center; gap: 3rem; margin-bottom: 0.5rem;">
+                      <div class="institution-block" style="display: flex; align-items: center;">
+                        <img src="files/logo/GeorgiaTech-cropped.svg" alt="Georgia Tech" style="height: 30px; margin-left: 0.5rem;">
+                      </div>
+                    </div>
+                    <div class="is-size-5" style="color: #666;"><a href="https://2025.ieee-icra.org/" target="_blank">ICRA 2025</a></div>
                   </div>
 
                   <div class="column has-text-centered">
