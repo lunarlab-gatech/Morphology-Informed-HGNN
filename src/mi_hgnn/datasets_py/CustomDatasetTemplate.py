@@ -7,11 +7,11 @@ class CustomDataset(FlexibleDataset):
 
 
     # ========================= DOWNLOADING ==========================
-    def get_downloaded_dataset_file_name(self):
+    def get_downloaded_dataset_file_names(self):
         """
-        Type the name of the file extension of your dataset sequence files here!
+        Type the names of the file extension of your dataset sequence files here!
         """
-        return "data.<YOUR_EXTENSION_HERE>"
+        return ["data.<YOUR_EXTENSION_HERE>"]
 
     # ========================= PROCESSING ===========================
     def process(self):
@@ -29,8 +29,8 @@ class CustomDataset(FlexibleDataset):
 
         # Write a txt file to save the dataset length & and first sequence index
         with open(str(Path(self.processed_dir, "info.txt")), "w") as f:
-            file_id, loc = self.get_file_id_and_loc()
-            f.write(str(dataset_entries) + " " + file_id)
+            file_ids, loc = self.get_file_ids_and_loc()
+            f.write(str(dataset_entries) + " " + file_ids[0])
 
     # ============= DATA SORTING ORDER AND MAPPINGS ==================
     def get_urdf_name_to_dataset_array_index(self) -> dict:
@@ -100,8 +100,8 @@ class CustomDataset_sequence1(CustomDataset):
     to "Anyone with the link", and then copy the link. Paste the link, and then extract the string between the text of
     '/file/d/' and '/view?usp=sharing'. Take this string, and paste it as the first return argument below.
     """
-    def get_file_id_and_loc(self):
-        return "<Your_String_Here>", "Google"
+    def get_file_ids_and_loc(self):
+        return ["<Your_String_Here>"], "Google"
     
 class CustomDataset_sequence2(CustomDataset):
     """
@@ -110,8 +110,8 @@ class CustomDataset_sequence2(CustomDataset):
     expire, doesn't require a password, and allows for downloading. Finally, copy and paste the link as the first return
     argument below, but change the last number from 0 to 1 (this tells Dropbox to send the raw file, instead of a webpage).
     """
-    def get_file_id_and_loc(self):
-        return "<Your_Link_Here>", "Dropbox"
+    def get_file_ids_and_loc(self):
+        return ["<Your_Link_Here>"], "Dropbox"
     
 """
 Create classes for each of your sequences...

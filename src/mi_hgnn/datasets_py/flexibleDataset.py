@@ -92,12 +92,12 @@ class FlexibleDataset(Dataset):
                     "Dataset has too few entries for the provided 'history_length'."
                 )
 
-            # Check to make sure that this dataset id matches what we expect.
+            # Check to make sure that first dataset id matches what we expect.
             # Protects against users passing a folder path to a different
             # dataset sequence, causing a different dataset to be used than
             # expected.
-            file_id, loc = self.get_file_id_and_loc()
-            if file_id != data[1]:
+            file_ids, loc = self.get_file_ids_and_loc()
+            if file_ids[0] != data[1]:
                 raise ValueError("'root' parameter points to a Dataset sequence that doesn't match this Dataset class. Either fix the path to point to the correct sequence, or delete the data in the folder so that the proper sequence can be downloaded.")
 
         # Parse the robot graph from the URDF file
@@ -191,20 +191,22 @@ class FlexibleDataset(Dataset):
 
     @property
     def raw_file_names(self):
-        return [self.get_downloaded_dataset_file_name()]
+        return self.get_downloaded_dataset_file_names()
 
     def download(self):
-        file_id, loc = self.get_file_id_and_loc()
+        file_ids, loc = self.get_file_ids_and_loc()
+        file_names = self.get_downloaded_dataset_file_names()
         if loc == "Google":
-            download_file_from_google_drive(file_id,
-                                            Path(self.root, 'raw'),
-                                            self.get_downloaded_dataset_file_name())
+            for i in range(0, len(file_names)):
+                download_file_from_google_drive(file_ids[i],
+                        Path(self.root, 'raw'), file_names[i])
         elif loc == "Dropbox":
-            urllib.request.urlretrieve(file_id, Path(self.root, "raw", self.get_downloaded_dataset_file_name()))
+            for i in range(0, len(file_names)):
+                urllib.request.urlretrieve(file_ids[i], Path(self.root, "raw", file_names[i]))
         else:
             raise NotImplementedError("Only Google and Dropbox are implemented.")
         
-    def get_file_id_and_loc(self):
+    def get_file_ids_and_loc(self):
         """
         Method for child classes to choose which sequence to load;
         used if the dataset is downloaded.
@@ -214,15 +216,18 @@ class FlexibleDataset(Dataset):
         a different sequence.
 
         Returns:
-            file_id (str) - File id (or link) for download
+            file_id (list) - File ids (or links) for download
             location (str) - Either "Google" or "Dropbox"
         """
         raise self.notImplementedError
     
-    def get_downloaded_dataset_file_name(self):
+    def get_downloaded_dataset_file_names(self):
         """
-        Method for defining the new name of the downloaded
-        dataset file.
+        Method for defining the new names of the downloaded
+        dataset files.
+
+        Returns:
+            file_names (list) - List of names of each file
         """
         raise self.notImplementedError
     
