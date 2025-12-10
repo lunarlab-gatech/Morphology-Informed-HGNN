@@ -76,13 +76,11 @@ We encourage you to extend the library for your own applications. If you'd like 
 If you find our repository or our work useful, please cite the relevant publication:
 
 ```
-@article{butterfield2024mi,
-  title={{MI-HGNN: Morphology-Informed Heterogeneous Graph Neural Network for Legged Robot Contact Perception}},
+@inproceedings{butterfield2025mi,
+  title={{MI-HGNN}: Morphology-informed heterogeneous graph neural network for legged robot contact perception},
   author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
-  journal={arXiv preprint arXiv:2409.11146},
-  year={2024},
-  eprint={2409.11146},
-  url={https://arxiv.org/abs/2409.11146},
+  booktitle={{2025 IEEE International Conference on Robotics and Automation (ICRA)}},
+  year={2025},
 }
 ```
 
