@@ -77,7 +77,7 @@ If you find our repository or our work useful, please cite the relevant publicat
 
 ```
 @inproceedings{butterfield2025mi,
-  title={{MI-HGNN}: Morphology-informed heterogeneous graph neural network for legged robot contact perception},
+  title={{MI-HGNN}: {M}orphology-informed heterogeneous graph neural network for legged robot contact perception},
   author={Butterfield, Daniel and Garimella, Sandilya Sai and Cheng, Nai-Jen and Gan, Lu},
   booktitle={{2025 IEEE International Conference on Robotics and Automation (ICRA)}},
   year={2025},
