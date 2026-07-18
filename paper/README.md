@@ -1,6 +1,6 @@
 # Paper Replication
 
-This directory provides information on replicating experiments in the [MI-HGNN: Morphology-Informed Heterogenous Grpah Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146) paper. It includes model weights, links to other necessary repositories, and instructions for generating figures.
+This directory provides information on replicating experiments in the [MI-HGNN: Morphology-Informed Heterogenous Graph Neural Network for Legged Robot Contact Perception](https://arxiv.org/abs/2409.11146) paper. It includes model weights, links to other necessary repositories, and instructions for generating figures.
 
 Whenever a specific trained model is referenced in this README (for example, `ancient-salad-5`), it will be highlighted as shown, and there will be a folder on Georgia Tech's [Dropbox](https://www.dropbox.com/scl/fo/8p165xcfbdfwlcr3jx7tb/ABoxs5BOEXsQnJgFXF_Mjcc?rlkey=znrs7oyu29qsswpd3a5r55zk8&st=53v30ys3&dl=0) with its name. Unless otherwise specified, the model weights used for the paper were those trained the longest (have highest `epoch=` number in their .ckpt file).
 
